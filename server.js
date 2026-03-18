@@ -9,11 +9,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// ========== 1. НАСТРОЙКА BACKBLAZE B2 ==========
+// ========== НАСТРОЙКА BACKBLAZE B2 ==========
 const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;
 const B2_APP_KEY = process.env.B2_APP_KEY;
 const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;
-const WORKER_URL = process.env.WORKER_URL || 'https://b2-proxy.murofixbhop.workers.dev';
+const WORKER_URL = process.env.WORKER_URL;
 
 let b2Auth = null;
 let b2BucketId = null;
@@ -67,7 +67,6 @@ async function uploadFileToB2(fileBuffer, fileName, mimeType) {
     }
   });
 
-  // Возвращаем URL через Worker (он добавит CORS)
   return `${WORKER_URL}/${B2_BUCKET_NAME}/${fileName}`;
 }
 
@@ -86,7 +85,7 @@ async function uploadFileToB2(fileBuffer, fileName, mimeType) {
   }
 })();
 
-// ========== 2. ХРАНЕНИЕ ИСТОРИИ В B2 ==========
+// ========== ХРАНЕНИЕ ИСТОРИИ В B2 ==========
 const HISTORY_FILE_NAME = 'history.json';
 const MAX_HISTORY = 1000;
 let messageHistory = [];
@@ -129,7 +128,7 @@ async function saveHistoryToB2() {
   }
 }
 
-// ========== 3. НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
+// ========== НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }
@@ -137,7 +136,6 @@ const upload = multer({
 
 app.use(express.static('public'));
 
-// Эндпоинт загрузки файла
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -171,7 +169,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// ========== 4. ЧАТ (ПОЛЬЗОВАТЕЛИ, СООБЩЕНИЯ) ==========
+// ========== ЧАТ ==========
 const users = new Map();
 const recentDisconnects = new Map();
 
@@ -272,5 +270,4 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log(`🌐 Worker URL: ${WORKER_URL}`);
 });
