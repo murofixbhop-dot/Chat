@@ -163,7 +163,6 @@ app.post('/api/login', async (req, res) => {
   const cleanName = username.trim();
 
   if (users.has(cleanName)) {
-    // Пользователь существует
     const userData = users.get(cleanName);
     return res.json({
       success: true,
@@ -178,7 +177,6 @@ app.post('/api/login', async (req, res) => {
       }
     });
   } else {
-    // Новый пользователь – создаём
     const newUser = {
       nickname: cleanName,
       avatar: null,
@@ -242,7 +240,6 @@ app.post('/api/send-friend-request', async (req, res) => {
   users.set(to, targetUser);
   await saveUsers();
 
-  // Уведомляем получателя
   const targetSocketId = userSockets.get(to);
   if (targetSocketId) {
     io.to(targetSocketId).emit('friend-request', { from });
@@ -273,7 +270,6 @@ app.post('/api/accept-friend-request', async (req, res) => {
   users.set(requester, requesterUser);
   await saveUsers();
 
-  // Уведомляем обоих об обновлении друзей
   const userSocket = userSockets.get(username);
   if (userSocket) io.to(userSocket).emit('friends-updated', { friends: user.friends });
   const requesterSocket = userSockets.get(requester);
@@ -319,7 +315,6 @@ app.post('/api/create-group', async (req, res) => {
 
   const groupId = `group_${Date.now()}`;
   const group = { id: groupId, name, members: [creator, ...(members || [])] };
-  // В реальном проекте нужно хранить группы отдельно. Здесь для простоты сохраним в users каждого участника
   for (const member of group.members) {
     if (users.has(member)) {
       const user = users.get(member);
@@ -462,16 +457,14 @@ io.on('connection', (socket) => {
     io.to(msg.room).emit('message', msg);
   });
 
-  // ===== ДОБАВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ АВАТАРОВ =====
+  // Обработчик обновления аватара
   socket.on('avatar-updated', ({ username, avatar }) => {
     if (!username || !users.has(username)) return;
     const user = users.get(username);
     user.avatar = avatar;
     users.set(username, user);
-    saveUsers(); // асинхронно, не ждём
-
+    saveUsers();
     // Рассылаем всем, чтобы обновились аватары в интерфейсе
-    // В будущем можно оптимизировать, отправляя только друзьям
     io.emit('avatar-updated', { username, avatar });
   });
 
