@@ -22,7 +22,7 @@
             --friend-hover: #e9ecef;
             --accent-color: #0088cc;
             --online-indicator: #2ecc71;
-            --scrollbar-thumb: #ccc;
+            --scrollbar-thumb: #aaa;
             --scrollbar-track: #f1f1f1;
             --modal-overlay: rgba(0,0,0,0.5);
         }
@@ -42,7 +42,7 @@
             --friend-item-bg: #1e1e2f;
             --friend-hover: #2a2a3a;
             --accent-color: #4a4a8a;
-            --scrollbar-thumb: #444;
+            --scrollbar-thumb: #555;
             --scrollbar-track: #222;
             --modal-overlay: rgba(0,0,0,0.7);
         }
@@ -60,21 +60,21 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            transition: background 0.3s, color 0.3s;
+            transition: background 0.2s, color 0.2s;
             color: var(--text-color);
         }
 
-        /* Стилизация скроллбара */
+        /* Увеличенный скроллбар */
         ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
+            width: 10px;
+            height: 10px;
         }
         ::-webkit-scrollbar-track {
             background: var(--scrollbar-track);
         }
         ::-webkit-scrollbar-thumb {
             background: var(--scrollbar-thumb);
-            border-radius: 3px;
+            border-radius: 5px;
         }
         ::-webkit-scrollbar-thumb:hover {
             background: var(--accent-color);
@@ -91,14 +91,14 @@
             position: relative;
         }
 
-        /* Левая панель (десктоп) */
+        /* Левая панель */
         .sidebar {
             width: 300px;
             background: var(--sidebar-bg);
             border-right: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s;
+            transition: transform 0.3s ease;
         }
         @media (max-width: 768px) {
             .sidebar {
@@ -106,9 +106,11 @@
                 left: 0;
                 top: 0;
                 bottom: 0;
-                z-index: 100;
+                width: 80%;
+                max-width: 300px;
+                z-index: 1000;
                 transform: translateX(-100%);
-                box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+                box-shadow: 2px 0 10px rgba(0,0,0,0.3);
             }
             .sidebar.open {
                 transform: translateX(0);
@@ -137,23 +139,32 @@
             transition: transform 0.2s;
             background-size: cover;
             background-position: center;
+            flex-shrink: 0;
         }
         .avatar:hover { transform: scale(1.05); }
         .profile-info {
             flex: 1;
+            min-width: 0;
         }
         .profile-info .nickname {
             font-weight: 600;
             font-size: 16px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .profile-info .username {
             font-size: 12px;
             color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .settings-icon {
             font-size: 20px;
             cursor: pointer;
             color: var(--text-secondary);
+            flex-shrink: 0;
         }
 
         .tabs {
@@ -213,10 +224,14 @@
             color: white;
             font-weight: bold;
             background-size: cover;
+            flex-shrink: 0;
         }
         .friend-name {
             flex: 1;
             font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .request-actions {
             display: flex;
@@ -346,44 +361,58 @@
             background: var(--sidebar-bg);
         }
 
-        /* Предпросмотр файла */
-        .file-preview {
+        /* Предпросмотр файлов */
+        .file-preview-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        .file-preview-item {
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 10px;
+            padding: 8px;
             background: var(--friend-item-bg);
-            border-radius: 10px;
-            margin-bottom: 10px;
+            border-radius: 8px;
             position: relative;
         }
-        .file-preview img, .file-preview video {
-            max-width: 60px;
-            max-height: 60px;
+        .file-preview-item .preview-thumb {
+            width: 50px;
+            height: 50px;
             border-radius: 5px;
             object-fit: cover;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--border-color);
+            color: var(--text-secondary);
+            font-size: 24px;
         }
-        .file-preview .file-info {
+        .file-preview-item .preview-thumb i { font-size: 30px; }
+        .file-preview-item .file-info {
             flex: 1;
-            font-size: 14px;
+            font-size: 13px;
             overflow: hidden;
             white-space: nowrap;
             text-overflow: ellipsis;
         }
-        .file-preview .preview-actions {
-            display: flex;
-            gap: 5px;
-        }
-        .preview-actions button {
-            border: none;
-            background: var(--accent-color);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .preview-actions button.cancel {
+        .file-preview-item .remove-file {
             background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            flex-shrink: 0;
         }
 
         .input-row {
@@ -429,10 +458,10 @@
             margin-bottom: 10px;
         }
 
-        /* Меню выбора типа файла (скрепка) */
+        /* Меню выбора файла (скрепка) */
         .attach-menu {
             position: absolute;
-            bottom: 70px;
+            bottom: 80px;
             left: 20px;
             background: var(--sidebar-bg);
             border: 1px solid var(--border-color);
@@ -442,7 +471,7 @@
             flex-direction: column;
             gap: 5px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-            z-index: 200;
+            z-index: 1100;
         }
         .attach-menu.show { display: flex; }
         .attach-item {
@@ -453,6 +482,7 @@
             align-items: center;
             gap: 10px;
             color: var(--text-color);
+            white-space: nowrap;
         }
         .attach-item:hover { background: var(--friend-hover); }
 
@@ -467,7 +497,7 @@
             background: var(--modal-overlay);
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            z-index: 2000;
         }
         .modal.active { display: flex; }
         .modal-content {
@@ -587,7 +617,7 @@
             justify-content: space-around;
             position: sticky;
             bottom: 0;
-            z-index: 50;
+            z-index: 500;
         }
         .nav-item {
             font-size: 24px;
@@ -683,7 +713,7 @@
 
     <!-- Основной интерфейс -->
     <div class="chat-container">
-        <!-- Боковая панель (друзья/группы/заявки) -->
+        <!-- Боковая панель -->
         <div class="sidebar" id="sidebar">
             <div class="profile">
                 <div class="avatar" id="profileAvatar" onclick="openSettings()"></div>
@@ -702,17 +732,17 @@
                 <!-- Друзья -->
                 <div id="friendsTab">
                     <div class="add-group" onclick="openAddFriend()"><i class="fas fa-plus-circle"></i> Добавить друга</div>
-                    <ul class="friends-list" id="friendsList">
-                        <li class="friend-item" onclick="switchRoom('general')">
-                            <div class="friend-avatar">#</div>
+                    <ul class="friends-list" id="friendsList"></ul>
+                </div>
+                <!-- Группы (включая общий чат) -->
+                <div id="groupsTab" style="display:none;">
+                    <div class="add-group" onclick="openGroupModal()"><i class="fas fa-plus-circle"></i> Создать группу</div>
+                    <ul class="groups-list" id="groupsList">
+                        <li class="group-item active" onclick="switchRoom('general')">
+                            <div class="group-avatar">#</div>
                             <span class="friend-name">Общий чат</span>
                         </li>
                     </ul>
-                </div>
-                <!-- Группы -->
-                <div id="groupsTab" style="display:none;">
-                    <div class="add-group" onclick="openGroupModal()"><i class="fas fa-plus-circle"></i> Создать группу</div>
-                    <ul class="groups-list" id="groupsList"></ul>
                 </div>
                 <!-- Заявки -->
                 <div id="requestsTab" style="display:none;">
@@ -732,22 +762,11 @@
             </div>
             <div class="messages" id="messages"></div>
 
-            <!-- Предпросмотр файла -->
-            <div id="filePreview" class="file-preview" style="display: none;">
-                <div id="previewThumbnail"></div>
-                <div class="file-info" id="previewInfo"></div>
-                <div class="preview-actions">
-                    <button class="send" onclick="sendFile()">Отправить</button>
-                    <button class="cancel" onclick="cancelFilePreview()">Отмена</button>
-                </div>
-            </div>
+            <!-- Предпросмотр файлов (несколько) -->
+            <div id="filePreviewContainer" class="file-preview-container" style="display: none;"></div>
 
-            <!-- Меню выбора типа файла (скрепка) -->
-            <div id="attachMenu" class="attach-menu">
-                <div class="attach-item" onclick="selectFileType('image/*')"><i class="fas fa-camera"></i> Фото</div>
-                <div class="attach-item" onclick="selectFileType('video/*')"><i class="fas fa-video"></i> Видео</div>
-                <div class="attach-item" onclick="selectFileType('*/*')"><i class="fas fa-file"></i> Файл</div>
-            </div>
+            <!-- Меню выбора файла (скрепка) -->
+            <div id="attachMenu" class="attach-menu"></div>
 
             <div class="input-area">
                 <div id="recordingIndicator">
@@ -797,9 +816,7 @@
         const settingsNickname = document.getElementById('settingsNickname');
         const accountUsernameSpan = document.getElementById('accountUsername');
         const attachMenu = document.getElementById('attachMenu');
-        const filePreview = document.getElementById('filePreview');
-        const previewThumbnail = document.getElementById('previewThumbnail');
-        const previewInfo = document.getElementById('previewInfo');
+        const filePreviewContainer = document.getElementById('filePreviewContainer');
 
         let currentUser = null;
         let userData = { nickname: '', username: '', avatar: null, theme: 'light', friends: [], friendRequests: [], groups: [] };
@@ -807,11 +824,10 @@
         let friends = [];
         let groups = [];
         let friendRequests = [];
+        let isInRoom = {}; // для предотвращения повторного входа
 
-        // Для предпросмотра файла
-        let selectedFile = null;
-        let selectedFileType = null;
-        let selectedFileUrl = null;
+        // Для множественного выбора файлов
+        let selectedFiles = []; // массив { file, type, url, name }
 
         // Определяем тип устройства
         const isTouchDevice = 'ontouchstart' in window;
@@ -835,6 +851,7 @@
                     userData = data.user;
                     localStorage.setItem('chatUser', currentUser);
                     loginModal.classList.remove('active');
+                    // Применяем тему ДО отображения
                     applyTheme(userData.theme);
                     updateProfileUI();
                     socket.emit('identify', currentUser);
@@ -883,19 +900,19 @@
         function enableChat() {
             messageInput.disabled = false;
             attachBtn.disabled = false;
-            // sendBtn будет активироваться динамически через проверку текста или файла
             messageInput.addEventListener('input', updateSendButton);
+            updateSendButton();
         }
 
         function updateSendButton() {
-            if (messageInput.value.trim() || selectedFile) {
+            if (messageInput.value.trim() || selectedFiles.length > 0) {
                 sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
                 sendBtn.classList.add('primary');
                 sendBtn.disabled = false;
             } else {
                 sendBtn.innerHTML = '<i class="fas fa-microphone"></i>';
                 sendBtn.classList.remove('primary');
-                sendBtn.disabled = false; // микрофон доступен всегда
+                sendBtn.disabled = false;
             }
         }
 
@@ -930,6 +947,17 @@
             sidebar.classList.toggle('open');
         }
 
+        // Закрытие свайпом (для мобильных)
+        let touchStartX = 0;
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+        });
+        document.addEventListener('touchend', (e) => {
+            if (sidebar.classList.contains('open') && touchStartX > 200 && e.changedTouches[0].clientX < 50) {
+                sidebar.classList.remove('open');
+            }
+        });
+
         function switchTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content > div').forEach(d => d.style.display = 'none');
@@ -959,7 +987,7 @@
 
         // ========== ДРУЗЬЯ И ЗАЯВКИ ==========
         function renderFriends() {
-            friendsList.innerHTML = '<li class="friend-item" onclick="switchRoom(\'general\')"><div class="friend-avatar">#</div><span class="friend-name">Общий чат</span></li>';
+            friendsList.innerHTML = '';
             friends.forEach(friend => {
                 const li = document.createElement('li');
                 li.className = 'friend-item';
@@ -973,7 +1001,8 @@
         }
 
         function renderGroups() {
-            groupsList.innerHTML = '';
+            // Оставляем общий чат в группах
+            groupsList.innerHTML = '<li class="group-item" onclick="switchRoom(\'general\')"><div class="group-avatar">#</div><span class="friend-name">Общий чат</span></li>';
             groups.forEach(group => {
                 const li = document.createElement('li');
                 li.className = 'group-item';
@@ -1049,13 +1078,14 @@
 
         // ========== КОМНАТЫ ==========
         function switchRoom(room) {
+            if (currentRoom === room) return; // не перезагружаем, если уже в этой комнате
             currentRoom = room;
             if (room === 'general') {
                 currentRoomName.textContent = 'Общий чат';
             } else if (room.startsWith('private:')) {
                 const parts = room.split(':');
                 const other = parts[1] === currentUser ? parts[2] : parts[1];
-                currentRoomName.textContent = other; // Показываем имя собеседника
+                currentRoomName.textContent = other;
             } else if (room.startsWith('group:')) {
                 const group = groups.find(g => g.id === room.replace('group:', ''));
                 currentRoomName.textContent = group ? group.name : 'Группа';
@@ -1085,13 +1115,13 @@
             let content = `<div class="user">${msg.user}</div>`;
 
             if (msg.type === 'image') {
-                content += `<img src="${msg.url}" alt="Фото" onclick="showMedia('${msg.url}', 'image')">`;
+                content += `<img src="${msg.url}" alt="Фото" onclick="showMedia('${msg.url}', 'image')" loading="lazy">`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else if (msg.type === 'video') {
-                content += `<video src="${msg.url}" controls onclick="showMedia('${msg.url}', 'video')"></video>`;
+                content += `<video src="${msg.url}" controls preload="metadata" onclick="showMedia('${msg.url}', 'video')"></video>`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else if (msg.type === 'audio') {
-                content += `<audio controls src="${msg.url}"></audio>`;
+                content += `<audio controls src="${msg.url}" preload="metadata"></audio>`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else {
                 content += `<div class="text">${msg.text}</div>`;
@@ -1118,9 +1148,9 @@
                 socket.emit('message', { text: messageInput.value.trim(), room: currentRoom });
                 messageInput.value = '';
                 updateSendButton();
-            } else if (selectedFile) {
-                // Отправка файла (если есть предпросмотр)
-                sendFile();
+            } else if (selectedFiles.length > 0) {
+                // Отправка файлов
+                sendFiles();
             } else {
                 // Голосовое сообщение
                 if (isRecording) stopRecording();
@@ -1129,9 +1159,21 @@
         });
 
         // ========== СКРЕПКА (ВЫБОР ФАЙЛА) ==========
-        attachBtn.addEventListener('click', () => {
+        attachBtn.addEventListener('click', (e) => {
+            // Позиционируем меню над кнопкой
+            const rect = attachBtn.getBoundingClientRect();
+            attachMenu.style.left = rect.left + 'px';
+            attachMenu.style.bottom = (window.innerHeight - rect.top + 10) + 'px';
             attachMenu.classList.toggle('show');
         });
+
+        // Заполняем меню опциями
+        attachMenu.innerHTML = `
+            <div class="attach-item" onclick="selectFiles('image/*')"><i class="fas fa-camera"></i> Фото</div>
+            <div class="attach-item" onclick="selectFiles('video/*')"><i class="fas fa-video"></i> Видео</div>
+            <div class="attach-item" onclick="selectFiles('audio/*')"><i class="fas fa-music"></i> Аудио</div>
+            <div class="attach-item" onclick="selectFiles('*/*')"><i class="fas fa-file"></i> Файл</div>
+        `;
 
         // Закрыть меню при клике вне
         document.addEventListener('click', (e) => {
@@ -1140,74 +1182,103 @@
             }
         });
 
-        function selectFileType(accept) {
+        function selectFiles(accept) {
             attachMenu.classList.remove('show');
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = accept;
+            input.multiple = true; // множественный выбор
             input.style.display = 'none';
             document.body.appendChild(input);
             input.addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                if (file.size > 50 * 1024 * 1024) {
-                    alert('Файл слишком большой (макс. 50 МБ)');
-                    return;
-                }
-                // Сохраняем файл для предпросмотра
-                selectedFile = file;
-                selectedFileType = file.type.startsWith('image/') ? 'image' : (file.type.startsWith('video/') ? 'video' : 'file');
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    selectedFileUrl = e.target.result;
-                    showFilePreview(file, selectedFileType, e.target.result);
-                };
-                reader.readAsDataURL(file);
+                const files = Array.from(e.target.files);
+                files.forEach(file => {
+                    if (file.size > 50 * 1024 * 1024) {
+                        alert(`Файл ${file.name} слишком большой (макс. 50 МБ)`);
+                        return;
+                    }
+                    // Определяем тип
+                    let type = 'file';
+                    if (file.type.startsWith('image/')) type = 'image';
+                    else if (file.type.startsWith('video/')) type = 'video';
+                    else if (file.type.startsWith('audio/')) type = 'audio';
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        selectedFiles.push({
+                            file: file,
+                            type: type,
+                            url: e.target.result,
+                            name: file.name
+                        });
+                        renderFilePreviews();
+                        updateSendButton();
+                    };
+                    reader.readAsDataURL(file);
+                });
                 input.remove();
             });
             input.click();
         }
 
-        function showFilePreview(file, type, dataUrl) {
-            previewThumbnail.innerHTML = '';
-            if (type === 'image') {
-                previewThumbnail.innerHTML = `<img src="${dataUrl}" style="max-width:60px; max-height:60px;">`;
-            } else if (type === 'video') {
-                previewThumbnail.innerHTML = `<video src="${dataUrl}" style="max-width:60px; max-height:60px;"></video>`;
-            } else {
-                previewThumbnail.innerHTML = '<i class="fas fa-file" style="font-size:40px;"></i>';
+        function renderFilePreviews() {
+            filePreviewContainer.innerHTML = '';
+            if (selectedFiles.length === 0) {
+                filePreviewContainer.style.display = 'none';
+                return;
             }
-            previewInfo.textContent = file.name;
-            filePreview.style.display = 'flex';
-            updateSendButton();
-        }
-
-        function cancelFilePreview() {
-            selectedFile = null;
-            selectedFileType = null;
-            selectedFileUrl = null;
-            filePreview.style.display = 'none';
-            updateSendButton();
-        }
-
-        async function sendFile() {
-            if (!selectedFile) return;
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            try {
-                const response = await fetch('/upload', { method: 'POST', body: formData });
-                const result = await response.json();
-                if (result.success) {
-                    socket.emit('media-message', {
-                        mediaData: { type: result.type, url: result.url, fileName: result.name, text: '' },
-                        room: currentRoom
-                    });
-                    cancelFilePreview();
+            filePreviewContainer.style.display = 'flex';
+            selectedFiles.forEach((f, index) => {
+                const item = document.createElement('div');
+                item.className = 'file-preview-item';
+                let thumbHtml = '';
+                if (f.type === 'image') {
+                    thumbHtml = `<img src="${f.url}" class="preview-thumb">`;
+                } else if (f.type === 'video') {
+                    thumbHtml = `<video src="${f.url}" class="preview-thumb" preload="metadata"></video>`;
+                } else if (f.type === 'audio') {
+                    thumbHtml = `<i class="fas fa-music preview-thumb"></i>`;
+                } else {
+                    thumbHtml = `<i class="fas fa-file preview-thumb"></i>`;
                 }
-            } catch (error) {
-                console.error('Ошибка загрузки файла:', error);
-                alert('Не удалось загрузить файл');
+                item.innerHTML = `
+                    <div class="preview-thumb">${thumbHtml}</div>
+                    <div class="file-info">${f.name}</div>
+                    <button class="remove-file" onclick="removeFile(${index})"><i class="fas fa-times"></i></button>
+                `;
+                filePreviewContainer.appendChild(item);
+            });
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            renderFilePreviews();
+            updateSendButton();
+        }
+
+        async function sendFiles() {
+            for (let f of selectedFiles) {
+                const formData = new FormData();
+                formData.append('file', f.file);
+                try {
+                    const response = await fetch('/upload', { method: 'POST', body: formData });
+                    const result = await response.json();
+                    if (result.success) {
+                        socket.emit('media-message', {
+                            mediaData: { type: result.type, url: result.url, fileName: result.name, text: '' },
+                            room: currentRoom
+                        });
+                    } else {
+                        alert(`Ошибка загрузки файла ${f.name}`);
+                    }
+                } catch (error) {
+                    console.error('Ошибка загрузки файла:', error);
+                    alert(`Ошибка загрузки файла ${f.name}`);
+                }
             }
+            selectedFiles = [];
+            renderFilePreviews();
+            updateSendButton();
         }
 
         // ========== ГОЛОСОВЫЕ ==========
@@ -1218,14 +1289,18 @@
         let mediaStream = null;
         let isRecording = false;
 
+        // Для мобильных: удержание
         if (isTouchDevice) {
-            // Для мобильных: удержание
-            voiceBtn = sendBtn; // используем ту же кнопку
-            voiceBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
-            voiceBtn.addEventListener('touchend', stopRecording);
-            voiceBtn.addEventListener('touchcancel', stopRecording);
-        } else {
-            // Для ПК: клик для старта/остановки (через sendBtn, когда нет текста)
+            sendBtn.addEventListener('touchstart', (e) => {
+                if (!messageInput.value.trim() && selectedFiles.length === 0) {
+                    e.preventDefault();
+                    startRecording();
+                }
+            });
+            sendBtn.addEventListener('touchend', (e) => {
+                if (isRecording) stopRecording();
+            });
+            sendBtn.addEventListener('touchcancel', stopRecording);
         }
 
         async function startRecording() {
@@ -1334,7 +1409,12 @@
                 userData.avatar = result.url;
                 updateSettingsAvatar();
                 updateProfileUI();
+                // Отправляем обновление всем через сокет (чтобы другие видели аватар)
+                socket.emit('avatar-updated', { username: currentUser, avatar: result.url });
             }
+        });
+        socket.on('avatar-updated', ({ username, avatar }) => {
+            // Обновить аватар в списке друзей/групп (можно позже)
         });
         function updateSettingsAvatar() {
             if (userData.avatar) {
@@ -1385,6 +1465,8 @@
         function applyTheme(theme) {
             if (theme === 'dark') document.body.classList.add('dark-theme');
             else document.body.classList.remove('dark-theme');
+            // Также устанавливаем акцентный цвет из данных пользователя (если сохранён)
+            // Можно расширить
         }
 
         // ========== УДАЛЕНИЕ АККАУНТА ==========
@@ -1458,9 +1540,6 @@
         setInterval(() => {
             if (currentUser) socket.emit('ping');
         }, 3000);
-
-        // Инициализация кнопки отправки
-        updateSendButton();
     </script>
 </body>
 </html>
