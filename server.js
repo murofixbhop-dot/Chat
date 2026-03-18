@@ -66,9 +66,9 @@ function calculateSHA1(buffer) {
   return hash.digest('hex');
 }
 
-// ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ И ЗАЯВКАМИ ==========
+// ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ==========
 const USERS_FILE = 'users.json';
-let users = new Map(); // username -> { friends: [], friendRequests: [] }
+let users = new Map(); // username -> { nickname, avatar, theme, friends, friendRequests, groups }
 
 async function loadUsers() {
   try {
@@ -154,6 +154,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 // ========== API ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
 app.use(express.json());
 
+// Регистрация/вход
 app.post('/api/login', async (req, res) => {
   const { username } = req.body;
   if (!username || username.trim() === '') {
@@ -166,27 +167,71 @@ app.post('/api/login', async (req, res) => {
       success: true,
       user: {
         username: cleanName,
+        nickname: userData.nickname || cleanName,
+        avatar: userData.avatar || null,
+        theme: userData.theme || 'light',
         friends: userData.friends || [],
-        friendRequests: userData.friendRequests || []
+        friendRequests: userData.friendRequests || [],
+        groups: userData.groups || []
       }
     });
   } else {
-    const newUser = { friends: [], friendRequests: [] };
+    // Проверка на уникальность имени (уже есть, но для новых пользователей)
+    // Если имя занято, то мы бы не попали сюда, потому что users.has вернуло бы true
+    const newUser = {
+      nickname: cleanName,
+      avatar: null,
+      theme: 'light',
+      friends: [],
+      friendRequests: [],
+      groups: []
+    };
     users.set(cleanName, newUser);
     await saveUsers();
     return res.json({
       success: true,
-      user: { username: cleanName, friends: [], friendRequests: [] }
+      user: {
+        username: cleanName,
+        nickname: cleanName,
+        avatar: null,
+        theme: 'light',
+        friends: [],
+        friendRequests: [],
+        groups: []
+      }
     });
   }
+});
+
+// Обновление профиля (никнейм, аватар, тема)
+app.post('/api/update-profile', async (req, res) => {
+  const { username, nickname, avatar, theme } = req.body;
+  if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+  const user = users.get(username);
+  if (nickname !== undefined) user.nickname = nickname;
+  if (avatar !== undefined) user.avatar = avatar;
+  if (theme !== undefined) user.theme = theme;
+  users.set(username, user);
+  await saveUsers();
+  res.json({ success: true, user: { nickname: user.nickname, avatar: user.avatar, theme: user.theme } });
+});
+
+// Удаление аккаунта
+app.post('/api/delete-account', async (req, res) => {
+  const { username } = req.body;
+  if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+  users.delete(username);
+  await saveUsers();
+  // Также нужно удалить все личные сообщения? Пока оставим историю в истории.
+  res.json({ success: true });
 });
 
 // Отправить заявку в друзья
 app.post('/api/send-friend-request', async (req, res) => {
   const { from, to } = req.body;
   if (!from || !to) return res.status(400).json({ error: 'Не указаны имена' });
-  if (!users.has(from)) return res.status(404).json({ error: 'Отправитель не найден' });
-  if (!users.has(to)) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (!users.has(from) || !users.has(to)) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (from === to) return res.status(400).json({ error: 'Нельзя добавить себя' });
 
   const targetUser = users.get(to);
   if (!targetUser.friendRequests) targetUser.friendRequests = [];
@@ -197,12 +242,10 @@ app.post('/api/send-friend-request', async (req, res) => {
   users.set(to, targetUser);
   await saveUsers();
 
-  // Уведомляем получателя через socket, если он онлайн
   const targetSocketId = userSockets.get(to);
   if (targetSocketId) {
     io.to(targetSocketId).emit('friend-request', { from });
   }
-
   res.json({ success: true });
 });
 
@@ -219,9 +262,7 @@ app.post('/api/accept-friend-request', async (req, res) => {
   const index = user.friendRequests.indexOf(requester);
   if (index === -1) return res.status(400).json({ error: 'Заявка не найдена' });
 
-  // Удаляем заявку
   user.friendRequests.splice(index, 1);
-  // Добавляем в друзья обоим
   if (!user.friends) user.friends = [];
   if (!requesterUser.friends) requesterUser.friends = [];
   if (!user.friends.includes(requester)) user.friends.push(requester);
@@ -251,14 +292,33 @@ app.post('/api/reject-friend-request', async (req, res) => {
   res.json({ success: true });
 });
 
-// Получить список друзей и заявок
+// Создать группу
+app.post('/api/create-group', async (req, res) => {
+  const { creator, name, members } = req.body; // members - массив имён друзей
+  if (!creator || !name) return res.status(400).json({ error: 'Не указаны данные' });
+  if (!users.has(creator)) return res.status(404).json({ error: 'Создатель не найден' });
+
+  const groupId = `group_${Date.now()}`;
+  const group = {
+    id: groupId,
+    name: name,
+    members: [creator, ...(members || [])]
+  };
+  // Сохраняем группу в отдельном файле или в users? Лучше отдельный файл groups.json.
+  // Для простоты пока сохраним в groups.json
+  // TODO: реализовать сохранение групп
+  res.json({ success: true, groupId });
+});
+
+// Получить данные пользователя (друзья, заявки, группы)
 app.post('/api/get-user-data', (req, res) => {
   const { username } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   const userData = users.get(username);
   res.json({
     friends: userData.friends || [],
-    friendRequests: userData.friendRequests || []
+    friendRequests: userData.friendRequests || [],
+    groups: userData.groups || []
   });
 });
 
