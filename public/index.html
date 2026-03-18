@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Чат с фото и голосом</title>
+    <title>Чат с фото, видео и голосом</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
         body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -89,15 +89,21 @@
         .message .user { font-size: 0.8em; font-weight: bold; color: #444; margin-bottom: 2px; }
         .message .text { font-size: 1em; margin-bottom: 4px; }
         .message .time { font-size: 0.7em; color: #666; margin-top: 4px; text-align: right; }
-        .message img { 
-            max-width: 100%; 
-            max-height: 200px; 
-            border-radius: 8px; 
+        .message img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 8px;
             cursor: pointer;
             margin-top: 4px;
         }
-        .message audio { 
-            width: 100%; 
+        .message video {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-top: 4px;
+        }
+        .message audio {
+            width: 100%;
             margin-top: 4px;
         }
         .system {
@@ -165,7 +171,7 @@
             justify-content: center;
             align-items: center;
         }
-        .modal img {
+        .modal img, .modal video {
             max-width: 90%;
             max-height: 90%;
         }
@@ -203,15 +209,17 @@
             <div class="input-row">
                 <input type="text" id="messageInput" placeholder="Введите сообщение..." autocomplete="off">
                 <button class="action-btn" id="photoBtn" title="Отправить фото">📷</button>
+                <button class="action-btn" id="videoBtn" title="Отправить видео">🎥</button>
                 <button class="action-btn" id="voiceBtn" title="Голосовое сообщение">🎤</button>
                 <button class="action-btn primary" id="sendBtn">➤</button>
             </div>
         </div>
     </div>
 
-    <div id="imageModal" class="modal" onclick="this.style.display='none'">
+    <div id="mediaModal" class="modal" onclick="this.style.display='none'">
         <span class="modal-close">&times;</span>
-        <img id="modalImage" src="">
+        <img id="modalImage" src="" style="display: none;">
+        <video id="modalVideo" controls style="display: none;"></video>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -221,6 +229,7 @@
         const input = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
         const photoBtn = document.getElementById('photoBtn');
+        const videoBtn = document.getElementById('videoBtn');
         const voiceBtn = document.getElementById('voiceBtn');
         const currentNameLabel = document.getElementById('currentNameLabel');
         const changeNameBtn = document.getElementById('changeNameBtn');
@@ -228,8 +237,9 @@
         const recordingIndicator = document.getElementById('recordingIndicator');
         const recordingTime = document.getElementById('recordingTime');
         const stopRecordingBtn = document.getElementById('stopRecordingBtn');
-        const imageModal = document.getElementById('imageModal');
+        const mediaModal = document.getElementById('mediaModal');
         const modalImage = document.getElementById('modalImage');
+        const modalVideo = document.getElementById('modalVideo');
 
         // ========== ИМЯ ПОЛЬЗОВАТЕЛЯ ==========
         const STORAGE_KEY = 'chatUserName';
@@ -266,7 +276,7 @@
             onlineCountSpan.textContent = count;
         });
 
-        // ========== ПИНГ ДЛЯ ПОДДЕРЖАНИЯ СТАТУСА ==========
+        // ========== ПИНГ ==========
         setInterval(() => {
             socket.emit('ping');
         }, 3000);
@@ -275,11 +285,14 @@
         function addMessage(msg) {
             const msgDiv = document.createElement('div');
             msgDiv.classList.add('message');
-            
+
             let content = `<div class="user">${msg.user}</div>`;
-            
+
             if (msg.type === 'image') {
-                content += `<img src="${msg.url}" alt="Фото" onclick="showImage('${msg.url}')">`;
+                content += `<img src="${msg.url}" alt="Фото" onclick="showMedia('${msg.url}', 'image')">`;
+                if (msg.text) content += `<div class="text">${msg.text}</div>`;
+            } else if (msg.type === 'video') {
+                content += `<video src="${msg.url}" controls onclick="showMedia('${msg.url}', 'video')" style="max-width: 100%; max-height: 300px;"></video>`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else if (msg.type === 'audio') {
                 content += `<audio controls src="${msg.url}"></audio>`;
@@ -287,10 +300,10 @@
             } else {
                 content += `<div class="text">${msg.text}</div>`;
             }
-            
+
             content += `<div class="time">${msg.time}</div>`;
             msgDiv.innerHTML = content;
-            
+
             messagesDiv.appendChild(msgDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -323,44 +336,66 @@
             if (e.key === 'Enter') sendMessage();
         });
 
-        // ========== ЗАГРУЗКА ФОТО ==========
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = 'image/*';
-        fileInput.style.display = 'none';
-        document.body.appendChild(fileInput);
+        // ========== ЗАГРУЗКА ФАЙЛОВ (ФОТО, ВИДЕО) ==========
+        function createFileInput(accept, callback) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = accept;
+            input.style.display = 'none';
+            document.body.appendChild(input);
+            input.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                callback(file);
+                input.remove();
+            });
+            input.click();
+        }
 
         photoBtn.addEventListener('click', () => {
-            fileInput.click();
+            createFileInput('image/*', async (file) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                try {
+                    const response = await fetch('/upload', { method: 'POST', body: formData });
+                    const result = await response.json();
+                    if (result.success) {
+                        const caption = prompt('Подпись к фото (необязательно):', '');
+                        socket.emit('media-message', {
+                            type: 'image',
+                            url: result.url,
+                            fileName: result.name,
+                            text: caption || ''
+                        });
+                    }
+                } catch (error) {
+                    console.error('Ошибка загрузки фото:', error);
+                    alert('Не удалось загрузить фото');
+                }
+            });
         });
 
-        fileInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await response.json();
-                if (result.success) {
-                    const caption = prompt('Подпись к фото (необязательно):', '');
-                    socket.emit('media-message', {
-                        type: 'image',
-                        url: result.url,
-                        fileName: result.name,
-                        text: caption || ''
-                    });
+        videoBtn.addEventListener('click', () => {
+            createFileInput('video/*', async (file) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                try {
+                    const response = await fetch('/upload', { method: 'POST', body: formData });
+                    const result = await response.json();
+                    if (result.success) {
+                        const caption = prompt('Подпись к видео (необязательно):', '');
+                        socket.emit('media-message', {
+                            type: 'video',
+                            url: result.url,
+                            fileName: result.name,
+                            text: caption || ''
+                        });
+                    }
+                } catch (error) {
+                    console.error('Ошибка загрузки видео:', error);
+                    alert('Не удалось загрузить видео');
                 }
-            } catch (error) {
-                console.error('Ошибка загрузки фото:', error);
-                alert('Не удалось загрузить фото');
-            }
-            fileInput.value = '';
+            });
         });
 
         // ========== ГОЛОСОВЫЕ (УЛУЧШЕННОЕ КАЧЕСТВО) ==========
@@ -376,57 +411,56 @@
 
         async function startRecording() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
+                const stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         channelCount: 1,
                         sampleRate: 48000,
                         echoCancellation: true,
                         noiseSuppression: true,
                         autoGainControl: true
-                    } 
+                    }
                 });
-                
-                const options = {
-                    mimeType: 'audio/webm;codecs=opus',
-                    audioBitsPerSecond: 128000
-                };
-                
-                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    console.warn('opus не поддерживается, используется стандартный кодек');
+
+                // Пробуем разные кодеки для лучшего качества
+                let options = { audioBitsPerSecond: 256000 };
+                if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                    options.mimeType = 'audio/webm;codecs=opus';
+                } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                    options.mimeType = 'audio/webm';
                 }
-                
+
                 mediaRecorder = new MediaRecorder(stream, options);
                 audioChunks = [];
-                
+
                 mediaRecorder.ondataavailable = event => {
                     audioChunks.push(event.data);
                 };
-                
+
                 mediaRecorder.onstop = async () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     await sendVoiceMessage(audioBlob);
                     stream.getTracks().forEach(track => track.stop());
-                    
+
                     recordingIndicator.style.display = 'none';
                     voiceBtn.style.display = 'inline-block';
                     clearInterval(recordingTimer);
                     seconds = 0;
                 };
-                
+
                 mediaRecorder.start();
-                
+
                 recordingIndicator.style.display = 'flex';
                 voiceBtn.style.display = 'none';
-                
+
                 seconds = 0;
                 recordingTimer = setInterval(() => {
                     seconds++;
                     recordingTime.textContent = seconds;
                 }, 1000);
-                
+
             } catch (error) {
                 console.error('Ошибка доступа к микрофону:', error);
-                alert('Не удалось получить доступ к микрофону');
+                alert('Не удалось получить доступ к микрофону. Проверьте разрешения.');
             }
         }
 
@@ -441,10 +475,7 @@
             formData.append('file', blob, 'voice.webm');
 
             try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
+                const response = await fetch('/upload', { method: 'POST', body: formData });
                 const result = await response.json();
                 if (result.success) {
                     socket.emit('media-message', {
@@ -460,12 +491,23 @@
             }
         }
 
-        window.showImage = function(url) {
-            modalImage.src = url;
-            imageModal.style.display = 'flex';
+        // ========== ПРОСМОТР МЕДИА ==========
+        window.showMedia = function(url, type) {
+            if (type === 'image') {
+                modalImage.src = url;
+                modalImage.style.display = 'block';
+                modalVideo.style.display = 'none';
+            } else {
+                modalVideo.src = url;
+                modalVideo.style.display = 'block';
+                modalImage.style.display = 'none';
+            }
+            mediaModal.style.display = 'flex';
         };
-        imageModal.onclick = function() {
-            imageModal.style.display = 'none';
+
+        mediaModal.onclick = function() {
+            mediaModal.style.display = 'none';
+            modalVideo.pause();
         };
     </script>
 </body>
