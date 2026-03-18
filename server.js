@@ -10,10 +10,10 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // ========== 1. НАСТРОЙКА BACKBLAZE B2 ==========
-const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;      // ваш keyID
-const B2_APP_KEY = process.env.B2_APP_KEY;            // ваш applicationKey
-const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;    // имя бакета
-const WORKER_URL = process.env.WORKER_URL || 'https://b2-proxy.murofixbhop.workers.dev'; // ваш Worker URL
+const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;
+const B2_APP_KEY = process.env.B2_APP_KEY;
+const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;
+const WORKER_URL = process.env.WORKER_URL || 'https://b2-proxy.murofixbhop.workers.dev';
 
 let b2Auth = null;
 let b2BucketId = null;
@@ -53,7 +53,6 @@ function calculateSHA1(buffer) {
   return hash.digest('hex');
 }
 
-// Загрузка файла в B2, возвращает URL через Worker
 async function uploadFileToB2(fileBuffer, fileName, mimeType) {
   const uploadData = await getUploadUrl();
   const sha1 = calculateSHA1(fileBuffer);
@@ -68,7 +67,7 @@ async function uploadFileToB2(fileBuffer, fileName, mimeType) {
     }
   });
 
-  // Возвращаем ссылку через Worker, а не напрямую к B2
+  // Возвращаем URL через Worker (он добавит CORS)
   return `${WORKER_URL}/${B2_BUCKET_NAME}/${fileName}`;
 }
 
@@ -133,7 +132,7 @@ async function saveHistoryToB2() {
 // ========== 3. НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 } // 50 MB
+  limits: { fileSize: 50 * 1024 * 1024 }
 });
 
 app.use(express.static('public'));
@@ -151,7 +150,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     else if (mimeType.startsWith('audio/')) fileType = 'audio';
     else if (mimeType.startsWith('video/')) fileType = 'video';
 
-    // Добавляем префикс для Lifecycle Rules (опционально)
     let prefix = '';
     if (fileType === 'image') prefix = 'photos/';
     else if (fileType === 'video') prefix = 'videos/';
@@ -238,7 +236,7 @@ io.on('connection', (socket) => {
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
-    saveHistoryToB2(); // асинхронно
+    saveHistoryToB2();
     io.emit('message', msg);
   });
 
