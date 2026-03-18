@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>Chat with Friends</title>
+    <title>Мессенджер</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        /* Переменные светлой темы (по умолчанию) */
         :root {
             --bg-color: #f0f2f5;
             --sidebar-bg: #ffffff;
@@ -25,9 +24,9 @@
             --online-indicator: #2ecc71;
             --scrollbar-thumb: #ccc;
             --scrollbar-track: #f1f1f1;
+            --modal-overlay: rgba(0,0,0,0.5);
         }
 
-        /* Тёмная тема */
         body.dark-theme {
             --bg-color: #1a1a2e;
             --sidebar-bg: #16213e;
@@ -45,6 +44,7 @@
             --accent-color: #4a4a8a;
             --scrollbar-thumb: #444;
             --scrollbar-track: #222;
+            --modal-overlay: rgba(0,0,0,0.7);
         }
 
         * {
@@ -84,7 +84,6 @@
             width: 100%;
             max-width: 1300px;
             height: 100vh;
-            max-height: 100vh;
             display: flex;
             background: var(--sidebar-bg);
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
@@ -92,7 +91,7 @@
             position: relative;
         }
 
-        /* Левая панель */
+        /* Левая панель (десктоп) */
         .sidebar {
             width: 300px;
             background: var(--sidebar-bg);
@@ -346,6 +345,47 @@
             border-top: 1px solid var(--border-color);
             background: var(--sidebar-bg);
         }
+
+        /* Предпросмотр файла */
+        .file-preview {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: var(--friend-item-bg);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        .file-preview img, .file-preview video {
+            max-width: 60px;
+            max-height: 60px;
+            border-radius: 5px;
+            object-fit: cover;
+        }
+        .file-preview .file-info {
+            flex: 1;
+            font-size: 14px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .file-preview .preview-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .preview-actions button {
+            border: none;
+            background: var(--accent-color);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .preview-actions button.cancel {
+            background: #dc3545;
+        }
+
         .input-row {
             display: flex;
             gap: 8px;
@@ -373,6 +413,7 @@
             display: inline-flex;
             align-items: center;
             gap: 5px;
+            font-size: 16px;
         }
         .action-btn:hover { background: var(--friend-hover); }
         .action-btn.primary { background: var(--accent-color); color: white; }
@@ -388,6 +429,33 @@
             margin-bottom: 10px;
         }
 
+        /* Меню выбора типа файла (скрепка) */
+        .attach-menu {
+            position: absolute;
+            bottom: 70px;
+            left: 20px;
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px;
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 200;
+        }
+        .attach-menu.show { display: flex; }
+        .attach-item {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-color);
+        }
+        .attach-item:hover { background: var(--friend-hover); }
+
         /* Модальные окна */
         .modal {
             display: none;
@@ -396,7 +464,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: var(--modal-overlay);
             align-items: center;
             justify-content: center;
             z-index: 1000;
@@ -411,6 +479,7 @@
             overflow-y: auto;
             padding: 20px;
             color: var(--text-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
         .modal-header {
             display: flex;
@@ -436,10 +505,47 @@
             text-align: center;
             cursor: pointer;
             color: var(--text-secondary);
+            transition: 0.2s;
         }
         .settings-tab.active {
             border-bottom: 2px solid var(--accent-color);
             color: var(--accent-color);
+        }
+
+        .settings-pane {
+            padding: 10px 0;
+        }
+        .settings-pane label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+        }
+        .settings-pane input, .settings-pane select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: var(--input-bg);
+            color: var(--text-color);
+        }
+
+        .avatar-upload {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .avatar-upload .avatar {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 10px;
+        }
+        .avatar-upload button {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
         }
 
         .theme-preview {
@@ -454,8 +560,12 @@
             border-radius: 50%;
             cursor: pointer;
             border: 2px solid transparent;
+            transition: 0.2s;
         }
-        .color-option.selected { border-color: white; box-shadow: 0 0 0 2px var(--accent-color); }
+        .color-option.selected {
+            border-color: white;
+            box-shadow: 0 0 0 2px var(--accent-color);
+        }
 
         .danger-btn {
             background: #dc3545;
@@ -477,6 +587,7 @@
             justify-content: space-around;
             position: sticky;
             bottom: 0;
+            z-index: 50;
         }
         .nav-item {
             font-size: 24px;
@@ -484,7 +595,7 @@
             color: var(--text-secondary);
             padding: 5px 10px;
             border-radius: 50%;
-            transition: background 0.2s;
+            transition: 0.2s;
         }
         .nav-item.active { color: var(--accent-color); background: var(--friend-hover); }
         @media (max-width: 768px) {
@@ -500,8 +611,8 @@
         <div class="modal-content" style="max-width: 350px;">
             <h2>Вход / Регистрация</h2>
             <p>Введите уникальное имя для входа</p>
-            <input type="text" id="loginUsername" placeholder="Имя" autocomplete="off" style="width:100%; padding:10px; margin:10px 0;">
-            <button onclick="login()" style="width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px;">Продолжить</button>
+            <input type="text" id="loginUsername" placeholder="Имя" autocomplete="off">
+            <button onclick="login()" style="width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px; margin-top:10px;">Продолжить</button>
             <div id="loginError" style="color:#dc3545; margin-top:10px;"></div>
         </div>
     </div>
@@ -518,33 +629,37 @@
                 <div class="settings-tab" onclick="switchSettingsTab('theme')">Тема</div>
                 <div class="settings-tab" onclick="switchSettingsTab('account')">Аккаунт</div>
             </div>
+
+            <!-- Профиль -->
             <div id="settingsProfile" class="settings-pane">
-                <div style="text-align:center; margin:20px 0;">
-                    <div class="avatar" id="settingsAvatar" style="width:80px; height:80px; margin:0 auto;"></div>
-                    <button onclick="triggerAvatarUpload()" style="margin-top:10px;">Загрузить аватар</button>
+                <div class="avatar-upload">
+                    <div class="avatar" id="settingsAvatar"></div>
+                    <button onclick="triggerAvatarUpload()">Загрузить аватар</button>
                     <input type="file" id="avatarUpload" accept="image/*" style="display:none;">
                 </div>
-                <div>
-                    <label>Отображаемое имя (никнейм)</label>
-                    <input type="text" id="settingsNickname" style="width:100%; padding:8px; margin:5px 0;">
-                </div>
-                <button onclick="saveProfile()" style="margin-top:15px; width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px;">Сохранить</button>
+                <label>Отображаемое имя (никнейм)</label>
+                <input type="text" id="settingsNickname" placeholder="Никнейм">
+                <button onclick="saveProfile()" style="width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px;">Сохранить</button>
             </div>
+
+            <!-- Тема -->
             <div id="settingsTheme" class="settings-pane" style="display:none;">
-                <h4>Акцентный цвет</h4>
+                <label>Акцентный цвет</label>
                 <div class="theme-preview">
                     <div class="color-option selected" style="background:#0088cc;" onclick="selectAccentColor('#0088cc', this)"></div>
                     <div class="color-option" style="background:#4a4a8a;" onclick="selectAccentColor('#4a4a8a', this)"></div>
                     <div class="color-option" style="background:#28a745;" onclick="selectAccentColor('#28a745', this)"></div>
                     <div class="color-option" style="background:#dc3545;" onclick="selectAccentColor('#dc3545', this)"></div>
                 </div>
-                <h4>Фон чата</h4>
-                <select id="themeBg" style="width:100%; padding:8px;">
+                <label>Фон чата</label>
+                <select id="themeBg">
                     <option value="light">Светлый</option>
                     <option value="dark">Тёмный</option>
                 </select>
-                <button onclick="saveTheme()" style="margin-top:15px; width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px;">Применить</button>
+                <button onclick="saveTheme()" style="width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px; margin-top:10px;">Применить</button>
             </div>
+
+            <!-- Аккаунт -->
             <div id="settingsAccount" class="settings-pane" style="display:none;">
                 <p>Ваш логин: <strong id="accountUsername"></strong></p>
                 <button class="danger-btn" onclick="deleteAccount()">Удалить аккаунт</button>
@@ -559,16 +674,16 @@
                 <h2>Создать группу</h2>
                 <span class="close-btn" onclick="closeGroupModal()">&times;</span>
             </div>
-            <input type="text" id="groupName" placeholder="Название группы" style="width:100%; padding:10px; margin:10px 0;">
+            <input type="text" id="groupName" placeholder="Название группы">
             <p>Выберите участников:</p>
             <div id="groupMembersList" style="max-height:200px; overflow-y:auto;"></div>
-            <button onclick="createGroup()" style="margin-top:15px; width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px;">Создать</button>
+            <button onclick="createGroup()" style="width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px; margin-top:10px;">Создать</button>
         </div>
     </div>
 
     <!-- Основной интерфейс -->
     <div class="chat-container">
-        <!-- Боковая панель -->
+        <!-- Боковая панель (друзья/группы/заявки) -->
         <div class="sidebar" id="sidebar">
             <div class="profile">
                 <div class="avatar" id="profileAvatar" onclick="openSettings()"></div>
@@ -576,22 +691,27 @@
                     <div class="nickname" id="profileNickname">Загрузка...</div>
                     <div class="username" id="profileUsername"></div>
                 </div>
-                <div class="settings-icon" onclick="openSettings()">⚙️</div>
+                <div class="settings-icon" onclick="openSettings()"><i class="fas fa-cog"></i></div>
             </div>
             <div class="tabs">
-                <div class="tab active" onclick="switchTab('friends')">Друзья</div>
-                <div class="tab" onclick="switchTab('groups')">Группы</div>
-                <div class="tab" onclick="switchTab('requests')">Заявки</div>
+                <div class="tab active" onclick="switchTab('friends')"><i class="fas fa-user-friends"></i> Друзья</div>
+                <div class="tab" onclick="switchTab('groups')"><i class="fas fa-users"></i> Группы</div>
+                <div class="tab" onclick="switchTab('requests')"><i class="fas fa-bell"></i> Заявки</div>
             </div>
-            <div class="tab-content" id="tabContent">
+            <div class="tab-content">
                 <!-- Друзья -->
-                <div id="friendsTab" style="display:block;">
-                    <div class="add-group" onclick="openAddFriend()">+ Добавить друга</div>
-                    <ul class="friends-list" id="friendsList"></ul>
+                <div id="friendsTab">
+                    <div class="add-group" onclick="openAddFriend()"><i class="fas fa-plus-circle"></i> Добавить друга</div>
+                    <ul class="friends-list" id="friendsList">
+                        <li class="friend-item" onclick="switchRoom('general')">
+                            <div class="friend-avatar">#</div>
+                            <span class="friend-name">Общий чат</span>
+                        </li>
+                    </ul>
                 </div>
                 <!-- Группы -->
                 <div id="groupsTab" style="display:none;">
-                    <div class="add-group" onclick="openGroupModal()">+ Создать группу</div>
+                    <div class="add-group" onclick="openGroupModal()"><i class="fas fa-plus-circle"></i> Создать группу</div>
                     <ul class="groups-list" id="groupsList"></ul>
                 </div>
                 <!-- Заявки -->
@@ -601,27 +721,43 @@
             </div>
         </div>
 
-        <!-- Основная область -->
+        <!-- Основная область чата -->
         <div class="chat-main">
             <div class="chat-header">
-                <span class="menu-toggle" onclick="toggleSidebar()">☰</span>
+                <span class="menu-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></span>
                 <span class="room-name" id="currentRoomName">Общий чат</span>
                 <div class="online-indicator">
                     <span id="onlineCount">0</span> онлайн
                 </div>
             </div>
             <div class="messages" id="messages"></div>
+
+            <!-- Предпросмотр файла -->
+            <div id="filePreview" class="file-preview" style="display: none;">
+                <div id="previewThumbnail"></div>
+                <div class="file-info" id="previewInfo"></div>
+                <div class="preview-actions">
+                    <button class="send" onclick="sendFile()">Отправить</button>
+                    <button class="cancel" onclick="cancelFilePreview()">Отмена</button>
+                </div>
+            </div>
+
+            <!-- Меню выбора типа файла (скрепка) -->
+            <div id="attachMenu" class="attach-menu">
+                <div class="attach-item" onclick="selectFileType('image/*')"><i class="fas fa-camera"></i> Фото</div>
+                <div class="attach-item" onclick="selectFileType('video/*')"><i class="fas fa-video"></i> Видео</div>
+                <div class="attach-item" onclick="selectFileType('*/*')"><i class="fas fa-file"></i> Файл</div>
+            </div>
+
             <div class="input-area">
                 <div id="recordingIndicator">
                     <span>🔴 Запись...</span>
                     <span id="recordingTime">0</span>с
                 </div>
                 <div class="input-row">
+                    <button class="action-btn" id="attachBtn" title="Прикрепить"><i class="fas fa-paperclip"></i></button>
                     <input type="text" id="messageInput" placeholder="Сообщение..." autocomplete="off" disabled>
-                    <button class="action-btn" id="photoBtn" title="Фото" disabled><i class="fas fa-camera"></i></button>
-                    <button class="action-btn" id="videoBtn" title="Видео" disabled><i class="fas fa-video"></i></button>
-                    <button class="action-btn record" id="voiceBtn" title="Голосовое" disabled><i class="fas fa-microphone"></i></button>
-                    <button class="action-btn primary" id="sendBtn" disabled><i class="fas fa-paper-plane"></i></button>
+                    <button class="action-btn" id="sendBtn" title="Отправить" disabled><i class="fas fa-paper-plane"></i></button>
                 </div>
             </div>
         </div>
@@ -641,9 +777,7 @@
         const messagesDiv = document.getElementById('messages');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
-        const photoBtn = document.getElementById('photoBtn');
-        const videoBtn = document.getElementById('videoBtn');
-        const voiceBtn = document.getElementById('voiceBtn');
+        const attachBtn = document.getElementById('attachBtn');
         const onlineCountSpan = document.getElementById('onlineCount');
         const recordingIndicator = document.getElementById('recordingIndicator');
         const recordingTime = document.getElementById('recordingTime');
@@ -662,6 +796,10 @@
         const settingsAvatar = document.getElementById('settingsAvatar');
         const settingsNickname = document.getElementById('settingsNickname');
         const accountUsernameSpan = document.getElementById('accountUsername');
+        const attachMenu = document.getElementById('attachMenu');
+        const filePreview = document.getElementById('filePreview');
+        const previewThumbnail = document.getElementById('previewThumbnail');
+        const previewInfo = document.getElementById('previewInfo');
 
         let currentUser = null;
         let userData = { nickname: '', username: '', avatar: null, theme: 'light', friends: [], friendRequests: [], groups: [] };
@@ -669,6 +807,11 @@
         let friends = [];
         let groups = [];
         let friendRequests = [];
+
+        // Для предпросмотра файла
+        let selectedFile = null;
+        let selectedFileType = null;
+        let selectedFileUrl = null;
 
         // Определяем тип устройства
         const isTouchDevice = 'ontouchstart' in window;
@@ -707,10 +850,9 @@
             }
         }
 
-        // Автоматический вход (с проверкой существования пользователя)
+        // Автоматический вход
         const savedUser = localStorage.getItem('chatUser');
         if (savedUser) {
-            // Проверим, существует ли такой пользователь на сервере
             fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -729,24 +871,32 @@
                     enableChat();
                     switchRoom('general');
                 } else {
-                    // Если пользователь не найден, показываем окно входа
                     loginModal.classList.add('active');
                     localStorage.removeItem('chatUser');
                 }
             })
-            .catch(() => {
-                loginModal.classList.add('active');
-            });
+            .catch(() => loginModal.classList.add('active'));
         } else {
             loginModal.classList.add('active');
         }
 
         function enableChat() {
             messageInput.disabled = false;
-            photoBtn.disabled = false;
-            videoBtn.disabled = false;
-            voiceBtn.disabled = false;
-            sendBtn.disabled = false;
+            attachBtn.disabled = false;
+            // sendBtn будет активироваться динамически через проверку текста или файла
+            messageInput.addEventListener('input', updateSendButton);
+        }
+
+        function updateSendButton() {
+            if (messageInput.value.trim() || selectedFile) {
+                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                sendBtn.classList.add('primary');
+                sendBtn.disabled = false;
+            } else {
+                sendBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+                sendBtn.classList.remove('primary');
+                sendBtn.disabled = false; // микрофон доступен всегда
+            }
         }
 
         async function loadUserData() {
@@ -764,7 +914,7 @@
             renderRequests();
         }
 
-        // ========== СОБЫТИЯ SOCKET ДЛЯ ОБНОВЛЕНИЙ ==========
+        // ========== СОБЫТИЯ SOCKET ==========
         socket.on('friend-request', ({ from }) => {
             friendRequests.push(from);
             renderRequests();
@@ -809,7 +959,7 @@
 
         // ========== ДРУЗЬЯ И ЗАЯВКИ ==========
         function renderFriends() {
-            friendsList.innerHTML = '';
+            friendsList.innerHTML = '<li class="friend-item" onclick="switchRoom(\'general\')"><div class="friend-avatar">#</div><span class="friend-name">Общий чат</span></li>';
             friends.forEach(friend => {
                 const li = document.createElement('li');
                 li.className = 'friend-item';
@@ -900,11 +1050,12 @@
         // ========== КОМНАТЫ ==========
         function switchRoom(room) {
             currentRoom = room;
-            if (room === 'general') currentRoomName.textContent = 'Общий чат';
-            else if (room.startsWith('private:')) {
+            if (room === 'general') {
+                currentRoomName.textContent = 'Общий чат';
+            } else if (room.startsWith('private:')) {
                 const parts = room.split(':');
                 const other = parts[1] === currentUser ? parts[2] : parts[1];
-                currentRoomName.textContent = `Чат с ${other}`;
+                currentRoomName.textContent = other; // Показываем имя собеседника
             } else if (room.startsWith('group:')) {
                 const group = groups.find(g => g.id === room.replace('group:', ''));
                 currentRoomName.textContent = group ? group.name : 'Группа';
@@ -913,7 +1064,6 @@
         }
 
         function switchPrivateRoom(friend) {
-            // Сортируем имена для единообразия комнаты
             const room = ['private', currentUser, friend].sort().join(':');
             switchRoom(room);
         }
@@ -961,79 +1111,104 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        function sendMessage() {
-            const text = messageInput.value.trim();
-            if (text) {
-                socket.emit('message', { text, room: currentRoom });
+        // ========== УМНАЯ КНОПКА ОТПРАВКИ ==========
+        sendBtn.addEventListener('click', () => {
+            if (messageInput.value.trim()) {
+                // Отправка текста
+                socket.emit('message', { text: messageInput.value.trim(), room: currentRoom });
                 messageInput.value = '';
+                updateSendButton();
+            } else if (selectedFile) {
+                // Отправка файла (если есть предпросмотр)
+                sendFile();
+            } else {
+                // Голосовое сообщение
+                if (isRecording) stopRecording();
+                else startRecording();
             }
-        }
-        sendBtn.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => e.key === 'Enter' && sendMessage());
+        });
 
-        // ========== ЗАГРУЗКА МЕДИА ==========
-        function createFileInput(accept, callback) {
+        // ========== СКРЕПКА (ВЫБОР ФАЙЛА) ==========
+        attachBtn.addEventListener('click', () => {
+            attachMenu.classList.toggle('show');
+        });
+
+        // Закрыть меню при клике вне
+        document.addEventListener('click', (e) => {
+            if (!attachBtn.contains(e.target) && !attachMenu.contains(e.target)) {
+                attachMenu.classList.remove('show');
+            }
+        });
+
+        function selectFileType(accept) {
+            attachMenu.classList.remove('show');
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = accept;
             input.style.display = 'none';
             document.body.appendChild(input);
-            input.addEventListener('change', async (e) => {
+            input.addEventListener('change', (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 if (file.size > 50 * 1024 * 1024) {
                     alert('Файл слишком большой (макс. 50 МБ)');
                     return;
                 }
-                callback(file);
+                // Сохраняем файл для предпросмотра
+                selectedFile = file;
+                selectedFileType = file.type.startsWith('image/') ? 'image' : (file.type.startsWith('video/') ? 'video' : 'file');
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    selectedFileUrl = e.target.result;
+                    showFilePreview(file, selectedFileType, e.target.result);
+                };
+                reader.readAsDataURL(file);
                 input.remove();
             });
             input.click();
         }
 
-        photoBtn.addEventListener('click', () => {
-            if (!currentUser) return;
-            createFileInput('image/*', async (file) => {
-                const formData = new FormData();
-                formData.append('file', file);
-                try {
-                    const response = await fetch('/upload', { method: 'POST', body: formData });
-                    const result = await response.json();
-                    if (result.success) {
-                        const caption = prompt('Подпись к фото:', '') || '';
-                        socket.emit('media-message', {
-                            mediaData: { type: 'image', url: result.url, fileName: result.name, text: caption },
-                            room: currentRoom
-                        });
-                    }
-                } catch (error) {
-                    console.error('Ошибка загрузки фото:', error);
-                    alert('Не удалось загрузить фото');
-                }
-            });
-        });
+        function showFilePreview(file, type, dataUrl) {
+            previewThumbnail.innerHTML = '';
+            if (type === 'image') {
+                previewThumbnail.innerHTML = `<img src="${dataUrl}" style="max-width:60px; max-height:60px;">`;
+            } else if (type === 'video') {
+                previewThumbnail.innerHTML = `<video src="${dataUrl}" style="max-width:60px; max-height:60px;"></video>`;
+            } else {
+                previewThumbnail.innerHTML = '<i class="fas fa-file" style="font-size:40px;"></i>';
+            }
+            previewInfo.textContent = file.name;
+            filePreview.style.display = 'flex';
+            updateSendButton();
+        }
 
-        videoBtn.addEventListener('click', () => {
-            if (!currentUser) return;
-            createFileInput('video/*', async (file) => {
-                const formData = new FormData();
-                formData.append('file', file);
-                try {
-                    const response = await fetch('/upload', { method: 'POST', body: formData });
-                    const result = await response.json();
-                    if (result.success) {
-                        const caption = prompt('Подпись к видео:', '') || '';
-                        socket.emit('media-message', {
-                            mediaData: { type: 'video', url: result.url, fileName: result.name, text: caption },
-                            room: currentRoom
-                        });
-                    }
-                } catch (error) {
-                    console.error('Ошибка загрузки видео:', error);
-                    alert('Не удалось загрузить видео');
+        function cancelFilePreview() {
+            selectedFile = null;
+            selectedFileType = null;
+            selectedFileUrl = null;
+            filePreview.style.display = 'none';
+            updateSendButton();
+        }
+
+        async function sendFile() {
+            if (!selectedFile) return;
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const result = await response.json();
+                if (result.success) {
+                    socket.emit('media-message', {
+                        mediaData: { type: result.type, url: result.url, fileName: result.name, text: '' },
+                        room: currentRoom
+                    });
+                    cancelFilePreview();
                 }
-            });
-        });
+            } catch (error) {
+                console.error('Ошибка загрузки файла:', error);
+                alert('Не удалось загрузить файл');
+            }
+        }
 
         // ========== ГОЛОСОВЫЕ ==========
         let mediaRecorder = null;
@@ -1044,14 +1219,13 @@
         let isRecording = false;
 
         if (isTouchDevice) {
+            // Для мобильных: удержание
+            voiceBtn = sendBtn; // используем ту же кнопку
             voiceBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
             voiceBtn.addEventListener('touchend', stopRecording);
             voiceBtn.addEventListener('touchcancel', stopRecording);
         } else {
-            voiceBtn.addEventListener('click', () => {
-                if (isRecording) stopRecording();
-                else startRecording();
-            });
+            // Для ПК: клик для старта/остановки (через sendBtn, когда нет текста)
         }
 
         async function startRecording() {
@@ -1073,7 +1247,6 @@
                         await sendVoiceMessage(blob);
                     }
                     recordingIndicator.style.display = 'none';
-                    voiceBtn.classList.remove('record');
                     clearInterval(recordingTimer);
                     seconds = 0;
                     isRecording = false;
@@ -1081,7 +1254,6 @@
                 mediaRecorder.onerror = stopRecording;
                 mediaRecorder.start(1000);
                 recordingIndicator.style.display = 'flex';
-                voiceBtn.classList.add('record');
                 seconds = 0;
                 recordingTime.textContent = '0';
                 recordingTimer = setInterval(() => {
@@ -1103,7 +1275,6 @@
         function forceStopRecording() {
             if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
             recordingIndicator.style.display = 'none';
-            voiceBtn.classList.remove('record');
             clearInterval(recordingTimer);
             seconds = 0;
             isRecording = false;
@@ -1127,19 +1298,12 @@
             }
         }
 
-        // ========== НАСТРОЙКИ ПРОФИЛЯ ==========
+        // ========== НАСТРОЙКИ ==========
         function openSettings() {
             settingsModal.classList.add('active');
             settingsNickname.value = userData.nickname || '';
             accountUsernameSpan.textContent = currentUser;
-            if (userData.avatar) {
-                settingsAvatar.style.backgroundImage = `url(${userData.avatar})`;
-                settingsAvatar.style.backgroundSize = 'cover';
-                settingsAvatar.textContent = '';
-            } else {
-                settingsAvatar.style.background = 'linear-gradient(135deg, var(--accent-color), #764ba2)';
-                settingsAvatar.textContent = currentUser.charAt(0).toUpperCase();
-            }
+            updateSettingsAvatar();
         }
         function closeSettings() { settingsModal.classList.remove('active'); }
         function switchSettingsTab(tab) {
@@ -1168,14 +1332,20 @@
             const result = await response.json();
             if (result.success) {
                 userData.avatar = result.url;
-                settingsAvatar.style.backgroundImage = `url(${result.url})`;
-                settingsAvatar.style.backgroundSize = 'cover';
-                settingsAvatar.textContent = '';
-                profileAvatar.style.backgroundImage = `url(${result.url})`;
-                profileAvatar.style.backgroundSize = 'cover';
-                profileAvatar.textContent = '';
+                updateSettingsAvatar();
+                updateProfileUI();
             }
         });
+        function updateSettingsAvatar() {
+            if (userData.avatar) {
+                settingsAvatar.style.backgroundImage = `url(${userData.avatar})`;
+                settingsAvatar.style.backgroundSize = 'cover';
+                settingsAvatar.textContent = '';
+            } else {
+                settingsAvatar.style.background = 'linear-gradient(135deg, var(--accent-color), #764ba2)';
+                settingsAvatar.textContent = currentUser.charAt(0).toUpperCase();
+            }
+        }
         async function saveProfile() {
             const nickname = settingsNickname.value.trim();
             if (!nickname) return;
@@ -1197,13 +1367,10 @@
             document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
             el.classList.add('selected');
             document.documentElement.style.setProperty('--accent-color', color);
-            // Также меняем цвет своей кнопки отправки
-            document.querySelectorAll('.primary').forEach(btn => btn.style.background = color);
         }
         async function saveTheme() {
             const bg = document.getElementById('themeBg').value;
             const accent = document.querySelector('.color-option.selected')?.style.background || '#0088cc';
-            // Применяем тему
             if (bg === 'dark') document.body.classList.add('dark-theme');
             else document.body.classList.remove('dark-theme');
             document.documentElement.style.setProperty('--accent-color', accent);
@@ -1255,11 +1422,11 @@
             if (data.success) {
                 alert('Группа создана');
                 closeGroupModal();
-                loadUserData(); // перезагрузить группы
+                loadUserData();
             }
         }
 
-        // ========== ОБНОВЛЕНИЕ ПРОФИЛЯ В ИНТЕРФЕЙСЕ ==========
+        // ========== ОБНОВЛЕНИЕ ПРОФИЛЯ ==========
         function updateProfileUI() {
             profileNickname.textContent = userData.nickname || currentUser;
             profileUsername.textContent = '@' + currentUser;
@@ -1291,6 +1458,9 @@
         setInterval(() => {
             if (currentUser) socket.emit('ping');
         }, 3000);
+
+        // Инициализация кнопки отправки
+        updateSendButton();
     </script>
 </body>
 </html>
