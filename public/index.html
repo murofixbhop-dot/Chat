@@ -398,11 +398,12 @@
             });
         });
 
-        // ========== ГОЛОСОВЫЕ (УЛУЧШЕННОЕ КАЧЕСТВО) ==========
-        let mediaRecorder;
+        // ========== ГОЛОСОВЫЕ (СТАБИЛЬНАЯ ВЕРСИЯ) ==========
+        let mediaRecorder = null;
         let audioChunks = [];
-        let recordingTimer;
+        let recordingTimer = null;
         let seconds = 0;
+        let mediaStream = null;
 
         voiceBtn.addEventListener('mousedown', startRecording);
         voiceBtn.addEventListener('mouseup', stopRecording);
@@ -411,7 +412,7 @@
 
         async function startRecording() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
+                mediaStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         channelCount: 1,
                         sampleRate: 48000,
@@ -421,7 +422,6 @@
                     }
                 });
 
-                // Пробуем разные кодеки для лучшего качества
                 let options = { audioBitsPerSecond: 256000 };
                 if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
                     options.mimeType = 'audio/webm;codecs=opus';
@@ -429,25 +429,43 @@
                     options.mimeType = 'audio/webm';
                 }
 
-                mediaRecorder = new MediaRecorder(stream, options);
+                mediaRecorder = new MediaRecorder(mediaStream, options);
                 audioChunks = [];
 
                 mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
                 };
 
                 mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    await sendVoiceMessage(audioBlob);
-                    stream.getTracks().forEach(track => track.stop());
+                    if (mediaStream) {
+                        mediaStream.getTracks().forEach(track => track.stop());
+                        mediaStream = null;
+                    }
+
+                    if (audioChunks.length > 0) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await sendVoiceMessage(audioBlob);
+                    }
 
                     recordingIndicator.style.display = 'none';
                     voiceBtn.style.display = 'inline-block';
-                    clearInterval(recordingTimer);
+                    
+                    if (recordingTimer) {
+                        clearInterval(recordingTimer);
+                        recordingTimer = null;
+                    }
                     seconds = 0;
+                    mediaRecorder = null;
                 };
 
-                mediaRecorder.start();
+                mediaRecorder.onerror = (event) => {
+                    console.error('MediaRecorder ошибка:', event.error);
+                    stopRecording();
+                };
+
+                mediaRecorder.start(1000); // фрагменты каждую секунду
 
                 recordingIndicator.style.display = 'flex';
                 voiceBtn.style.display = 'none';
@@ -461,12 +479,36 @@
             } catch (error) {
                 console.error('Ошибка доступа к микрофону:', error);
                 alert('Не удалось получить доступ к микрофону. Проверьте разрешения.');
+                recordingIndicator.style.display = 'none';
+                voiceBtn.style.display = 'inline-block';
             }
         }
 
         function stopRecording() {
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
+                mediaRecorder.requestData();
+                try {
+                    mediaRecorder.stop();
+                } catch (e) {
+                    console.error('Ошибка при остановке записи:', e);
+                    if (mediaStream) {
+                        mediaStream.getTracks().forEach(track => track.stop());
+                        mediaStream = null;
+                    }
+                    recordingIndicator.style.display = 'none';
+                    voiceBtn.style.display = 'inline-block';
+                    if (recordingTimer) {
+                        clearInterval(recordingTimer);
+                        recordingTimer = null;
+                    }
+                }
+            } else {
+                recordingIndicator.style.display = 'none';
+                voiceBtn.style.display = 'inline-block';
+                if (recordingTimer) {
+                    clearInterval(recordingTimer);
+                    recordingTimer = null;
+                }
             }
         }
 
