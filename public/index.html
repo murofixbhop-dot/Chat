@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Чат с фото, видео и голосом</title>
     <style>
-        /* Стили без изменений (как в предыдущей версии) */
+        /* (стили без изменений, они уже были, можно оставить свои) */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
         body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         .chat-container {
@@ -399,7 +399,7 @@
             });
         });
 
-        // ========== ГОЛОСОВЫЕ (ПОЛНОСТЬЮ ПЕРЕПИСАНА, СТАБИЛЬНА) ==========
+        // ========== ГОЛОСОВЫЕ (СТАБИЛЬНАЯ ВЕРСИЯ) ==========
         let mediaRecorder = null;
         let audioChunks = [];
         let recordingTimer = null;
@@ -460,7 +460,6 @@
                         await sendVoiceMessage(audioBlob);
                     }
 
-                    // Сброс интерфейса
                     recordingIndicator.style.display = 'none';
                     voiceBtn.style.display = 'inline-block';
                     clearInterval(recordingTimer);
@@ -475,8 +474,7 @@
                     stopRecording();
                 };
 
-                // Запуск записи, просим данные каждые 1000 мс
-                mediaRecorder.start(1000);
+                mediaRecorder.start(1000); // фрагменты каждую секунду
 
                 recordingIndicator.style.display = 'flex';
                 voiceBtn.style.display = 'none';
