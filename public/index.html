@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Чат с фото, видео и голосом</title>
     <style>
+        /* Стили без изменений (как в предыдущей версии) */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
         body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         .chat-container {
@@ -289,13 +290,13 @@
             let content = `<div class="user">${msg.user}</div>`;
 
             if (msg.type === 'image') {
-                content += `<img src="${msg.url}" alt="Фото" onclick="showMedia('${msg.url}', 'image')">`;
+                content += `<img src="${msg.url}" alt="Фото" onclick="showMedia('${msg.url}', 'image')" crossorigin="anonymous">`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else if (msg.type === 'video') {
-                content += `<video src="${msg.url}" controls onclick="showMedia('${msg.url}', 'video')" style="max-width: 100%; max-height: 300px;"></video>`;
+                content += `<video src="${msg.url}" controls onclick="showMedia('${msg.url}', 'video')" style="max-width: 100%; max-height: 300px;" crossorigin="anonymous"></video>`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else if (msg.type === 'audio') {
-                content += `<audio controls src="${msg.url}"></audio>`;
+                content += `<audio controls src="${msg.url}" crossorigin="anonymous"></audio>`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else {
                 content += `<div class="text">${msg.text}</div>`;
@@ -398,19 +399,26 @@
             });
         });
 
-        // ========== ГОЛОСОВЫЕ (СТАБИЛЬНАЯ ВЕРСИЯ) ==========
+        // ========== ГОЛОСОВЫЕ (ПОЛНОСТЬЮ ПЕРЕПИСАНА, СТАБИЛЬНА) ==========
         let mediaRecorder = null;
         let audioChunks = [];
         let recordingTimer = null;
         let seconds = 0;
         let mediaStream = null;
+        let isRecording = false;
 
-        voiceBtn.addEventListener('mousedown', startRecording);
+        voiceBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startRecording();
+        });
         voiceBtn.addEventListener('mouseup', stopRecording);
         voiceBtn.addEventListener('mouseleave', stopRecording);
         stopRecordingBtn.addEventListener('click', stopRecording);
 
         async function startRecording() {
+            if (isRecording) return;
+            isRecording = true;
+
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
@@ -422,17 +430,20 @@
                     }
                 });
 
-                let options = { audioBitsPerSecond: 256000 };
-                if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                    options.mimeType = 'audio/webm;codecs=opus';
-                } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-                    options.mimeType = 'audio/webm';
-                }
+                // Пробуем наилучший кодек
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    : 'audio/webm';
+                
+                const options = {
+                    mimeType: mimeType,
+                    audioBitsPerSecond: 256000
+                };
 
                 mediaRecorder = new MediaRecorder(mediaStream, options);
                 audioChunks = [];
 
-                mediaRecorder.ondataavailable = event => {
+                mediaRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0) {
                         audioChunks.push(event.data);
                     }
@@ -449,15 +460,14 @@
                         await sendVoiceMessage(audioBlob);
                     }
 
+                    // Сброс интерфейса
                     recordingIndicator.style.display = 'none';
                     voiceBtn.style.display = 'inline-block';
-                    
-                    if (recordingTimer) {
-                        clearInterval(recordingTimer);
-                        recordingTimer = null;
-                    }
+                    clearInterval(recordingTimer);
+                    recordingTimer = null;
                     seconds = 0;
                     mediaRecorder = null;
+                    isRecording = false;
                 };
 
                 mediaRecorder.onerror = (event) => {
@@ -465,12 +475,14 @@
                     stopRecording();
                 };
 
-                mediaRecorder.start(1000); // фрагменты каждую секунду
+                // Запуск записи, просим данные каждые 1000 мс
+                mediaRecorder.start(1000);
 
                 recordingIndicator.style.display = 'flex';
                 voiceBtn.style.display = 'none';
 
                 seconds = 0;
+                recordingTime.textContent = '0';
                 recordingTimer = setInterval(() => {
                     seconds++;
                     recordingTime.textContent = seconds;
@@ -481,35 +493,36 @@
                 alert('Не удалось получить доступ к микрофону. Проверьте разрешения.');
                 recordingIndicator.style.display = 'none';
                 voiceBtn.style.display = 'inline-block';
+                isRecording = false;
             }
         }
 
         function stopRecording() {
+            if (!isRecording) return;
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.requestData();
                 try {
                     mediaRecorder.stop();
                 } catch (e) {
                     console.error('Ошибка при остановке записи:', e);
-                    if (mediaStream) {
-                        mediaStream.getTracks().forEach(track => track.stop());
-                        mediaStream = null;
-                    }
-                    recordingIndicator.style.display = 'none';
-                    voiceBtn.style.display = 'inline-block';
-                    if (recordingTimer) {
-                        clearInterval(recordingTimer);
-                        recordingTimer = null;
-                    }
+                    forceStopRecording();
                 }
             } else {
-                recordingIndicator.style.display = 'none';
-                voiceBtn.style.display = 'inline-block';
-                if (recordingTimer) {
-                    clearInterval(recordingTimer);
-                    recordingTimer = null;
-                }
+                forceStopRecording();
             }
+        }
+
+        function forceStopRecording() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            recordingIndicator.style.display = 'none';
+            voiceBtn.style.display = 'inline-block';
+            clearInterval(recordingTimer);
+            recordingTimer = null;
+            seconds = 0;
+            mediaRecorder = null;
+            isRecording = false;
         }
 
         async function sendVoiceMessage(blob) {
@@ -543,6 +556,7 @@
                 modalVideo.src = url;
                 modalVideo.style.display = 'block';
                 modalImage.style.display = 'none';
+                modalVideo.play().catch(e => console.log('Автовоспроизведение заблокировано'));
             }
             mediaModal.style.display = 'flex';
         };
