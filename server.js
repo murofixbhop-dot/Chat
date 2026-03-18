@@ -66,22 +66,21 @@ function calculateSHA1(buffer) {
   return hash.digest('hex');
 }
 
-// ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (users.json в B2) ==========
+// ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ==========
 const USERS_FILE = 'users.json';
-let users = new Map(); // username -> { friends: [], registered: true, ... }
+let users = new Map(); // username -> { friends: [] }
 
 async function loadUsers() {
   try {
     const url = await getDownloadUrl(USERS_FILE);
     const response = await axios.get(url, { timeout: 5000 });
     if (response.data && typeof response.data === 'object') {
-      // Преобразуем объект в Map
       users = new Map(Object.entries(response.data));
       console.log(`👥 Загружено ${users.size} пользователей`);
     }
   } catch (err) {
     if (err.response?.status === 404) {
-      console.log('📁 Файл users.json не найден, будет создан');
+      console.log('📁 users.json не найден, будет создан');
     } else {
       console.error('Ошибка загрузки пользователей:', err.message);
     }
@@ -104,7 +103,7 @@ async function saveUsers() {
         'X-Bz-Content-Sha1': sha1
       }
     });
-    console.log('💾 Пользователи сохранены в B2');
+    console.log('💾 Пользователи сохранены');
   } catch (err) {
     console.error('Ошибка сохранения пользователей:', err.message);
   }
@@ -155,7 +154,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 // ========== API ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
 app.use(express.json());
 
-// Регистрация / вход (если имя свободно, регистрируем; иначе вход)
 app.post('/api/login', async (req, res) => {
   const { username } = req.body;
   if (!username || username.trim() === '') {
@@ -163,10 +161,8 @@ app.post('/api/login', async (req, res) => {
   }
   const cleanName = username.trim();
   if (users.has(cleanName)) {
-    // Пользователь существует - просто возвращаем его данные
     return res.json({ success: true, user: { username: cleanName, friends: users.get(cleanName).friends || [] } });
   } else {
-    // Новый пользователь - создаём запись
     const newUser = { friends: [] };
     users.set(cleanName, newUser);
     await saveUsers();
@@ -174,7 +170,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Добавить друга
 app.post('/api/add-friend', async (req, res) => {
   const { username, friendName } = req.body;
   if (!username || !friendName) return res.status(400).json({ error: 'Не указаны имена' });
@@ -189,17 +184,16 @@ app.post('/api/add-friend', async (req, res) => {
   res.json({ success: true, friends: user.friends });
 });
 
-// Получить список друзей
 app.post('/api/get-friends', (req, res) => {
   const { username } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   res.json({ friends: users.get(username).friends || [] });
 });
 
-// ========== ХРАНЕНИЕ ИСТОРИИ ==========
+// ========== ХРАНЕНИЕ ИСТОРИИ (с поддержкой комнат) ==========
 const HISTORY_FILE = 'history.json';
-const MAX_HISTORY = 1000;
-let messageHistory = [];
+const MAX_HISTORY = 2000; // увеличим для всех комнат
+let messageHistory = []; // каждый объект: { id, user, text, type, url, fileName, time, room }
 
 async function loadHistory() {
   try {
@@ -251,9 +245,9 @@ async function saveHistory() {
   }
 })();
 
-// ========== SOCKET.IO (ЧАТ) ==========
+// ========== SOCKET.IO (ЧАТ С КОМНАТАМИ) ==========
 const onlineUsers = new Map(); // socketId -> { username, lastSeen }
-const recentDisconnects = new Map();
+const userSockets = new Map(); // username -> socketId
 
 function broadcastOnlineCount() {
   const now = Date.now();
@@ -270,8 +264,21 @@ io.on('connection', (socket) => {
   socket.on('identify', (username) => {
     currentUser = username;
     onlineUsers.set(socket.id, { username, lastSeen: Date.now() });
+    userSockets.set(username, socket.id);
     broadcastOnlineCount();
-    // Можно отправить список друзей и т.д.
+    // Присоединяемся к общей комнате
+    socket.join('general');
+    socket.emit('history', messageHistory.filter(m => m.room === 'general').slice(-100));
+  });
+
+  socket.on('join-room', (room) => {
+    if (!currentUser) return;
+    // Покидаем предыдущую комнату (если нужно)
+    socket.leaveAll();
+    socket.join(room);
+    // Отправляем историю для этой комнаты (последние 100)
+    const roomHistory = messageHistory.filter(m => m.room === room).slice(-100);
+    socket.emit('history', roomHistory);
   });
 
   socket.on('ping', () => {
@@ -282,22 +289,23 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('message', (text) => {
-    if (!currentUser) return; // Неавторизованные не могут писать
+  socket.on('message', ({ text, room }) => {
+    if (!currentUser) return;
     const msg = {
       id: Date.now() + Math.random(),
       user: currentUser,
       text,
       type: 'text',
-      time: new Date().toLocaleTimeString()
+      time: new Date().toLocaleTimeString(),
+      room: room || 'general'
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
     saveHistory();
-    io.emit('message', msg);
+    io.to(msg.room).emit('message', msg);
   });
 
-  socket.on('media-message', (mediaData) => {
+  socket.on('media-message', ({ mediaData, room }) => {
     if (!currentUser) return;
     const msg = {
       id: Date.now() + Math.random(),
@@ -306,29 +314,22 @@ io.on('connection', (socket) => {
       type: mediaData.type,
       url: mediaData.url,
       fileName: mediaData.fileName,
-      time: new Date().toLocaleTimeString()
+      time: new Date().toLocaleTimeString(),
+      room: room || 'general'
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
     saveHistory();
-    io.emit('message', msg);
+    io.to(msg.room).emit('message', msg);
   });
 
   socket.on('disconnect', () => {
-    if (onlineUsers.has(socket.id)) {
-      const user = onlineUsers.get(socket.id);
-      recentDisconnects.set(user.username, Date.now());
-      // Очистка старых записей
-      for (let [name, time] of recentDisconnects) {
-        if (Date.now() - time > 30000) recentDisconnects.delete(name);
-      }
+    if (currentUser) {
+      userSockets.delete(currentUser);
       onlineUsers.delete(socket.id);
       broadcastOnlineCount();
     }
   });
-
-  // Отправляем историю при подключении (если пользователь авторизован)
-  socket.emit('history', messageHistory);
 });
 
 const PORT = process.env.PORT || 3000;
