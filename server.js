@@ -154,14 +154,16 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 // ========== API ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
 app.use(express.json());
 
-// Регистрация/вход
+// Вход/регистрация с проверкой уникальности
 app.post('/api/login', async (req, res) => {
   const { username } = req.body;
   if (!username || username.trim() === '') {
     return res.status(400).json({ error: 'Имя не может быть пустым' });
   }
   const cleanName = username.trim();
+
   if (users.has(cleanName)) {
+    // Пользователь существует
     const userData = users.get(cleanName);
     return res.json({
       success: true,
@@ -176,8 +178,7 @@ app.post('/api/login', async (req, res) => {
       }
     });
   } else {
-    // Проверка на уникальность имени (уже есть, но для новых пользователей)
-    // Если имя занято, то мы бы не попали сюда, потому что users.has вернуло бы true
+    // Новый пользователь – создаём
     const newUser = {
       nickname: cleanName,
       avatar: null,
@@ -203,7 +204,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Обновление профиля (никнейм, аватар, тема)
+// Обновление профиля
 app.post('/api/update-profile', async (req, res) => {
   const { username, nickname, avatar, theme } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -222,7 +223,6 @@ app.post('/api/delete-account', async (req, res) => {
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   users.delete(username);
   await saveUsers();
-  // Также нужно удалить все личные сообщения? Пока оставим историю в истории.
   res.json({ success: true });
 });
 
@@ -242,6 +242,7 @@ app.post('/api/send-friend-request', async (req, res) => {
   users.set(to, targetUser);
   await saveUsers();
 
+  // Уведомляем получателя
   const targetSocketId = userSockets.get(to);
   if (targetSocketId) {
     io.to(targetSocketId).emit('friend-request', { from });
@@ -272,6 +273,12 @@ app.post('/api/accept-friend-request', async (req, res) => {
   users.set(requester, requesterUser);
   await saveUsers();
 
+  // Уведомляем обоих об обновлении друзей
+  const userSocket = userSockets.get(username);
+  if (userSocket) io.to(userSocket).emit('friends-updated', { friends: user.friends });
+  const requesterSocket = userSockets.get(requester);
+  if (requesterSocket) io.to(requesterSocket).emit('friends-updated', { friends: requesterUser.friends });
+
   res.json({ success: true, friends: user.friends });
 });
 
@@ -292,25 +299,7 @@ app.post('/api/reject-friend-request', async (req, res) => {
   res.json({ success: true });
 });
 
-// Создать группу
-app.post('/api/create-group', async (req, res) => {
-  const { creator, name, members } = req.body; // members - массив имён друзей
-  if (!creator || !name) return res.status(400).json({ error: 'Не указаны данные' });
-  if (!users.has(creator)) return res.status(404).json({ error: 'Создатель не найден' });
-
-  const groupId = `group_${Date.now()}`;
-  const group = {
-    id: groupId,
-    name: name,
-    members: [creator, ...(members || [])]
-  };
-  // Сохраняем группу в отдельном файле или в users? Лучше отдельный файл groups.json.
-  // Для простоты пока сохраним в groups.json
-  // TODO: реализовать сохранение групп
-  res.json({ success: true, groupId });
-});
-
-// Получить данные пользователя (друзья, заявки, группы)
+// Получить данные пользователя
 app.post('/api/get-user-data', (req, res) => {
   const { username } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -322,10 +311,31 @@ app.post('/api/get-user-data', (req, res) => {
   });
 });
 
+// Создать группу (упрощённо)
+app.post('/api/create-group', async (req, res) => {
+  const { creator, name, members } = req.body;
+  if (!creator || !name) return res.status(400).json({ error: 'Не указаны данные' });
+  if (!users.has(creator)) return res.status(404).json({ error: 'Создатель не найден' });
+
+  const groupId = `group_${Date.now()}`;
+  const group = { id: groupId, name, members: [creator, ...(members || [])] };
+  // В реальном проекте нужно хранить группы отдельно. Здесь для простоты сохраним в users каждого участника
+  for (const member of group.members) {
+    if (users.has(member)) {
+      const user = users.get(member);
+      if (!user.groups) user.groups = [];
+      user.groups.push(group);
+      users.set(member, user);
+    }
+  }
+  await saveUsers();
+  res.json({ success: true, groupId });
+});
+
 // ========== ХРАНЕНИЕ ИСТОРИИ ==========
 const HISTORY_FILE = 'history.json';
 const MAX_HISTORY = 2000;
-let messageHistory = []; // { id, user, text, type, url, fileName, time, room }
+let messageHistory = [];
 
 async function loadHistory() {
   try {
