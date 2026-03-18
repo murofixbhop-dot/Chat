@@ -53,6 +53,7 @@ let messageHistory = loadHistory();
 
 // ========== 3. УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ОНЛАЙН ==========
 const users = new Map(); // socketId -> { name, lastSeen }
+const recentDisconnects = new Map(); // name -> timestamp (для подавления повторных входов)
 
 function broadcastOnlineCount() {
   const now = Date.now();
@@ -111,7 +112,9 @@ io.on('connection', (socket) => {
 
   socket.on('set-name', (name) => {
     const newName = name?.trim() || 'Гость';
+
     if (hasName && currentUserName !== newName) {
+      // Смена имени
       const oldName = currentUserName;
       currentUserName = newName;
       socket.data.userName = currentUserName;
@@ -120,11 +123,25 @@ io.on('connection', (socket) => {
       }
       io.emit('system', `${oldName} теперь известен как ${currentUserName}`);
     } else if (!hasName) {
+      // Первая установка имени после подключения
       currentUserName = newName;
       socket.data.userName = currentUserName;
       users.set(socket.id, { name: currentUserName, lastSeen: Date.now() });
       hasName = true;
-      io.emit('system', `${currentUserName} присоединился к чату`);
+
+      // Проверяем, было ли это имя в недавних отключениях
+      const lastDisconnect = recentDisconnects.get(currentUserName);
+      const now = Date.now();
+      if (!lastDisconnect || now - lastDisconnect > 10000) {
+        // Если не было отключений или прошло больше 10 секунд – пишем о входе
+        io.emit('system', `${currentUserName} присоединился к чату`);
+      } else {
+        // Иначе просто добавляем без уведомления (перезагрузка)
+        console.log(`🔁 ${currentUserName} перезагрузил страницу`);
+      }
+      // Удаляем из recentDisconnects, если был
+      recentDisconnects.delete(currentUserName);
+
       broadcastOnlineCount();
     }
   });
@@ -169,6 +186,13 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     if (users.has(socket.id)) {
+      const user = users.get(socket.id);
+      // Запоминаем время отключения для этого имени
+      recentDisconnects.set(user.name, Date.now());
+      // Очищаем старые записи (> 30 секунд), чтобы не засорять память
+      for (let [name, time] of recentDisconnects) {
+        if (Date.now() - time > 30000) recentDisconnects.delete(name);
+      }
       users.delete(socket.id);
       broadcastOnlineCount();
     }
