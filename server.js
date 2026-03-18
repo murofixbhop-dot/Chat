@@ -54,10 +54,8 @@ let messageHistory = loadHistory();
 // ========== 3. УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ОНЛАЙН ==========
 const users = new Map(); // socketId -> { name, lastSeen }
 
-// Функция обновления списка онлайн и рассылки количества
 function broadcastOnlineCount() {
   const now = Date.now();
-  // Удаляем неактивных более 10 секунд (сокеты, которые не пинговались)
   for (let [id, user] of users.entries()) {
     if (now - user.lastSeen > 10000) {
       users.delete(id);
@@ -66,7 +64,6 @@ function broadcastOnlineCount() {
   io.emit('online-count', users.size);
 }
 
-// Каждые 5 секунд проверяем активность и рассылаем
 setInterval(broadcastOnlineCount, 5000);
 
 // ========== 4. ЗАГРУЗКА ФАЙЛОВ ==========
@@ -109,41 +106,29 @@ io.on('connection', (socket) => {
   let currentUserName = 'Гость';
   let hasName = false;
 
-  // При подключении сразу отправляем историю и текущее количество онлайн
   socket.emit('history', messageHistory);
   socket.emit('online-count', users.size);
 
-  // Клиент сообщает своё имя (при первом входе или смене)
   socket.on('set-name', (name) => {
     const newName = name?.trim() || 'Гость';
-    // Если имя изменилось и это не первая установка
     if (hasName && currentUserName !== newName) {
-      // Меняем имя, обновляем в users
       const oldName = currentUserName;
       currentUserName = newName;
       socket.data.userName = currentUserName;
-      // Обновляем запись в users
       if (users.has(socket.id)) {
         users.set(socket.id, { name: currentUserName, lastSeen: Date.now() });
       }
-      // Оповещаем всех о смене имени (если нужно)
       io.emit('system', `${oldName} теперь известен как ${currentUserName}`);
     } else if (!hasName) {
-      // Первая установка имени после подключения
       currentUserName = newName;
       socket.data.userName = currentUserName;
-      // Добавляем в список онлайн
       users.set(socket.id, { name: currentUserName, lastSeen: Date.now() });
       hasName = true;
-      // Отправляем системное сообщение о входе, только если это не повторное подключение
-      // Проверим, было ли это имя в списке недавно? Для простоты будем слать всегда при первом входе.
-      // Но можно усложнить: хранить имена, которые уже были сегодня, но пока оставим просто.
       io.emit('system', `${currentUserName} присоединился к чату`);
-      broadcastOnlineCount(); // сразу обновим счётчик
+      broadcastOnlineCount();
     }
   });
 
-  // Клиент отправляет пинг (каждые 3 секунды)
   socket.on('ping', () => {
     if (users.has(socket.id)) {
       const user = users.get(socket.id);
@@ -152,7 +137,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Текстовое сообщение
   socket.on('message', (text) => {
     const msg = {
       id: Date.now() + Math.random(),
@@ -167,7 +151,6 @@ io.on('connection', (socket) => {
     io.emit('message', msg);
   });
 
-  // Медиа-сообщение (фото/аудио)
   socket.on('media-message', (mediaData) => {
     const msg = {
       id: Date.now() + Math.random(),
@@ -184,18 +167,14 @@ io.on('connection', (socket) => {
     io.emit('message', msg);
   });
 
-  // Отключение
   socket.on('disconnect', () => {
     if (users.has(socket.id)) {
-      const userName = users.get(socket.id).name;
       users.delete(socket.id);
-      // Не отправляем сообщение о выходе, только обновляем счётчик
       broadcastOnlineCount();
     }
   });
 });
 
-// ========== 7. ЗАПУСК ==========
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
