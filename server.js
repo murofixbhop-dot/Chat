@@ -2,107 +2,140 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const axios = require('axios');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// ========== 1. НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
-const uploadDir = path.join(__dirname, 'public/uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+// ========== 1. НАСТРОЙКА BACKBLAZE B2 ==========
+const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;      // ваш keyID
+const B2_APP_KEY = process.env.B2_APP_KEY;            // ваш applicationKey
+const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;    // имя созданного бакета
+
+let b2Auth = null;          // сохраняем авторизацию
+let b2BucketId = null;      // ID бакета (получим автоматически)
+
+// Функция авторизации в B2
+async function authorizeB2() {
+  const credentials = `${B2_ACCOUNT_ID}:${B2_APP_KEY}`;
+  const base64 = Buffer.from(credentials).toString('base64');
+  const response = await axios.get('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', {
+    headers: { Authorization: `Basic ${base64}` }
+  });
+  b2Auth = response.data; // содержит apiUrl, authorizationToken, downloadUrl
+  return b2Auth;
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Функция получения bucketId по имени
+async function getBucketId(bucketName) {
+  const response = await axios.post(
+    `${b2Auth.apiUrl}/b2api/v2/b2_list_buckets`,
+    { accountId: B2_ACCOUNT_ID },
+    { headers: { Authorization: b2Auth.authorizationToken } }
+  );
+  const bucket = response.data.buckets.find(b => b.bucketName === bucketName);
+  if (!bucket) throw new Error(`Бакет "${bucketName}" не найден`);
+  return bucket.bucketId;
+}
 
+// Функция получения URL для загрузки
+async function getUploadUrl() {
+  const response = await axios.post(
+    `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
+    { bucketId: b2BucketId },
+    { headers: { Authorization: b2Auth.authorizationToken } }
+  );
+  return response.data; // { uploadUrl, authorizationToken }
+}
+
+// Функция вычисления SHA‑1 (требуется B2)
+function calculateSHA1(buffer) {
+  const hash = crypto.createHash('sha1');
+  hash.update(buffer);
+  return hash.digest('hex');
+}
+
+// Инициализация B2 при старте сервера
+(async () => {
+  try {
+    console.log('🔄 Авторизация в Backblaze B2...');
+    await authorizeB2();
+    console.log('✅ Авторизация успешна');
+    b2BucketId = await getBucketId(B2_BUCKET_NAME);
+    console.log(`✅ ID бакета "${B2_BUCKET_NAME}": ${b2BucketId}`);
+  } catch (err) {
+    console.error('❌ Ошибка подключения к B2:', err.message);
+    process.exit(1); // если B2 недоступен, сервер не запустится
+  }
+})();
+
+// ========== 2. НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
 const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }
+  storage: multer.memoryStorage(), // файл в памяти, потом в B2
+  limits: { fileSize: 10 * 1024 * 1024 } // 10 MB
 });
 
 app.use(express.static('public'));
 
-// ========== 2. ХРАНЕНИЕ ИСТОРИИ ==========
-const HISTORY_FILE = path.join(__dirname, 'history.json');
-const MAX_HISTORY = 100;
-
-function loadHistory() {
+// Эндпоинт загрузки файла
+app.post('/upload', upload.single('file'), async (req, res) => {
   try {
-    if (fs.existsSync(HISTORY_FILE)) {
-      return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    if (!req.file) {
+      return res.status(400).json({ error: 'Файл не загружен' });
     }
-  } catch (e) { console.error('Ошибка загрузки истории:', e); }
-  return [];
-}
 
-function saveHistory(history) {
-  try {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
-  } catch (e) { console.error('Ошибка сохранения истории:', e); }
-}
-
-let messageHistory = loadHistory();
-
-// ========== 3. УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ОНЛАЙН ==========
-const users = new Map(); // socketId -> { name, lastSeen }
-const recentDisconnects = new Map(); // name -> timestamp (для подавления повторных входов)
-
-function broadcastOnlineCount() {
-  const now = Date.now();
-  for (let [id, user] of users.entries()) {
-    if (now - user.lastSeen > 10000) {
-      users.delete(id);
-    }
-  }
-  io.emit('online-count', users.size);
-}
-
-setInterval(broadcastOnlineCount, 5000);
-
-// ========== 4. ЗАГРУЗКА ФАЙЛОВ ==========
-app.post('/upload', upload.single('file'), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+    // Получаем временные данные для загрузки
+    const uploadData = await getUploadUrl();
+    
+    const fileName = `${Date.now()}-${req.file.originalname}`;
+    const fileBuffer = req.file.buffer;
+    const sha1 = calculateSHA1(fileBuffer);
     const fileType = req.file.mimetype.startsWith('image/') ? 'image' : 'audio';
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({ success: true, url: fileUrl, type: fileType, name: req.file.originalname });
+    
+    // Загружаем в B2
+    await axios.post(uploadData.uploadUrl, fileBuffer, {
+      headers: {
+        'Authorization': uploadData.authorizationToken,
+        'X-Bz-File-Name': encodeURIComponent(fileName),
+        'Content-Type': req.file.mimetype,
+        'Content-Length': fileBuffer.length,
+        'X-Bz-Content-Sha1': sha1
+      }
+    });
+    
+    // Формируем публичную ссылку
+    const fileUrl = `https://${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}`;
+    
+    res.json({
+      success: true,
+      url: fileUrl,
+      type: fileType,
+      name: req.file.originalname,
+    });
+    
   } catch (error) {
-    console.error('Ошибка загрузки:', error);
+    console.error('Ошибка загрузки в B2:', error.response?.data || error.message);
     res.status(500).json({ error: 'Ошибка загрузки файла' });
   }
 });
 
-// ========== 5. АВТОУДАЛЕНИЕ СТАРЫХ ФАЙЛОВ ==========
-function deleteOldFiles() {
-  const oneWeek = 7 * 24 * 60 * 60 * 1000;
-  const now = Date.now();
-  fs.readdir(uploadDir, (err, files) => {
-    if (err) return;
-    files.forEach(file => {
-      const filePath = path.join(uploadDir, file);
-      fs.stat(filePath, (err, stats) => {
-        if (err) return;
-        if (now - stats.mtimeMs > oneWeek) {
-          fs.unlink(filePath, err => {
-            if (!err) console.log(`🗑 Удалён старый файл: ${file}`);
-          });
-        }
-      });
-    });
-  });
-}
-deleteOldFiles();
-setInterval(deleteOldFiles, 24 * 60 * 60 * 1000);
+// ========== 3. ЧАТ (ИСТОРИЯ, ПОЛЬЗОВАТЕЛИ) ==========
+const messageHistory = [];
+const MAX_HISTORY = 100;
+const users = new Map();               // socketId -> { name, lastSeen }
+const recentDisconnects = new Map();    // name -> timestamp
 
-// ========== 6. SOCKET.IO ==========
+function broadcastOnlineCount() {
+  const now = Date.now();
+  for (let [id, user] of users.entries()) {
+    if (now - user.lastSeen > 10000) users.delete(id);
+  }
+  io.emit('online-count', users.size);
+}
+setInterval(broadcastOnlineCount, 5000);
+
 io.on('connection', (socket) => {
   let currentUserName = 'Гость';
   let hasName = false;
@@ -123,25 +156,18 @@ io.on('connection', (socket) => {
       }
       io.emit('system', `${oldName} теперь известен как ${currentUserName}`);
     } else if (!hasName) {
-      // Первая установка имени после подключения
+      // Первая установка имени
       currentUserName = newName;
       socket.data.userName = currentUserName;
       users.set(socket.id, { name: currentUserName, lastSeen: Date.now() });
       hasName = true;
 
-      // Проверяем, было ли это имя в недавних отключениях
       const lastDisconnect = recentDisconnects.get(currentUserName);
       const now = Date.now();
       if (!lastDisconnect || now - lastDisconnect > 10000) {
-        // Если не было отключений или прошло больше 10 секунд – пишем о входе
         io.emit('system', `${currentUserName} присоединился к чату`);
-      } else {
-        // Иначе просто добавляем без уведомления (перезагрузка)
-        console.log(`🔁 ${currentUserName} перезагрузил страницу`);
       }
-      // Удаляем из recentDisconnects, если был
       recentDisconnects.delete(currentUserName);
-
       broadcastOnlineCount();
     }
   });
@@ -158,13 +184,12 @@ io.on('connection', (socket) => {
     const msg = {
       id: Date.now() + Math.random(),
       user: currentUserName,
-      text: text,
+      text,
       type: 'text',
       time: new Date().toLocaleTimeString()
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
-    saveHistory(messageHistory);
     io.emit('message', msg);
   });
 
@@ -180,16 +205,14 @@ io.on('connection', (socket) => {
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
-    saveHistory(messageHistory);
     io.emit('message', msg);
   });
 
   socket.on('disconnect', () => {
     if (users.has(socket.id)) {
       const user = users.get(socket.id);
-      // Запоминаем время отключения для этого имени
       recentDisconnects.set(user.name, Date.now());
-      // Очищаем старые записи (> 30 секунд), чтобы не засорять память
+      // очистка старых записей
       for (let [name, time] of recentDisconnects) {
         if (Date.now() - time > 30000) recentDisconnects.delete(name);
       }
@@ -202,5 +225,4 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log(`📁 Загружено сообщений: ${messageHistory.length}`);
 });
