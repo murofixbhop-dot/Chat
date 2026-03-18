@@ -6,6 +6,7 @@
     <title>Мессенджер со звонками</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
+        /* Стили полностью идентичны вашему исходному коду, оставляем без изменений */
         :root {
             --bg-color: #f0f2f5;
             --sidebar-bg: #ffffff;
@@ -191,11 +192,9 @@
             padding: 10px;
         }
 
-        /* Добавляем отступы для вкладок Друзья и Заявки */
         #friendsTab, #requestsTab {
             padding-top: 10px;
         }
-        /* Для групп отступ не добавляем (оставляем как есть) */
         #groupsTab {
             padding-top: 0;
         }
@@ -728,7 +727,7 @@
     </style>
 </head>
 <body>
-    <!-- Экран загрузки (чтобы скрыть мигание) -->
+    <!-- Экран загрузки -->
     <div id="loadingScreen" class="loading active">
         <i class="fas fa-circle-notch fa-spin"></i> Загрузка...
     </div>
@@ -900,7 +899,6 @@
             if (savedTheme === 'dark') {
                 document.body.classList.add('dark-theme');
             }
-            // Убираем загрузочный экран через небольшую задержку, чтобы страница успела отрисоваться
             setTimeout(() => {
                 document.getElementById('loadingScreen').classList.remove('active');
             }, 100);
@@ -953,7 +951,10 @@
         let friends = [];
         let groups = [];
         let friendRequests = [];
-        let selectedFiles = []; // массив выбранных файлов для отправки
+        let selectedFiles = [];
+
+        // Хранилище аватаров других пользователей
+        let userAvatars = {};
 
         const isTouchDevice = 'ontouchstart' in window;
 
@@ -970,16 +971,13 @@
             peer.on('error', (err) => console.error('Peer error:', err));
         }
 
-        // Обработка входящего звонка
         function handleIncomingCall(call) {
             if (currentCall) {
                 call.close();
                 return;
             }
             const isVideo = call.metadata?.video || false;
-            // Показываем модалку входящего звонка
             const caller = call.peer;
-            // Временно используем просто первую букву (позже можно подгрузить аватар)
             callAvatar.style.backgroundImage = '';
             callAvatar.textContent = caller.charAt(0).toUpperCase();
             callName.textContent = caller;
@@ -992,7 +990,6 @@
             currentCall = call;
         }
 
-        // Ответить на звонок
         function answerCall(withVideo, isVideo) {
             navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo })
                 .then(stream => {
@@ -1006,7 +1003,6 @@
                 .catch(err => console.error('Failed to get media', err));
         }
 
-        // Начать звонок
         function startCall(isVideo) {
             const target = currentRoom.startsWith('private:') ? currentRoom.split(':').find(p => p !== currentUser) : null;
             if (!target) return alert('Можно звонить только в личный чат');
@@ -1021,7 +1017,6 @@
                         endCall();
                     });
                     currentCall = call;
-                    // Показываем окно ожидания
                     callAvatar.style.backgroundImage = '';
                     callAvatar.textContent = target.charAt(0).toUpperCase();
                     callName.textContent = target;
@@ -1033,7 +1028,6 @@
         }
 
         function showCallWindow(peerId, stream, isVideo) {
-            // Создаём модальное окно с видео
             const modal = document.createElement('div');
             modal.className = 'call-modal active';
             modal.innerHTML = `
@@ -1099,7 +1093,6 @@
             }
         }
 
-        // Автоматический вход
         const savedUser = localStorage.getItem('chatUser');
         if (savedUser) {
             fetch('/api/login', {
@@ -1166,6 +1159,7 @@
 
         // ========== ОБНОВЛЕНИЕ АВАТАРОВ ==========
         socket.on('avatar-updated', ({ username, avatar }) => {
+            userAvatars[username] = avatar; // сохраняем
             // Обновить аватар в списке друзей
             const friendItems = document.querySelectorAll('.friend-item');
             friendItems.forEach(item => {
@@ -1179,7 +1173,8 @@
             });
             // Обновить аватар в шапке, если это текущий собеседник
             if (currentRoom.startsWith('private:')) {
-                const other = currentRoom.split(':').find(p => p !== currentUser);
+                const participants = currentRoom.split(':').slice(1);
+                const other = participants.find(p => p !== currentUser);
                 if (other === username) {
                     roomAvatar.style.backgroundImage = avatar ? `url(${avatar})` : '';
                     roomAvatar.textContent = avatar ? '' : username.charAt(0).toUpperCase();
@@ -1192,7 +1187,6 @@
             sidebar.classList.toggle('open');
         }
 
-        // Закрытие свайпом
         let touchStartX = 0;
         document.addEventListener('touchstart', (e) => {
             touchStartX = e.touches[0].clientX;
@@ -1308,23 +1302,28 @@
             }
         }
 
-        // ========== КОМНАТЫ ==========
+        // ========== КОМНАТЫ (ИСПРАВЛЕНО) ==========
         function switchRoom(room) {
             if (currentRoom === room) return;
             currentRoom = room;
-            // Обновляем заголовок и аватар
             if (room === 'general') {
                 currentRoomName.textContent = 'Общий чат';
                 roomAvatar.style.backgroundImage = '';
                 roomAvatar.textContent = '#';
                 callButtonsDiv.innerHTML = '';
             } else if (room.startsWith('private:')) {
-                const parts = room.split(':');
-                const other = parts[1] === currentUser ? parts[2] : parts[1];
-                currentRoomName.textContent = other;
-                // Устанавливаем аватар собеседника (позже можно подгрузить)
-                roomAvatar.style.backgroundImage = '';
-                roomAvatar.textContent = other.charAt(0).toUpperCase();
+                // Извлекаем имена участников, исключая 'private'
+                const participants = room.split(':').slice(1);
+                const other = participants.find(p => p !== currentUser);
+                currentRoomName.textContent = other || 'Неизвестно';
+                // Устанавливаем аватар собеседника, если он есть в хранилище
+                if (other && userAvatars[other]) {
+                    roomAvatar.style.backgroundImage = `url(${userAvatars[other]})`;
+                    roomAvatar.textContent = '';
+                } else {
+                    roomAvatar.style.backgroundImage = '';
+                    roomAvatar.textContent = other ? other.charAt(0).toUpperCase() : '?';
+                }
                 callButtonsDiv.innerHTML = `
                     <button class="call-btn" onclick="startCall(false)" title="Аудиозвонок"><i class="fas fa-phone"></i></button>
                     <button class="call-btn" onclick="startCall(true)" title="Видеозвонок"><i class="fas fa-video"></i></button>
@@ -1404,22 +1403,40 @@
             }
         });
 
-        // ========== СКРЕПКА (исправленное позиционирование) ==========
+        // ========== СКРЕПКА (ИСПРАВЛЕНО: измеряем высоту и размещаем над кнопкой) ==========
         attachBtn.addEventListener('click', (e) => {
-            const rect = attachBtn.getBoundingClientRect();
+            // Показываем меню для измерения, затем скрываем
+            attachMenu.style.display = 'block';
+            const menuHeight = attachMenu.offsetHeight;
             const menuWidth = attachMenu.offsetWidth;
+            attachMenu.style.display = '';
+
+            const rect = attachBtn.getBoundingClientRect();
             let left = rect.left;
+            // Проверка на выход за правый край
             if (left + menuWidth > window.innerWidth) {
                 left = window.innerWidth - menuWidth - 10;
             }
-            attachMenu.style.left = left + 'px';
+            if (left < 10) left = 10;
+
+            // Определяем позицию по вертикали: сначала пытаемся поместить над кнопкой
             const spaceAbove = rect.top;
             const spaceBelow = window.innerHeight - rect.bottom;
-            if (spaceBelow > attachMenu.offsetHeight + 10) {
-                attachMenu.style.top = (rect.bottom + 10) + 'px';
+
+            let top;
+            if (spaceAbove > menuHeight + 10) {
+                // Есть место сверху – ставим над кнопкой
+                top = rect.top - menuHeight - 10;
+            } else if (spaceBelow > menuHeight + 10) {
+                // Места сверху нет, но есть снизу – ставим под кнопкой
+                top = rect.bottom + 10;
             } else {
-                attachMenu.style.top = (rect.top - attachMenu.offsetHeight - 10) + 'px';
+                // Совсем мало места – прижимаем к верху
+                top = 10;
             }
+
+            attachMenu.style.left = left + 'px';
+            attachMenu.style.top = top + 'px';
             attachMenu.classList.toggle('show');
         });
 
