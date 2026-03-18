@@ -1,16 +1,14 @@
 {
-  "name": "media-chat",
+  "name": "simple-chat",
   "version": "2.0.0",
   "description": "Чат с фото и голосовыми сообщениями",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "mkdir -p public/uploads && node server.js"
   },
   "dependencies": {
     "express": "^4.22.1",
     "socket.io": "^4.8.3",
-    "multer": "^1.4.5-lts.1",
-    "@aws-sdk/client-s3": "^3.750.0",
-    "crypto": "^1.0.1"
+    "multer": "^1.4.5-lts.1"
   }
 }
