@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Общий чат (замена Telegram)</title>
+    <title>Чат со сменой имени</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
         body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -22,9 +22,30 @@
             background: #0088cc;
             color: white;
             padding: 16px;
-            text-align: center;
-            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
+        .chat-header h3 { margin: 0; font-weight: 500; }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.2);
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        #changeNameBtn {
+            background: transparent;
+            border: 1px solid white;
+            color: white;
+            padding: 2px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        #changeNameBtn:hover { background: rgba(255,255,255,0.3); }
         .messages {
             flex: 1;
             padding: 16px;
@@ -80,7 +101,13 @@
 </head>
 <body>
     <div class="chat-container">
-        <div class="chat-header">Общий чат (все, кто на сайте)</div>
+        <div class="chat-header">
+            <h3>Общий чат</h3>
+            <div class="user-info">
+                <span id="currentNameLabel">Гость</span>
+                <button id="changeNameBtn">✎ сменить</button>
+            </div>
+        </div>
         <div class="messages" id="messages"></div>
         <div class="input-area">
             <input type="text" id="messageInput" placeholder="Введите сообщение..." autocomplete="off">
@@ -94,8 +121,47 @@
         const messagesDiv = document.getElementById('messages');
         const input = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
+        const currentNameLabel = document.getElementById('currentNameLabel');
+        const changeNameBtn = document.getElementById('changeNameBtn');
 
-        // Функция добавления сообщения в окно
+        // Работа с localStorage
+        const STORAGE_KEY = 'chatUserName';
+        function getStoredName() {
+            return localStorage.getItem(STORAGE_KEY);
+        }
+        function setStoredName(name) {
+            localStorage.setItem(STORAGE_KEY, name);
+            currentNameLabel.textContent = name;
+        }
+
+        // Запрашиваем имя, если его нет
+        let myName = getStoredName();
+        if (!myName) {
+            myName = prompt('Введите ваше имя (или оставьте пустым для "Гость")', 'Гость');
+            if (!myName || myName.trim() === '') myName = 'Гость';
+            setStoredName(myName);
+        } else {
+            currentNameLabel.textContent = myName;
+        }
+
+        // Сообщаем серверу наше имя после подключения
+        socket.emit('set-name', myName);
+
+        // Смена имени по кнопке
+        changeNameBtn.addEventListener('click', () => {
+            const newName = prompt('Введите новое имя', myName);
+            if (newName !== null && newName.trim() !== '') {
+                myName = newName.trim();
+                setStoredName(myName);
+                socket.emit('change-name', myName);
+            } else if (newName !== null && newName.trim() === '') {
+                myName = 'Гость';
+                setStoredName(myName);
+                socket.emit('change-name', myName);
+            }
+        });
+
+        // Функция добавления сообщения
         function addMessage(msg) {
             const msgDiv = document.createElement('div');
             msgDiv.classList.add('message');
@@ -108,7 +174,6 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        // Системные сообщения
         function addSystem(text) {
             const sysDiv = document.createElement('div');
             sysDiv.classList.add('system');
@@ -117,15 +182,11 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        // Получение истории при подключении
         socket.on('history', (history) => {
             history.forEach(addMessage);
         });
 
-        // Получение нового сообщения
         socket.on('message', addMessage);
-
-        // Системное уведомление (вход/выход)
         socket.on('system', addSystem);
 
         // Отправка сообщения
