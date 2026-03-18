@@ -462,6 +462,19 @@ io.on('connection', (socket) => {
     io.to(msg.room).emit('message', msg);
   });
 
+  // ===== ДОБАВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ АВАТАРОВ =====
+  socket.on('avatar-updated', ({ username, avatar }) => {
+    if (!username || !users.has(username)) return;
+    const user = users.get(username);
+    user.avatar = avatar;
+    users.set(username, user);
+    saveUsers(); // асинхронно, не ждём
+
+    // Рассылаем всем, чтобы обновились аватары в интерфейсе
+    // В будущем можно оптимизировать, отправляя только друзьям
+    io.emit('avatar-updated', { username, avatar });
+  });
+
   socket.on('disconnect', () => {
     if (currentUser) {
       userSockets.delete(currentUser);
