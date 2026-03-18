@@ -10,9 +10,9 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // ========== НАСТРОЙКА BACKBLAZE B2 ==========
-const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;      // 5361ea801503
-const B2_APP_KEY = process.env.B2_APP_KEY;            // 005b798671bb82c6bf621015c1e19ef15760027eb6
-const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;    // my-chat-files
+const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;
+const B2_APP_KEY = process.env.B2_APP_KEY;
+const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;
 
 let b2Auth = null;
 let b2BucketId = null;
@@ -46,19 +46,17 @@ async function getUploadUrl() {
   return response.data;
 }
 
-// Генерация временной ссылки на скачивание (действительна 7 дней)
 async function getDownloadUrl(fileName) {
   const response = await axios.post(
     `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
     {
       bucketId: b2BucketId,
       fileNamePrefix: fileName,
-      validDurationInSeconds: 604800 // 7 дней
+      validDurationInSeconds: 604800
     },
     { headers: { Authorization: b2Auth.authorizationToken } }
   );
   const token = response.data.authorizationToken;
-  // Используем downloadUrl из авторизации (например, f005.backblazeb2.com)
   return `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}?Authorization=${token}`;
 }
 
@@ -68,20 +66,58 @@ function calculateSHA1(buffer) {
   return hash.digest('hex');
 }
 
-// ========== НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }
-});
+// ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (users.json в B2) ==========
+const USERS_FILE = 'users.json';
+let users = new Map(); // username -> { friends: [], registered: true, ... }
+
+async function loadUsers() {
+  try {
+    const url = await getDownloadUrl(USERS_FILE);
+    const response = await axios.get(url, { timeout: 5000 });
+    if (response.data && typeof response.data === 'object') {
+      // Преобразуем объект в Map
+      users = new Map(Object.entries(response.data));
+      console.log(`👥 Загружено ${users.size} пользователей`);
+    }
+  } catch (err) {
+    if (err.response?.status === 404) {
+      console.log('📁 Файл users.json не найден, будет создан');
+    } else {
+      console.error('Ошибка загрузки пользователей:', err.message);
+    }
+  }
+}
+
+async function saveUsers() {
+  try {
+    const usersObj = Object.fromEntries(users);
+    const jsonBuffer = Buffer.from(JSON.stringify(usersObj, null, 2), 'utf-8');
+    const uploadData = await getUploadUrl();
+    const sha1 = calculateSHA1(jsonBuffer);
+
+    await axios.post(uploadData.uploadUrl, jsonBuffer, {
+      headers: {
+        'Authorization': uploadData.authorizationToken,
+        'X-Bz-File-Name': USERS_FILE,
+        'Content-Type': 'application/json',
+        'Content-Length': jsonBuffer.length,
+        'X-Bz-Content-Sha1': sha1
+      }
+    });
+    console.log('💾 Пользователи сохранены в B2');
+  } catch (err) {
+    console.error('Ошибка сохранения пользователей:', err.message);
+  }
+}
+
+// ========== ЗАГРУЗКА ФАЙЛОВ ==========
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 app.use(express.static('public'));
 
-// Эндпоинт загрузки файла
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Файл не загружен' });
-    }
+    if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
 
     const mimeType = req.file.mimetype;
     let fileType = 'file';
@@ -89,15 +125,12 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     else if (mimeType.startsWith('audio/')) fileType = 'audio';
     else if (mimeType.startsWith('video/')) fileType = 'video';
 
-    // Добавляем префикс для организации файлов
     let prefix = '';
     if (fileType === 'image') prefix = 'photos/';
     else if (fileType === 'video') prefix = 'videos/';
     else if (fileType === 'audio') prefix = 'audio/';
 
     const fileName = prefix + Date.now() + '-' + req.file.originalname;
-
-    // 1. Загружаем файл в B2
     const uploadData = await getUploadUrl();
     const sha1 = calculateSHA1(req.file.buffer);
     await axios.post(uploadData.uploadUrl, req.file.buffer, {
@@ -110,15 +143,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       }
     });
 
-    // 2. Генерируем временную ссылку на скачивание
     const fileUrl = await getDownloadUrl(fileName);
-
-    res.json({
-      success: true,
-      url: fileUrl,
-      type: fileType,
-      name: req.file.originalname,
-    });
+    res.json({ success: true, url: fileUrl, type: fileType, name: req.file.originalname });
 
   } catch (error) {
     console.error('Ошибка загрузки:', error.response?.data || error.message);
@@ -126,45 +152,84 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// ========== ХРАНЕНИЕ ИСТОРИИ В B2 ==========
-const HISTORY_FILE_NAME = 'history.json';
+// ========== API ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
+app.use(express.json());
+
+// Регистрация / вход (если имя свободно, регистрируем; иначе вход)
+app.post('/api/login', async (req, res) => {
+  const { username } = req.body;
+  if (!username || username.trim() === '') {
+    return res.status(400).json({ error: 'Имя не может быть пустым' });
+  }
+  const cleanName = username.trim();
+  if (users.has(cleanName)) {
+    // Пользователь существует - просто возвращаем его данные
+    return res.json({ success: true, user: { username: cleanName, friends: users.get(cleanName).friends || [] } });
+  } else {
+    // Новый пользователь - создаём запись
+    const newUser = { friends: [] };
+    users.set(cleanName, newUser);
+    await saveUsers();
+    return res.json({ success: true, user: { username: cleanName, friends: [] } });
+  }
+});
+
+// Добавить друга
+app.post('/api/add-friend', async (req, res) => {
+  const { username, friendName } = req.body;
+  if (!username || !friendName) return res.status(400).json({ error: 'Не указаны имена' });
+  if (!users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (!users.has(friendName)) return res.status(404).json({ error: 'Друг не найден' });
+  const user = users.get(username);
+  if (!user.friends.includes(friendName)) {
+    user.friends.push(friendName);
+    users.set(username, user);
+    await saveUsers();
+  }
+  res.json({ success: true, friends: user.friends });
+});
+
+// Получить список друзей
+app.post('/api/get-friends', (req, res) => {
+  const { username } = req.body;
+  if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+  res.json({ friends: users.get(username).friends || [] });
+});
+
+// ========== ХРАНЕНИЕ ИСТОРИИ ==========
+const HISTORY_FILE = 'history.json';
 const MAX_HISTORY = 1000;
 let messageHistory = [];
 
-async function loadHistoryFromB2() {
+async function loadHistory() {
   try {
-    // Для загрузки истории тоже генерируем временную ссылку
-    const url = await getDownloadUrl(HISTORY_FILE_NAME);
+    const url = await getDownloadUrl(HISTORY_FILE);
     const response = await axios.get(url, { timeout: 5000 });
     if (response.data && Array.isArray(response.data)) {
       messageHistory = response.data.slice(-MAX_HISTORY);
       console.log(`📁 Загружено ${messageHistory.length} сообщений`);
     }
   } catch (err) {
-    if (err.response?.status === 404) {
-      console.log('📁 Файл истории не найден, будет создан');
-    } else {
-      console.error('Ошибка загрузки истории:', err.message);
-    }
+    if (err.response?.status === 404) console.log('📁 history.json не найден');
+    else console.error('Ошибка загрузки истории:', err.message);
   }
 }
 
-async function saveHistoryToB2() {
+async function saveHistory() {
   try {
     const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
     const uploadData = await getUploadUrl();
     const sha1 = calculateSHA1(jsonBuffer);
-
     await axios.post(uploadData.uploadUrl, jsonBuffer, {
       headers: {
         'Authorization': uploadData.authorizationToken,
-        'X-Bz-File-Name': HISTORY_FILE_NAME,
+        'X-Bz-File-Name': HISTORY_FILE,
         'Content-Type': 'application/json',
         'Content-Length': jsonBuffer.length,
         'X-Bz-Content-Sha1': sha1
       }
     });
-    console.log('💾 История сохранена в B2');
+    console.log('💾 История сохранена');
   } catch (err) {
     console.error('Ошибка сохранения истории:', err.message);
   }
@@ -178,109 +243,92 @@ async function saveHistoryToB2() {
     console.log('✅ Авторизация успешна');
     b2BucketId = await getBucketId(B2_BUCKET_NAME);
     console.log(`✅ ID бакета: ${b2BucketId}`);
-    await loadHistoryFromB2();
+    await loadUsers();
+    await loadHistory();
   } catch (err) {
     console.error('❌ Ошибка подключения к B2:', err.message);
     process.exit(1);
   }
 })();
 
-// ========== ЧАТ (ПОЛЬЗОВАТЕЛИ, СООБЩЕНИЯ) ==========
-const users = new Map();
+// ========== SOCKET.IO (ЧАТ) ==========
+const onlineUsers = new Map(); // socketId -> { username, lastSeen }
 const recentDisconnects = new Map();
 
 function broadcastOnlineCount() {
   const now = Date.now();
-  for (let [id, user] of users.entries()) {
-    if (now - user.lastSeen > 10000) users.delete(id);
+  for (let [id, user] of onlineUsers.entries()) {
+    if (now - user.lastSeen > 10000) onlineUsers.delete(id);
   }
-  io.emit('online-count', users.size);
+  io.emit('online-count', onlineUsers.size);
 }
 setInterval(broadcastOnlineCount, 5000);
 
 io.on('connection', (socket) => {
-  let currentUserName = 'Гость';
-  let hasName = false;
+  let currentUser = null;
 
-  socket.emit('history', messageHistory);
-  socket.emit('online-count', users.size);
-
-  socket.on('set-name', (name) => {
-    const newName = name?.trim() || 'Гость';
-
-    if (hasName && currentUserName !== newName) {
-      const oldName = currentUserName;
-      currentUserName = newName;
-      socket.data.userName = currentUserName;
-      if (users.has(socket.id)) {
-        users.set(socket.id, { name: currentUserName, lastSeen: Date.now() });
-      }
-      io.emit('system', `${oldName} теперь известен как ${currentUserName}`);
-    } else if (!hasName) {
-      currentUserName = newName;
-      socket.data.userName = currentUserName;
-      users.set(socket.id, { name: currentUserName, lastSeen: Date.now() });
-      hasName = true;
-
-      const lastDisconnect = recentDisconnects.get(currentUserName);
-      const now = Date.now();
-      if (!lastDisconnect || now - lastDisconnect > 10000) {
-        io.emit('system', `${currentUserName} присоединился к чату`);
-      }
-      recentDisconnects.delete(currentUserName);
-      broadcastOnlineCount();
-    }
+  socket.on('identify', (username) => {
+    currentUser = username;
+    onlineUsers.set(socket.id, { username, lastSeen: Date.now() });
+    broadcastOnlineCount();
+    // Можно отправить список друзей и т.д.
   });
 
   socket.on('ping', () => {
-    if (users.has(socket.id)) {
-      const user = users.get(socket.id);
+    if (onlineUsers.has(socket.id)) {
+      const user = onlineUsers.get(socket.id);
       user.lastSeen = Date.now();
-      users.set(socket.id, user);
+      onlineUsers.set(socket.id, user);
     }
   });
 
   socket.on('message', (text) => {
+    if (!currentUser) return; // Неавторизованные не могут писать
     const msg = {
       id: Date.now() + Math.random(),
-      user: currentUserName,
+      user: currentUser,
       text,
       type: 'text',
       time: new Date().toLocaleTimeString()
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
-    saveHistoryToB2();
+    saveHistory();
     io.emit('message', msg);
   });
 
   socket.on('media-message', (mediaData) => {
+    if (!currentUser) return;
     const msg = {
       id: Date.now() + Math.random(),
-      user: currentUserName,
+      user: currentUser,
       text: mediaData.text || '',
       type: mediaData.type,
-      url: mediaData.url, // теперь это прямая временная ссылка
+      url: mediaData.url,
       fileName: mediaData.fileName,
       time: new Date().toLocaleTimeString()
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
-    saveHistoryToB2();
+    saveHistory();
     io.emit('message', msg);
   });
 
   socket.on('disconnect', () => {
-    if (users.has(socket.id)) {
-      const user = users.get(socket.id);
-      recentDisconnects.set(user.name, Date.now());
+    if (onlineUsers.has(socket.id)) {
+      const user = onlineUsers.get(socket.id);
+      recentDisconnects.set(user.username, Date.now());
+      // Очистка старых записей
       for (let [name, time] of recentDisconnects) {
         if (Date.now() - time > 30000) recentDisconnects.delete(name);
       }
-      users.delete(socket.id);
+      onlineUsers.delete(socket.id);
       broadcastOnlineCount();
     }
   });
+
+  // Отправляем историю при подключении (если пользователь авторизован)
+  socket.emit('history', messageHistory);
 });
 
 const PORT = process.env.PORT || 3000;
