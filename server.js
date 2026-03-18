@@ -13,21 +13,20 @@ const io = new Server(server);
 const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;      // ваш keyID
 const B2_APP_KEY = process.env.B2_APP_KEY;            // ваш applicationKey
 const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;    // имя бакета
+const WORKER_URL = process.env.WORKER_URL || 'https://b2-proxy.murofixbhop.workers.dev'; // ваш Worker URL
 
-let b2Auth = null;          // авторизация
-let b2BucketId = null;      // ID бакета
+let b2Auth = null;
+let b2BucketId = null;
 
-// Функция авторизации
 async function authorizeB2() {
   const credentials = `${B2_ACCOUNT_ID}:${B2_APP_KEY}`;
   const base64 = Buffer.from(credentials).toString('base64');
   const response = await axios.get('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', {
     headers: { Authorization: `Basic ${base64}` }
   });
-  return response.data; // { apiUrl, authorizationToken, downloadUrl }
+  return response.data;
 }
 
-// Функция получения bucketId по имени
 async function getBucketId(bucketName) {
   const response = await axios.post(
     `${b2Auth.apiUrl}/b2api/v2/b2_list_buckets`,
@@ -39,24 +38,22 @@ async function getBucketId(bucketName) {
   return bucket.bucketId;
 }
 
-// Функция получения URL для загрузки
 async function getUploadUrl() {
   const response = await axios.post(
     `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
     { bucketId: b2BucketId },
     { headers: { Authorization: b2Auth.authorizationToken } }
   );
-  return response.data; // { uploadUrl, authorizationToken }
+  return response.data;
 }
 
-// Функция вычисления SHA‑1
 function calculateSHA1(buffer) {
   const hash = crypto.createHash('sha1');
   hash.update(buffer);
   return hash.digest('hex');
 }
 
-// Функция для загрузки файла в B2 (возвращает публичную ссылку)
+// Загрузка файла в B2, возвращает URL через Worker
 async function uploadFileToB2(fileBuffer, fileName, mimeType) {
   const uploadData = await getUploadUrl();
   const sha1 = calculateSHA1(fileBuffer);
@@ -71,19 +68,18 @@ async function uploadFileToB2(fileBuffer, fileName, mimeType) {
     }
   });
 
-  return `https://${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}`;
+  // Возвращаем ссылку через Worker, а не напрямую к B2
+  return `${WORKER_URL}/${B2_BUCKET_NAME}/${fileName}`;
 }
 
-// Инициализация B2 при старте сервера
+// Инициализация B2
 (async () => {
   try {
     console.log('🔄 Авторизация в Backblaze B2...');
     b2Auth = await authorizeB2();
     console.log('✅ Авторизация успешна');
     b2BucketId = await getBucketId(B2_BUCKET_NAME);
-    console.log(`✅ ID бакета "${B2_BUCKET_NAME}": ${b2BucketId}`);
-
-    // Загружаем историю сообщений из B2 (если есть)
+    console.log(`✅ ID бакета: ${b2BucketId}`);
     await loadHistoryFromB2();
   } catch (err) {
     console.error('❌ Ошибка подключения к B2:', err.message);
@@ -93,28 +89,26 @@ async function uploadFileToB2(fileBuffer, fileName, mimeType) {
 
 // ========== 2. ХРАНЕНИЕ ИСТОРИИ В B2 ==========
 const HISTORY_FILE_NAME = 'history.json';
-const MAX_HISTORY = 1000; // храним последние 1000 сообщений
+const MAX_HISTORY = 1000;
 let messageHistory = [];
 
-// Загрузка истории из B2
 async function loadHistoryFromB2() {
   try {
-    const url = `https://${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${HISTORY_FILE_NAME}`;
+    const url = `${WORKER_URL}/${B2_BUCKET_NAME}/${HISTORY_FILE_NAME}`;
     const response = await axios.get(url, { timeout: 5000 });
     if (response.data && Array.isArray(response.data)) {
       messageHistory = response.data.slice(-MAX_HISTORY);
-      console.log(`📁 Загружено ${messageHistory.length} сообщений из истории`);
+      console.log(`📁 Загружено ${messageHistory.length} сообщений`);
     }
   } catch (err) {
     if (err.response?.status === 404) {
-      console.log('📁 Файл истории не найден, будет создан при первом сообщении');
+      console.log('📁 Файл истории не найден, будет создан');
     } else {
-      console.error('Ошибка загрузки истории из B2:', err.message);
+      console.error('Ошибка загрузки истории:', err.message);
     }
   }
 }
 
-// Сохранение истории в B2
 async function saveHistoryToB2() {
   try {
     const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
@@ -132,14 +126,14 @@ async function saveHistoryToB2() {
     });
     console.log('💾 История сохранена в B2');
   } catch (err) {
-    console.error('Ошибка сохранения истории в B2:', err.message);
+    console.error('Ошибка сохранения истории:', err.message);
   }
 }
 
 // ========== 3. НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 } // 50 MB (для видео)
+  limits: { fileSize: 50 * 1024 * 1024 } // 50 MB
 });
 
 app.use(express.static('public'));
@@ -157,7 +151,13 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     else if (mimeType.startsWith('audio/')) fileType = 'audio';
     else if (mimeType.startsWith('video/')) fileType = 'video';
 
-    const fileName = `${Date.now()}-${req.file.originalname}`;
+    // Добавляем префикс для Lifecycle Rules (опционально)
+    let prefix = '';
+    if (fileType === 'image') prefix = 'photos/';
+    else if (fileType === 'video') prefix = 'videos/';
+    else if (fileType === 'audio') prefix = 'audio/';
+
+    const fileName = prefix + Date.now() + '-' + req.file.originalname;
     const fileUrl = await uploadFileToB2(req.file.buffer, fileName, mimeType);
 
     res.json({
@@ -168,14 +168,14 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Ошибка загрузки в B2:', error.response?.data || error.message);
+    console.error('Ошибка загрузки:', error.response?.data || error.message);
     res.status(500).json({ error: 'Ошибка загрузки файла' });
   }
 });
 
 // ========== 4. ЧАТ (ПОЛЬЗОВАТЕЛИ, СООБЩЕНИЯ) ==========
-const users = new Map();               // socketId -> { name, lastSeen }
-const recentDisconnects = new Map();    // name -> timestamp
+const users = new Map();
+const recentDisconnects = new Map();
 
 function broadcastOnlineCount() {
   const now = Date.now();
@@ -238,7 +238,7 @@ io.on('connection', (socket) => {
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
-    saveHistoryToB2(); // асинхронно сохраняем в B2
+    saveHistoryToB2(); // асинхронно
     io.emit('message', msg);
   });
 
@@ -254,7 +254,7 @@ io.on('connection', (socket) => {
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
-    saveHistoryToB2(); // асинхронно сохраняем в B2
+    saveHistoryToB2();
     io.emit('message', msg);
   });
 
@@ -274,4 +274,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
+  console.log(`🌐 Worker URL: ${WORKER_URL}`);
 });
