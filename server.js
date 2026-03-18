@@ -10,10 +10,9 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // ========== НАСТРОЙКА BACKBLAZE B2 ==========
-const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;
-const B2_APP_KEY = process.env.B2_APP_KEY;
-const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;
-const WORKER_URL = process.env.WORKER_URL;
+const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;      // 5361ea801503
+const B2_APP_KEY = process.env.B2_APP_KEY;            // 005b798671bb82c6bf621015c1e19ef15760027eb6
+const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;    // my-chat-files
 
 let b2Auth = null;
 let b2BucketId = null;
@@ -47,43 +46,85 @@ async function getUploadUrl() {
   return response.data;
 }
 
+// Генерация временной ссылки на скачивание (действительна 7 дней)
+async function getDownloadUrl(fileName) {
+  const response = await axios.post(
+    `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
+    {
+      bucketId: b2BucketId,
+      fileNamePrefix: fileName,
+      validDurationInSeconds: 604800 // 7 дней
+    },
+    { headers: { Authorization: b2Auth.authorizationToken } }
+  );
+  const token = response.data.authorizationToken;
+  // Используем downloadUrl из авторизации (например, f005.backblazeb2.com)
+  return `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}?Authorization=${token}`;
+}
+
 function calculateSHA1(buffer) {
   const hash = crypto.createHash('sha1');
   hash.update(buffer);
   return hash.digest('hex');
 }
 
-async function uploadFileToB2(fileBuffer, fileName, mimeType) {
-  const uploadData = await getUploadUrl();
-  const sha1 = calculateSHA1(fileBuffer);
+// ========== НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
 
-  await axios.post(uploadData.uploadUrl, fileBuffer, {
-    headers: {
-      'Authorization': uploadData.authorizationToken,
-      'X-Bz-File-Name': encodeURIComponent(fileName),
-      'Content-Type': mimeType,
-      'Content-Length': fileBuffer.length,
-      'X-Bz-Content-Sha1': sha1
-    }
-  });
+app.use(express.static('public'));
 
-  return `${WORKER_URL}/${B2_BUCKET_NAME}/${fileName}`;
-}
-
-// Инициализация B2
-(async () => {
+// Эндпоинт загрузки файла
+app.post('/upload', upload.single('file'), async (req, res) => {
   try {
-    console.log('🔄 Авторизация в Backblaze B2...');
-    b2Auth = await authorizeB2();
-    console.log('✅ Авторизация успешна');
-    b2BucketId = await getBucketId(B2_BUCKET_NAME);
-    console.log(`✅ ID бакета: ${b2BucketId}`);
-    await loadHistoryFromB2();
-  } catch (err) {
-    console.error('❌ Ошибка подключения к B2:', err.message);
-    process.exit(1);
+    if (!req.file) {
+      return res.status(400).json({ error: 'Файл не загружен' });
+    }
+
+    const mimeType = req.file.mimetype;
+    let fileType = 'file';
+    if (mimeType.startsWith('image/')) fileType = 'image';
+    else if (mimeType.startsWith('audio/')) fileType = 'audio';
+    else if (mimeType.startsWith('video/')) fileType = 'video';
+
+    // Добавляем префикс для организации файлов
+    let prefix = '';
+    if (fileType === 'image') prefix = 'photos/';
+    else if (fileType === 'video') prefix = 'videos/';
+    else if (fileType === 'audio') prefix = 'audio/';
+
+    const fileName = prefix + Date.now() + '-' + req.file.originalname;
+
+    // 1. Загружаем файл в B2
+    const uploadData = await getUploadUrl();
+    const sha1 = calculateSHA1(req.file.buffer);
+    await axios.post(uploadData.uploadUrl, req.file.buffer, {
+      headers: {
+        'Authorization': uploadData.authorizationToken,
+        'X-Bz-File-Name': encodeURIComponent(fileName),
+        'Content-Type': mimeType,
+        'Content-Length': req.file.buffer.length,
+        'X-Bz-Content-Sha1': sha1
+      }
+    });
+
+    // 2. Генерируем временную ссылку на скачивание
+    const fileUrl = await getDownloadUrl(fileName);
+
+    res.json({
+      success: true,
+      url: fileUrl,
+      type: fileType,
+      name: req.file.originalname,
+    });
+
+  } catch (error) {
+    console.error('Ошибка загрузки:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Ошибка загрузки файла' });
   }
-})();
+});
 
 // ========== ХРАНЕНИЕ ИСТОРИИ В B2 ==========
 const HISTORY_FILE_NAME = 'history.json';
@@ -92,7 +133,8 @@ let messageHistory = [];
 
 async function loadHistoryFromB2() {
   try {
-    const url = `${WORKER_URL}/${B2_BUCKET_NAME}/${HISTORY_FILE_NAME}`;
+    // Для загрузки истории тоже генерируем временную ссылку
+    const url = await getDownloadUrl(HISTORY_FILE_NAME);
     const response = await axios.get(url, { timeout: 5000 });
     if (response.data && Array.isArray(response.data)) {
       messageHistory = response.data.slice(-MAX_HISTORY);
@@ -128,48 +170,22 @@ async function saveHistoryToB2() {
   }
 }
 
-// ========== НАСТРОЙКА ЗАГРУЗКИ ФАЙЛОВ ==========
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }
-});
-
-app.use(express.static('public'));
-
-app.post('/upload', upload.single('file'), async (req, res) => {
+// ========== ИНИЦИАЛИЗАЦИЯ B2 ==========
+(async () => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Файл не загружен' });
-    }
-
-    const mimeType = req.file.mimetype;
-    let fileType = 'file';
-    if (mimeType.startsWith('image/')) fileType = 'image';
-    else if (mimeType.startsWith('audio/')) fileType = 'audio';
-    else if (mimeType.startsWith('video/')) fileType = 'video';
-
-    let prefix = '';
-    if (fileType === 'image') prefix = 'photos/';
-    else if (fileType === 'video') prefix = 'videos/';
-    else if (fileType === 'audio') prefix = 'audio/';
-
-    const fileName = prefix + Date.now() + '-' + req.file.originalname;
-    const fileUrl = await uploadFileToB2(req.file.buffer, fileName, mimeType);
-
-    res.json({
-      success: true,
-      url: fileUrl,
-      type: fileType,
-      name: req.file.originalname,
-    });
-
-  } catch (error) {
-    console.error('Ошибка загрузки:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Ошибка загрузки файла' });
+    console.log('🔄 Авторизация в Backblaze B2...');
+    b2Auth = await authorizeB2();
+    console.log('✅ Авторизация успешна');
+    b2BucketId = await getBucketId(B2_BUCKET_NAME);
+    console.log(`✅ ID бакета: ${b2BucketId}`);
+    await loadHistoryFromB2();
+  } catch (err) {
+    console.error('❌ Ошибка подключения к B2:', err.message);
+    process.exit(1);
   }
-});
+})();
 
-// ========== ЧАТ ==========
+// ========== ЧАТ (ПОЛЬЗОВАТЕЛИ, СООБЩЕНИЯ) ==========
 const users = new Map();
 const recentDisconnects = new Map();
 
@@ -244,7 +260,7 @@ io.on('connection', (socket) => {
       user: currentUserName,
       text: mediaData.text || '',
       type: mediaData.type,
-      url: mediaData.url,
+      url: mediaData.url, // теперь это прямая временная ссылка
       fileName: mediaData.fileName,
       time: new Date().toLocaleTimeString()
     };
