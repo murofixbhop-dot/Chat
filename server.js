@@ -66,9 +66,9 @@ function calculateSHA1(buffer) {
   return hash.digest('hex');
 }
 
-// ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ==========
+// ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ И ЗАЯВКАМИ ==========
 const USERS_FILE = 'users.json';
-let users = new Map(); // username -> { friends: [] }
+let users = new Map(); // username -> { friends: [], friendRequests: [] }
 
 async function loadUsers() {
   try {
@@ -161,39 +161,111 @@ app.post('/api/login', async (req, res) => {
   }
   const cleanName = username.trim();
   if (users.has(cleanName)) {
-    return res.json({ success: true, user: { username: cleanName, friends: users.get(cleanName).friends || [] } });
+    const userData = users.get(cleanName);
+    return res.json({
+      success: true,
+      user: {
+        username: cleanName,
+        friends: userData.friends || [],
+        friendRequests: userData.friendRequests || []
+      }
+    });
   } else {
-    const newUser = { friends: [] };
+    const newUser = { friends: [], friendRequests: [] };
     users.set(cleanName, newUser);
     await saveUsers();
-    return res.json({ success: true, user: { username: cleanName, friends: [] } });
+    return res.json({
+      success: true,
+      user: { username: cleanName, friends: [], friendRequests: [] }
+    });
   }
 });
 
-app.post('/api/add-friend', async (req, res) => {
-  const { username, friendName } = req.body;
-  if (!username || !friendName) return res.status(400).json({ error: 'Не указаны имена' });
-  if (!users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
-  if (!users.has(friendName)) return res.status(404).json({ error: 'Друг не найден' });
-  const user = users.get(username);
-  if (!user.friends.includes(friendName)) {
-    user.friends.push(friendName);
-    users.set(username, user);
-    await saveUsers();
+// Отправить заявку в друзья
+app.post('/api/send-friend-request', async (req, res) => {
+  const { from, to } = req.body;
+  if (!from || !to) return res.status(400).json({ error: 'Не указаны имена' });
+  if (!users.has(from)) return res.status(404).json({ error: 'Отправитель не найден' });
+  if (!users.has(to)) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  const targetUser = users.get(to);
+  if (!targetUser.friendRequests) targetUser.friendRequests = [];
+  if (targetUser.friendRequests.includes(from)) {
+    return res.json({ success: false, message: 'Заявка уже отправлена' });
   }
+  targetUser.friendRequests.push(from);
+  users.set(to, targetUser);
+  await saveUsers();
+
+  // Уведомляем получателя через socket, если он онлайн
+  const targetSocketId = userSockets.get(to);
+  if (targetSocketId) {
+    io.to(targetSocketId).emit('friend-request', { from });
+  }
+
+  res.json({ success: true });
+});
+
+// Принять заявку
+app.post('/api/accept-friend-request', async (req, res) => {
+  const { username, requester } = req.body;
+  if (!username || !requester) return res.status(400).json({ error: 'Не указаны имена' });
+  if (!users.has(username) || !users.has(requester)) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  const user = users.get(username);
+  const requesterUser = users.get(requester);
+
+  if (!user.friendRequests) user.friendRequests = [];
+  const index = user.friendRequests.indexOf(requester);
+  if (index === -1) return res.status(400).json({ error: 'Заявка не найдена' });
+
+  // Удаляем заявку
+  user.friendRequests.splice(index, 1);
+  // Добавляем в друзья обоим
+  if (!user.friends) user.friends = [];
+  if (!requesterUser.friends) requesterUser.friends = [];
+  if (!user.friends.includes(requester)) user.friends.push(requester);
+  if (!requesterUser.friends.includes(username)) requesterUser.friends.push(username);
+
+  users.set(username, user);
+  users.set(requester, requesterUser);
+  await saveUsers();
+
   res.json({ success: true, friends: user.friends });
 });
 
-app.post('/api/get-friends', (req, res) => {
-  const { username } = req.body;
-  if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
-  res.json({ friends: users.get(username).friends || [] });
+// Отклонить заявку
+app.post('/api/reject-friend-request', async (req, res) => {
+  const { username, requester } = req.body;
+  if (!username || !requester) return res.status(400).json({ error: 'Не указаны имена' });
+  if (!users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  const user = users.get(username);
+  if (!user.friendRequests) user.friendRequests = [];
+  const index = user.friendRequests.indexOf(requester);
+  if (index !== -1) {
+    user.friendRequests.splice(index, 1);
+    users.set(username, user);
+    await saveUsers();
+  }
+  res.json({ success: true });
 });
 
-// ========== ХРАНЕНИЕ ИСТОРИИ (с поддержкой комнат) ==========
+// Получить список друзей и заявок
+app.post('/api/get-user-data', (req, res) => {
+  const { username } = req.body;
+  if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+  const userData = users.get(username);
+  res.json({
+    friends: userData.friends || [],
+    friendRequests: userData.friendRequests || []
+  });
+});
+
+// ========== ХРАНЕНИЕ ИСТОРИИ ==========
 const HISTORY_FILE = 'history.json';
-const MAX_HISTORY = 2000; // увеличим для всех комнат
-let messageHistory = []; // каждый объект: { id, user, text, type, url, fileName, time, room }
+const MAX_HISTORY = 2000;
+let messageHistory = []; // { id, user, text, type, url, fileName, time, room }
 
 async function loadHistory() {
   try {
@@ -245,7 +317,7 @@ async function saveHistory() {
   }
 })();
 
-// ========== SOCKET.IO (ЧАТ С КОМНАТАМИ) ==========
+// ========== SOCKET.IO ==========
 const onlineUsers = new Map(); // socketId -> { username, lastSeen }
 const userSockets = new Map(); // username -> socketId
 
@@ -266,17 +338,14 @@ io.on('connection', (socket) => {
     onlineUsers.set(socket.id, { username, lastSeen: Date.now() });
     userSockets.set(username, socket.id);
     broadcastOnlineCount();
-    // Присоединяемся к общей комнате
     socket.join('general');
     socket.emit('history', messageHistory.filter(m => m.room === 'general').slice(-100));
   });
 
   socket.on('join-room', (room) => {
     if (!currentUser) return;
-    // Покидаем предыдущую комнату (если нужно)
     socket.leaveAll();
     socket.join(room);
-    // Отправляем историю для этой комнаты (последние 100)
     const roomHistory = messageHistory.filter(m => m.room === room).slice(-100);
     socket.emit('history', roomHistory);
   });
