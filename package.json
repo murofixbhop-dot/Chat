@@ -1,7 +1,7 @@
 {
   "name": "simple-chat",
-  "version": "3.0.0",
-  "description": "Чат с фото и голосовыми сообщениями (Backblaze B2)",
+  "version": "4.0.0",
+  "description": "Чат с фото, видео, голосом и Backblaze B2",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
