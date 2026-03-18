@@ -13,30 +13,35 @@ app.use(express.static('public'));
 const messageHistory = [];
 const MAX_HISTORY = 50;
 
-// Генератор случайных имён
-const animals = ['Кот', 'Пёс', 'Лис', 'Волк', 'Медведь', 'Заяц', 'Ёж', 'Бобр', 'Сова', 'Орёл'];
-function randomName() {
-    const animal = animals[Math.floor(Math.random() * animals.length)];
-    const number = Math.floor(Math.random() * 1000);
-    return `${animal}${number}`;
-}
-
 io.on('connection', (socket) => {
-    // Присваиваем случайное имя
-    const userName = randomName();
-    socket.data.userName = userName;
+    // При подключении имя ещё не задано
+    let userName = 'Гость';
 
-    // Отправляем новому пользователю историю сообщений
+    // Отправляем новому пользователю историю сообщений (без имени)
     socket.emit('history', messageHistory);
 
-    // Оповещаем всех, кроме нового, что пользователь присоединился
-    socket.broadcast.emit('system', `${userName} присоединился к чату`);
+    // Клиент сообщает нам своё имя
+    socket.on('set-name', (name) => {
+        userName = name || 'Гость';
+        socket.data.userName = userName;
+        // Оповещаем всех, кроме нового, что пользователь присоединился
+        socket.broadcast.emit('system', `${userName} присоединился к чату`);
+    });
+
+    // Обработка смены имени в процессе
+    socket.on('change-name', (newName) => {
+        const oldName = userName;
+        userName = newName || 'Гость';
+        socket.data.userName = userName;
+        // Оповещаем всех о смене имени
+        io.emit('system', `${oldName} теперь известен как ${userName}`);
+    });
 
     // Обработка входящего сообщения
     socket.on('message', (text) => {
         const msg = {
             id: Date.now() + Math.random(),
-            user: userName,
+            user: socket.data.userName || 'Гость',
             text: text,
             time: new Date().toLocaleTimeString()
         };
@@ -50,7 +55,9 @@ io.on('connection', (socket) => {
 
     // При отключении
     socket.on('disconnect', () => {
-        io.emit('system', `${userName} покинул чат`);
+        if (socket.data.userName) {
+            io.emit('system', `${socket.data.userName} покинул чат`);
+        }
     });
 });
 
