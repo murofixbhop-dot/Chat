@@ -191,6 +191,15 @@
             padding: 10px;
         }
 
+        /* Добавляем отступы для вкладок Друзья и Заявки */
+        #friendsTab, #requestsTab {
+            padding-top: 10px;
+        }
+        /* Для групп отступ не добавляем (оставляем как есть) */
+        #groupsTab {
+            padding-top: 0;
+        }
+
         .friends-list, .groups-list, .requests-list {
             list-style: none;
         }
@@ -825,12 +834,12 @@
                 <div class="tab" onclick="switchTab('requests')"><i class="fas fa-bell"></i> Заявки</div>
             </div>
             <div class="tab-content">
-                <!-- Друзья -->
+                <!-- Друзья (с отступом) -->
                 <div id="friendsTab">
                     <div class="add-group" onclick="openAddFriend()"><i class="fas fa-plus-circle"></i> Добавить друга</div>
                     <ul class="friends-list" id="friendsList"></ul>
                 </div>
-                <!-- Группы (включая общий чат) -->
+                <!-- Группы (без отступа) -->
                 <div id="groupsTab" style="display:none;">
                     <div class="add-group" onclick="openGroupModal()"><i class="fas fa-plus-circle"></i> Создать группу</div>
                     <ul class="groups-list" id="groupsList">
@@ -840,7 +849,7 @@
                         </li>
                     </ul>
                 </div>
-                <!-- Заявки -->
+                <!-- Заявки (с отступом) -->
                 <div id="requestsTab" style="display:none;">
                     <ul class="requests-list" id="requestsList"></ul>
                 </div>
@@ -1314,7 +1323,7 @@
                 const other = parts[1] === currentUser ? parts[2] : parts[1];
                 currentRoomName.textContent = other;
                 // Устанавливаем аватар собеседника (позже можно подгрузить)
-                roomAvatar.style.backgroundImage = ''; // временно
+                roomAvatar.style.backgroundImage = '';
                 roomAvatar.textContent = other.charAt(0).toUpperCase();
                 callButtonsDiv.innerHTML = `
                     <button class="call-btn" onclick="startCall(false)" title="Аудиозвонок"><i class="fas fa-phone"></i></button>
@@ -1395,11 +1404,22 @@
             }
         });
 
-        // ========== СКРЕПКА ==========
+        // ========== СКРЕПКА (исправленное позиционирование) ==========
         attachBtn.addEventListener('click', (e) => {
             const rect = attachBtn.getBoundingClientRect();
-            attachMenu.style.left = rect.left + 'px';
-            attachMenu.style.top = (rect.top - attachMenu.offsetHeight - 10) + 'px';
+            const menuWidth = attachMenu.offsetWidth;
+            let left = rect.left;
+            if (left + menuWidth > window.innerWidth) {
+                left = window.innerWidth - menuWidth - 10;
+            }
+            attachMenu.style.left = left + 'px';
+            const spaceAbove = rect.top;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            if (spaceBelow > attachMenu.offsetHeight + 10) {
+                attachMenu.style.top = (rect.bottom + 10) + 'px';
+            } else {
+                attachMenu.style.top = (rect.top - attachMenu.offsetHeight - 10) + 'px';
+            }
             attachMenu.classList.toggle('show');
         });
 
