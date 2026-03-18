@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Медиа-чат с фото и голосом</title>
+    <title>Чат с фото и голосом</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
         body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -27,6 +27,30 @@
             align-items: center;
         }
         .chat-header h3 { margin: 0; font-weight: 500; }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .online-indicator {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .online-indicator::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #2ecc71;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } }
         .user-info {
             display: flex;
             align-items: center;
@@ -122,11 +146,6 @@
         .action-btn.recording {
             animation: pulse 1s infinite;
         }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
         #recordingIndicator {
             color: #dc3545;
             font-weight: bold;
@@ -164,9 +183,14 @@
     <div class="chat-container">
         <div class="chat-header">
             <h3>Медиа-чат</h3>
-            <div class="user-info">
-                <span id="currentNameLabel">Гость</span>
-                <button id="changeNameBtn">✎ сменить</button>
+            <div class="header-right">
+                <div class="online-indicator">
+                    <span id="onlineCount">0</span> онлайн
+                </div>
+                <div class="user-info">
+                    <span id="currentNameLabel">Гость</span>
+                    <button id="changeNameBtn">✎ сменить</button>
+                </div>
             </div>
         </div>
         <div class="messages" id="messages"></div>
@@ -185,7 +209,6 @@
         </div>
     </div>
 
-    <!-- Модальное окно для просмотра фото -->
     <div id="imageModal" class="modal" onclick="this.style.display='none'">
         <span class="modal-close">&times;</span>
         <img id="modalImage" src="">
@@ -201,13 +224,14 @@
         const voiceBtn = document.getElementById('voiceBtn');
         const currentNameLabel = document.getElementById('currentNameLabel');
         const changeNameBtn = document.getElementById('changeNameBtn');
+        const onlineCountSpan = document.getElementById('onlineCount');
         const recordingIndicator = document.getElementById('recordingIndicator');
         const recordingTime = document.getElementById('recordingTime');
         const stopRecordingBtn = document.getElementById('stopRecordingBtn');
         const imageModal = document.getElementById('imageModal');
         const modalImage = document.getElementById('modalImage');
 
-        // Работа с именем
+        // ========== ИМЯ ПОЛЬЗОВАТЕЛЯ ==========
         const STORAGE_KEY = 'chatUserName';
         function getStoredName() {
             return localStorage.getItem(STORAGE_KEY);
@@ -229,18 +253,25 @@
 
         changeNameBtn.addEventListener('click', () => {
             const newName = prompt('Введите новое имя', myName);
-            if (newName !== null && newName.trim() !== '') {
-                myName = newName.trim();
+            if (newName !== null) {
+                const trimmed = newName.trim();
+                myName = trimmed || 'Гость';
                 setStoredName(myName);
-                socket.emit('change-name', myName);
-            } else if (newName !== null && newName.trim() === '') {
-                myName = 'Гость';
-                setStoredName(myName);
-                socket.emit('change-name', myName);
+                socket.emit('set-name', myName);
             }
         });
 
-        // Функция добавления сообщения
+        // ========== ИНДИКАТОР ОНЛАЙН ==========
+        socket.on('online-count', (count) => {
+            onlineCountSpan.textContent = count;
+        });
+
+        // ========== ПИНГ ДЛЯ ПОДДЕРЖАНИЯ СТАТУСА ==========
+        setInterval(() => {
+            socket.emit('ping');
+        }, 3000);
+
+        // ========== СООБЩЕНИЯ ==========
         function addMessage(msg) {
             const msgDiv = document.createElement('div');
             msgDiv.classList.add('message');
@@ -280,7 +311,6 @@
         socket.on('message', addMessage);
         socket.on('system', addSystem);
 
-        // Отправка текста
         function sendMessage() {
             const text = input.value.trim();
             if (text) {
@@ -288,13 +318,12 @@
                 input.value = '';
             }
         }
-
         sendBtn.addEventListener('click', sendMessage);
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
 
-        // === ЗАГРУЗКА ФОТО ===
+        // ========== ЗАГРУЗКА ФОТО ==========
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'image/*';
@@ -317,12 +346,9 @@
                     method: 'POST',
                     body: formData
                 });
-
                 const result = await response.json();
                 if (result.success) {
-                    // Спрашиваем подпись к фото
                     const caption = prompt('Подпись к фото (необязательно):', '');
-                    
                     socket.emit('media-message', {
                         type: 'image',
                         url: result.url,
@@ -334,11 +360,10 @@
                 console.error('Ошибка загрузки фото:', error);
                 alert('Не удалось загрузить фото');
             }
-            
             fileInput.value = '';
         });
 
-        // === ГОЛОСОВЫЕ СООБЩЕНИЯ ===
+        // ========== ГОЛОСОВЫЕ (УЛУЧШЕННОЕ КАЧЕСТВО) ==========
         let mediaRecorder;
         let audioChunks = [];
         let recordingTimer;
@@ -347,13 +372,30 @@
         voiceBtn.addEventListener('mousedown', startRecording);
         voiceBtn.addEventListener('mouseup', stopRecording);
         voiceBtn.addEventListener('mouseleave', stopRecording);
-
         stopRecordingBtn.addEventListener('click', stopRecording);
 
         async function startRecording() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        channelCount: 1,
+                        sampleRate: 48000,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    } 
+                });
+                
+                const options = {
+                    mimeType: 'audio/webm;codecs=opus',
+                    audioBitsPerSecond: 128000
+                };
+                
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    console.warn('opus не поддерживается, используется стандартный кодек');
+                }
+                
+                mediaRecorder = new MediaRecorder(stream, options);
                 audioChunks = [];
                 
                 mediaRecorder.ondataavailable = event => {
@@ -365,7 +407,6 @@
                     await sendVoiceMessage(audioBlob);
                     stream.getTracks().forEach(track => track.stop());
                     
-                    // Скрываем индикатор
                     recordingIndicator.style.display = 'none';
                     voiceBtn.style.display = 'inline-block';
                     clearInterval(recordingTimer);
@@ -374,11 +415,9 @@
                 
                 mediaRecorder.start();
                 
-                // Показываем индикатор
                 recordingIndicator.style.display = 'flex';
                 voiceBtn.style.display = 'none';
                 
-                // Таймер
                 seconds = 0;
                 recordingTimer = setInterval(() => {
                     seconds++;
@@ -406,7 +445,6 @@
                     method: 'POST',
                     body: formData
                 });
-
                 const result = await response.json();
                 if (result.success) {
                     socket.emit('media-message', {
@@ -422,12 +460,10 @@
             }
         }
 
-        // Просмотр фото
         window.showImage = function(url) {
             modalImage.src = url;
             imageModal.style.display = 'flex';
         };
-
         imageModal.onclick = function() {
             imageModal.style.display = 'none';
         };
