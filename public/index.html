@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>Мессенджер</title>
+    <title>Мессенджер со звонками</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         :root {
@@ -60,11 +60,10 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            transition: background 0.2s, color 0.2s;
             color: var(--text-color);
         }
 
-        /* Увеличенный скроллбар */
+        /* Скроллбар */
         ::-webkit-scrollbar {
             width: 10px;
             height: 10px;
@@ -91,7 +90,7 @@
             position: relative;
         }
 
-        /* Левая панель */
+        /* Боковая панель */
         .sidebar {
             width: 300px;
             background: var(--sidebar-bg);
@@ -284,6 +283,24 @@
         .room-name {
             font-weight: 600;
         }
+        .call-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .call-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        .call-btn:hover { background: rgba(255,255,255,0.3); }
         .online-indicator {
             font-size: 14px;
             display: flex;
@@ -458,7 +475,7 @@
             margin-bottom: 10px;
         }
 
-        /* Меню выбора файла (скрепка) */
+        /* Меню скрепки */
         .attach-menu {
             position: absolute;
             bottom: 80px;
@@ -486,7 +503,57 @@
         }
         .attach-item:hover { background: var(--friend-hover); }
 
-        /* Модальные окна */
+        /* Модальное окно звонка */
+        .call-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 3000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: white;
+        }
+        .call-modal.active { display: flex; }
+        .call-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            color: white;
+            margin-bottom: 20px;
+            background-size: cover;
+        }
+        .call-name { font-size: 24px; margin-bottom: 10px; }
+        .call-status { font-size: 16px; opacity: 0.8; margin-bottom: 30px; }
+        .call-actions {
+            display: flex;
+            gap: 30px;
+        }
+        .call-action-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .call-end { background: #dc3545; color: white; }
+        .call-answer { background: #28a745; color: white; }
+        .call-mute { background: #ffc107; color: black; }
+
+        /* Модальные окна (общие) */
         .modal {
             display: none;
             position: fixed;
@@ -607,32 +674,6 @@
             width: 100%;
             margin-top: 10px;
         }
-
-        /* Нижнее меню для мобильных */
-        .bottom-nav {
-            display: none;
-            background: var(--sidebar-bg);
-            border-top: 1px solid var(--border-color);
-            padding: 10px;
-            justify-content: space-around;
-            position: sticky;
-            bottom: 0;
-            z-index: 500;
-        }
-        .nav-item {
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--text-secondary);
-            padding: 5px 10px;
-            border-radius: 50%;
-            transition: 0.2s;
-        }
-        .nav-item.active { color: var(--accent-color); background: var(--friend-hover); }
-        @media (max-width: 768px) {
-            .bottom-nav {
-                display: flex;
-            }
-        }
     </style>
 </head>
 <body>
@@ -711,6 +752,14 @@
         </div>
     </div>
 
+    <!-- Модальное окно звонка (входящий/исходящий) -->
+    <div id="callModal" class="call-modal">
+        <div class="call-avatar" id="callAvatar"></div>
+        <div class="call-name" id="callName"></div>
+        <div class="call-status" id="callStatus">Звонок...</div>
+        <div class="call-actions" id="callActions"></div>
+    </div>
+
     <!-- Основной интерфейс -->
     <div class="chat-container">
         <!-- Боковая панель -->
@@ -738,7 +787,7 @@
                 <div id="groupsTab" style="display:none;">
                     <div class="add-group" onclick="openGroupModal()"><i class="fas fa-plus-circle"></i> Создать группу</div>
                     <ul class="groups-list" id="groupsList">
-                        <li class="group-item active" onclick="switchRoom('general')">
+                        <li class="group-item" onclick="switchRoom('general')">
                             <div class="group-avatar">#</div>
                             <span class="friend-name">Общий чат</span>
                         </li>
@@ -756,16 +805,17 @@
             <div class="chat-header">
                 <span class="menu-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></span>
                 <span class="room-name" id="currentRoomName">Общий чат</span>
+                <div class="call-buttons" id="callButtons"></div>
                 <div class="online-indicator">
                     <span id="onlineCount">0</span> онлайн
                 </div>
             </div>
             <div class="messages" id="messages"></div>
 
-            <!-- Предпросмотр файлов (несколько) -->
+            <!-- Предпросмотр файлов -->
             <div id="filePreviewContainer" class="file-preview-container" style="display: none;"></div>
 
-            <!-- Меню выбора файла (скрепка) -->
+            <!-- Меню скрепки -->
             <div id="attachMenu" class="attach-menu"></div>
 
             <div class="input-area">
@@ -782,15 +832,17 @@
         </div>
     </div>
 
-    <!-- Нижнее меню для мобильных -->
-    <div class="bottom-nav">
-        <div class="nav-item active" onclick="switchMobileTab('chat')"><i class="fas fa-comment"></i></div>
-        <div class="nav-item" onclick="switchMobileTab('friends')"><i class="fas fa-users"></i></div>
-        <div class="nav-item" onclick="openSettings()"><i class="fas fa-cog"></i></div>
-    </div>
-
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script>
+        // ========== ПРИМЕНЕНИЕ ТЕМЫ ДО ЗАГРУЗКИ ==========
+        (function() {
+            const savedTheme = localStorage.getItem('chatTheme') || 'light';
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+            }
+        })();
+
         // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
         const socket = io();
         const messagesDiv = document.getElementById('messages');
@@ -817,20 +869,137 @@
         const accountUsernameSpan = document.getElementById('accountUsername');
         const attachMenu = document.getElementById('attachMenu');
         const filePreviewContainer = document.getElementById('filePreviewContainer');
+        const callButtonsDiv = document.getElementById('callButtons');
+        const callModal = document.getElementById('callModal');
+        const callAvatar = document.getElementById('callAvatar');
+        const callName = document.getElementById('callName');
+        const callStatus = document.getElementById('callStatus');
+        const callActions = document.getElementById('callActions');
 
+        // PeerJS для звонков
+        let peer = null;
+        let currentCall = null;
+        let localStream = null;
+        let remoteStream = null;
+
+        // Данные пользователя
         let currentUser = null;
         let userData = { nickname: '', username: '', avatar: null, theme: 'light', friends: [], friendRequests: [], groups: [] };
         let currentRoom = 'general';
         let friends = [];
         let groups = [];
         let friendRequests = [];
-        let isInRoom = {}; // для предотвращения повторного входа
+        let selectedFiles = [];
 
-        // Для множественного выбора файлов
-        let selectedFiles = []; // массив { file, type, url, name }
-
-        // Определяем тип устройства
         const isTouchDevice = 'ontouchstart' in window;
+
+        // ========== ИНИЦИАЛИЗАЦИЯ PEER ==========
+        function initPeer() {
+            if (!currentUser) return;
+            peer = new Peer(currentUser, {
+                host: '0.peerjs.com', // можно использовать свой сервер, но для простоты оставим публичный
+                port: 443,
+                path: '/',
+                secure: true
+            });
+            peer.on('call', handleIncomingCall);
+            peer.on('error', (err) => console.error('Peer error:', err));
+        }
+
+        // Обработка входящего звонка
+        function handleIncomingCall(call) {
+            if (currentCall) {
+                call.close();
+                return;
+            }
+            const isVideo = call.metadata?.video || false;
+            // Показываем модалку входящего звонка
+            const caller = call.peer;
+            const callerData = users.get(caller) || { nickname: caller, avatar: null };
+            callAvatar.style.backgroundImage = callerData.avatar ? `url(${callerData.avatar})` : '';
+            callAvatar.textContent = callerData.avatar ? '' : caller.charAt(0).toUpperCase();
+            callName.textContent = callerData.nickname || caller;
+            callStatus.textContent = 'Входящий звонок...';
+            callActions.innerHTML = `
+                <button class="call-action-btn call-answer" onclick="answerCall(true, ${isVideo})"><i class="fas fa-phone-alt"></i></button>
+                <button class="call-action-btn call-end" onclick="endCall()"><i class="fas fa-phone-slash"></i></button>
+            `;
+            callModal.classList.add('active');
+            currentCall = call;
+        }
+
+        // Ответить на звонок
+        function answerCall(withVideo, isVideo) {
+            navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo })
+                .then(stream => {
+                    localStream = stream;
+                    currentCall.answer(stream); // отправляем свой поток
+                    currentCall.on('stream', remoteStream => {
+                        // показываем видео удалённого пользователя
+                        showCallWindow(currentCall.peer, remoteStream, isVideo);
+                    });
+                    callModal.classList.remove('active');
+                })
+                .catch(err => console.error('Failed to get media', err));
+        }
+
+        // Начать звонок (вызывается из кнопок)
+        function startCall(isVideo) {
+            const target = currentRoom.startsWith('private:') ? currentRoom.split(':').find(p => p !== currentUser) : null;
+            if (!target) return alert('Можно звонить только в личный чат');
+            navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo })
+                .then(stream => {
+                    localStream = stream;
+                    const call = peer.call(target, stream, { metadata: { video: isVideo } });
+                    call.on('stream', remoteStream => {
+                        showCallWindow(target, remoteStream, isVideo);
+                    });
+                    call.on('close', () => {
+                        endCall();
+                    });
+                    currentCall = call;
+                    // Показываем окно ожидания
+                    callAvatar.style.backgroundImage = '';
+                    callAvatar.textContent = target.charAt(0).toUpperCase();
+                    callName.textContent = target;
+                    callStatus.textContent = 'Звоним...';
+                    callActions.innerHTML = `<button class="call-action-btn call-end" onclick="endCall()"><i class="fas fa-phone-slash"></i></button>`;
+                    callModal.classList.add('active');
+                })
+                .catch(err => console.error('Failed to get media', err));
+        }
+
+        function showCallWindow(peerId, stream, isVideo) {
+            // Создаём модальное окно с видео
+            const modal = document.createElement('div');
+            modal.className = 'call-modal active';
+            modal.innerHTML = `
+                <video id="remoteVideo" autoplay style="width: 100%; height: 100%; object-fit: cover;"></video>
+                <video id="localVideo" autoplay muted style="position: absolute; bottom: 20px; right: 20px; width: 200px; border-radius: 10px;"></video>
+                <div style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);">
+                    <button class="call-action-btn call-end" onclick="endCall()"><i class="fas fa-phone-slash"></i></button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const remoteVideo = modal.querySelector('#remoteVideo');
+            const localVideo = modal.querySelector('#localVideo');
+            remoteVideo.srcObject = stream;
+            localVideo.srcObject = localStream;
+            callModal.classList.remove('active');
+        }
+
+        function endCall() {
+            if (currentCall) {
+                currentCall.close();
+                currentCall = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+                localStream = null;
+            }
+            // Закрыть все модалки звонка
+            document.querySelectorAll('.call-modal').forEach(m => m.remove());
+        }
 
         // ========== АВТОРИЗАЦИЯ ==========
         async function login() {
@@ -850,14 +1019,15 @@
                     currentUser = data.user.username;
                     userData = data.user;
                     localStorage.setItem('chatUser', currentUser);
-                    loginModal.classList.remove('active');
-                    // Применяем тему ДО отображения
+                    localStorage.setItem('chatTheme', userData.theme); // сохраняем тему
                     applyTheme(userData.theme);
                     updateProfileUI();
                     socket.emit('identify', currentUser);
                     loadUserData();
                     enableChat();
+                    initPeer();
                     switchRoom('general');
+                    loginModal.classList.remove('active');
                 } else {
                     loginError.textContent = data.error || 'Ошибка входа';
                 }
@@ -886,6 +1056,7 @@
                     socket.emit('identify', currentUser);
                     loadUserData();
                     enableChat();
+                    initPeer();
                     switchRoom('general');
                 } else {
                     loginModal.classList.add('active');
@@ -931,15 +1102,20 @@
             renderRequests();
         }
 
-        // ========== СОБЫТИЯ SOCKET ==========
-        socket.on('friend-request', ({ from }) => {
-            friendRequests.push(from);
-            renderRequests();
-        });
-
-        socket.on('friends-updated', ({ friends: newFriends }) => {
-            friends = newFriends;
-            renderFriends();
+        // ========== ОБНОВЛЕНИЕ АВАТАРОВ ==========
+        socket.on('avatar-updated', ({ username, avatar }) => {
+            // Обновить аватар в списке друзей
+            const friendItems = document.querySelectorAll('.friend-item');
+            friendItems.forEach(item => {
+                const name = item.querySelector('.friend-name')?.textContent;
+                if (name === username) {
+                    const avatarDiv = item.querySelector('.friend-avatar');
+                    avatarDiv.style.backgroundImage = avatar ? `url(${avatar})` : '';
+                    avatarDiv.style.backgroundSize = 'cover';
+                    avatarDiv.textContent = avatar ? '' : username.charAt(0).toUpperCase();
+                }
+            });
+            // Обновить в списке групп (участников) – пока пропустим
         });
 
         // ========== ИНТЕРФЕЙС ==========
@@ -947,7 +1123,7 @@
             sidebar.classList.toggle('open');
         }
 
-        // Закрытие свайпом (для мобильных)
+        // Закрытие свайпом
         let touchStartX = 0;
         document.addEventListener('touchstart', (e) => {
             touchStartX = e.touches[0].clientX;
@@ -973,18 +1149,6 @@
             }
         }
 
-        function switchMobileTab(tab) {
-            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-            if (tab === 'chat') {
-                document.querySelectorAll('.nav-item')[0].classList.add('active');
-                sidebar.classList.remove('open');
-            } else if (tab === 'friends') {
-                document.querySelectorAll('.nav-item')[1].classList.add('active');
-                sidebar.classList.add('open');
-                switchTab('friends');
-            }
-        }
-
         // ========== ДРУЗЬЯ И ЗАЯВКИ ==========
         function renderFriends() {
             friendsList.innerHTML = '';
@@ -1001,7 +1165,6 @@
         }
 
         function renderGroups() {
-            // Оставляем общий чат в группах
             groupsList.innerHTML = '<li class="group-item" onclick="switchRoom(\'general\')"><div class="group-avatar">#</div><span class="friend-name">Общий чат</span></li>';
             groups.forEach(group => {
                 const li = document.createElement('li');
@@ -1078,17 +1241,25 @@
 
         // ========== КОМНАТЫ ==========
         function switchRoom(room) {
-            if (currentRoom === room) return; // не перезагружаем, если уже в этой комнате
+            if (currentRoom === room) return;
             currentRoom = room;
             if (room === 'general') {
                 currentRoomName.textContent = 'Общий чат';
+                callButtonsDiv.innerHTML = ''; // в общем чате звонков нет
             } else if (room.startsWith('private:')) {
                 const parts = room.split(':');
                 const other = parts[1] === currentUser ? parts[2] : parts[1];
                 currentRoomName.textContent = other;
+                // Показываем кнопки звонка
+                callButtonsDiv.innerHTML = `
+                    <button class="call-btn" onclick="startCall(false)" title="Аудиозвонок"><i class="fas fa-phone"></i></button>
+                    <button class="call-btn" onclick="startCall(true)" title="Видеозвонок"><i class="fas fa-video"></i></button>
+                `;
             } else if (room.startsWith('group:')) {
                 const group = groups.find(g => g.id === room.replace('group:', ''));
                 currentRoomName.textContent = group ? group.name : 'Группа';
+                // Для групп пока не добавляем звонки (можно потом)
+                callButtonsDiv.innerHTML = '';
             }
             socket.emit('join-room', room);
         }
@@ -1141,33 +1312,28 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        // ========== УМНАЯ КНОПКА ОТПРАВКИ ==========
+        // ========== ОТПРАВКА ==========
         sendBtn.addEventListener('click', () => {
             if (messageInput.value.trim()) {
-                // Отправка текста
                 socket.emit('message', { text: messageInput.value.trim(), room: currentRoom });
                 messageInput.value = '';
                 updateSendButton();
             } else if (selectedFiles.length > 0) {
-                // Отправка файлов
                 sendFiles();
             } else {
-                // Голосовое сообщение
                 if (isRecording) stopRecording();
                 else startRecording();
             }
         });
 
-        // ========== СКРЕПКА (ВЫБОР ФАЙЛА) ==========
+        // ========== СКРЕПКА ==========
         attachBtn.addEventListener('click', (e) => {
-            // Позиционируем меню над кнопкой
             const rect = attachBtn.getBoundingClientRect();
             attachMenu.style.left = rect.left + 'px';
             attachMenu.style.bottom = (window.innerHeight - rect.top + 10) + 'px';
             attachMenu.classList.toggle('show');
         });
 
-        // Заполняем меню опциями
         attachMenu.innerHTML = `
             <div class="attach-item" onclick="selectFiles('image/*')"><i class="fas fa-camera"></i> Фото</div>
             <div class="attach-item" onclick="selectFiles('video/*')"><i class="fas fa-video"></i> Видео</div>
@@ -1175,7 +1341,6 @@
             <div class="attach-item" onclick="selectFiles('*/*')"><i class="fas fa-file"></i> Файл</div>
         `;
 
-        // Закрыть меню при клике вне
         document.addEventListener('click', (e) => {
             if (!attachBtn.contains(e.target) && !attachMenu.contains(e.target)) {
                 attachMenu.classList.remove('show');
@@ -1187,7 +1352,7 @@
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = accept;
-            input.multiple = true; // множественный выбор
+            input.multiple = true;
             input.style.display = 'none';
             document.body.appendChild(input);
             input.addEventListener('change', (e) => {
@@ -1197,7 +1362,6 @@
                         alert(`Файл ${file.name} слишком большой (макс. 50 МБ)`);
                         return;
                     }
-                    // Определяем тип
                     let type = 'file';
                     if (file.type.startsWith('image/')) type = 'image';
                     else if (file.type.startsWith('video/')) type = 'video';
@@ -1289,7 +1453,6 @@
         let mediaStream = null;
         let isRecording = false;
 
-        // Для мобильных: удержание
         if (isTouchDevice) {
             sendBtn.addEventListener('touchstart', (e) => {
                 if (!messageInput.value.trim() && selectedFiles.length === 0) {
@@ -1409,12 +1572,8 @@
                 userData.avatar = result.url;
                 updateSettingsAvatar();
                 updateProfileUI();
-                // Отправляем обновление всем через сокет (чтобы другие видели аватар)
                 socket.emit('avatar-updated', { username: currentUser, avatar: result.url });
             }
-        });
-        socket.on('avatar-updated', ({ username, avatar }) => {
-            // Обновить аватар в списке друзей/групп (можно позже)
         });
         function updateSettingsAvatar() {
             if (userData.avatar) {
@@ -1455,6 +1614,7 @@
             else document.body.classList.remove('dark-theme');
             document.documentElement.style.setProperty('--accent-color', accent);
             userData.theme = bg;
+            localStorage.setItem('chatTheme', bg);
             await fetch('/api/update-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1465,8 +1625,6 @@
         function applyTheme(theme) {
             if (theme === 'dark') document.body.classList.add('dark-theme');
             else document.body.classList.remove('dark-theme');
-            // Также устанавливаем акцентный цвет из данных пользователя (если сохранён)
-            // Можно расширить
         }
 
         // ========== УДАЛЕНИЕ АККАУНТА ==========
@@ -1478,6 +1636,7 @@
                 body: JSON.stringify({ username: currentUser })
             });
             localStorage.removeItem('chatUser');
+            localStorage.removeItem('chatTheme');
             location.reload();
         }
 
@@ -1508,7 +1667,7 @@
             }
         }
 
-        // ========== ОБНОВЛЕНИЕ ПРОФИЛЯ ==========
+        // ========== ПРОФИЛЬ ==========
         function updateProfileUI() {
             profileNickname.textContent = userData.nickname || currentUser;
             profileUsername.textContent = '@' + currentUser;
