@@ -99,15 +99,23 @@
       </svg>
     </div>
     <h1 class="login-h1">Добро пожаловать<br/>в <span class="grad">Aura</span></h1>
-    <p class="login-sub">Введите имя чтобы войти или создать аккаунт</p>
+    <p class="login-sub" id="loginSubText">Введите имя и пароль</p>
     <div class="field-wrap">
       <i class="ti ti-user field-ico"></i>
-      <input id="loginInput" class="field" type="text" placeholder="Ваше имя…" autocomplete="off" maxlength="32"
+      <input id="loginInput" class="field" type="text" placeholder="Имя пользователя…" autocomplete="username" maxlength="32"
+             onkeydown="if(event.key==='Enter')document.getElementById('loginPassInput').focus()"/>
+    </div>
+    <div class="field-wrap" style="margin-top:10px">
+      <i class="ti ti-lock field-ico"></i>
+      <input id="loginPassInput" class="field" type="password" placeholder="Пароль (мин. 4 символа)…" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')doLogin()"/>
+      <button class="pass-toggle" onclick="togglePassVisibility()" type="button" title="Показать пароль">
+        <i class="ti ti-eye" id="passEyeIcon"></i>
+      </button>
     </div>
     <div id="loginErr" class="login-err" aria-live="polite"></div>
     <button id="loginBtn" class="btn-primary w-full" onclick="doLogin()">
-      Продолжить <i class="ti ti-arrow-right"></i>
+      Войти <i class="ti ti-arrow-right"></i>
     </button>
     <div class="palette-row">
       <span class="pal-label">Палитра:</span>
