@@ -9,19 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// ========== PEERJS SERVER (встроенный, без внешних зависимостей) ==========
-// Запускаем на том же HTTP-сервере по пути /peerjs
-try {
-  const { ExpressPeerServer } = require('peer');
-  const peerServer = ExpressPeerServer(server, {
-    path: '/peerjs',
-    allow_discovery: false,
-  });
-  app.use('/peerjs', peerServer);
-  console.log('✅ PeerJS сервер запущен на /peerjs');
-} catch (e) {
-  console.warn('⚠️  peer пакет не установлен, звонки через 0.peerjs.com');
-}
+// PeerJS не нужен — сигналинг через Socket.IO
 
 // ========== НАСТРОЙКА BACKBLAZE B2 ==========
 const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;
@@ -554,6 +542,26 @@ io.on('connection', (socket) => {
       io.to(targetSocketId).emit('request-peer-id', {});
     }
   });
+
+  // ── CALL RELAY ── forward call signals between users
+  function relayTo(event, data) {
+    const target = data.to;
+    if (!target) return;
+    const tid = userSockets.get(target);
+    if (tid) {
+      io.to(tid).emit(event, data);
+    } else {
+      console.warn(`[Call] ${event}: target "${target}" not found`);
+    }
+  }
+  socket.on('call-invite',       data => relayTo('call-invite',       data));
+  socket.on('call-answer-ready', data => relayTo('call-answer-ready', data));
+  socket.on('call-offer',        data => relayTo('call-offer',        data));
+  socket.on('call-answer',       data => relayTo('call-answer',       data));
+  socket.on('call-ice',          data => relayTo('call-ice',          data));
+  socket.on('call-end',          data => relayTo('call-end',          data));
+  socket.on('call-decline',      data => relayTo('call-decline',      data));
+  socket.on('call-busy',         data => relayTo('call-busy',         data));
 
   socket.on('disconnect', () => {
     if (currentUser) {
