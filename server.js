@@ -449,8 +449,12 @@ io.on('connection', (socket) => {
     broadcastOnlineCount();
     socket.join('general');
     socket.emit('history', messageHistory.filter(m => m.room === 'general').slice(-100));
-    // Ask all online users to re-broadcast their peer IDs to this new socket
-    socket.broadcast.emit('request-peer-id', { from: username });
+    // Send all known peer IDs to this user so they can call anyone
+    const allPeers = {};
+    peerIdRegistry.forEach((pid, uname) => { allPeers[uname] = pid; });
+    socket.emit('peer-id-registry', allPeers);
+    // Ask everyone else to re-broadcast their peer ID (catches stale entries)
+    socket.broadcast.emit('request-peer-id', {});
   });
 
   socket.on('join-room', (room) => {
@@ -514,17 +518,32 @@ io.on('connection', (socket) => {
     io.emit('avatar-updated', { username, avatar });
   });
 
-  // PeerJS ID registration — broadcast to all so everyone knows how to call this user
+  // PeerJS ID registration
   socket.on('peer-id', ({ username, peerId }) => {
     if (!username || !peerId) return;
     console.log(`[PeerID] ${username} → ${peerId}`);
-    // Broadcast to everyone (they need this to call us)
+    peerIdRegistry.set(username, peerId);
+    // Broadcast to everyone so they can update their registry
     socket.broadcast.emit('peer-id', { username, peerId });
+  });
+
+  // Someone wants to call a specific user — request their latest peerId
+  socket.on('get-peer-id', ({ target }) => {
+    const pid = peerIdRegistry.get(target);
+    if (pid) {
+      socket.emit('peer-id', { username: target, peerId: pid });
+    }
+    // Also ask target to re-broadcast (in case registry stale)
+    const targetSocketId = userSockets.get(target);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('request-peer-id', {});
+    }
   });
 
   socket.on('disconnect', () => {
     if (currentUser) {
       userSockets.delete(currentUser);
+      peerIdRegistry.delete(currentUser);
       onlineUsers.delete(socket.id);
       broadcastOnlineCount();
     }
