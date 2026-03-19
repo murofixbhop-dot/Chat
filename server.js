@@ -427,8 +427,9 @@ async function saveHistory() {
 })();
 
 // ========== SOCKET.IO ==========
-const onlineUsers = new Map(); // socketId -> { username, lastSeen }
-const userSockets = new Map(); // username -> socketId
+const onlineUsers = new Map();    // socketId -> { username, lastSeen }
+const userSockets = new Map();    // username -> socketId
+const peerIdRegistry = new Map(); // username -> peerId
 
 function broadcastOnlineCount() {
   const now = Date.now();
