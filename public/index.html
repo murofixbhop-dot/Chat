@@ -1839,7 +1839,7 @@
 
     <div id="loadingScreen" class="loading active">
         <div class="loading-logo"><i class="fas fa-comment-dots"></i></div>
-        <div class="loading-text">Подключение...</div>
+        <div class="loading-text" id="loadingText">Подключение...</div>
         <div class="loading-dots"><span></span><span></span><span></span></div>
     </div>
 
@@ -2231,19 +2231,45 @@
         (function() {
             const savedTheme = localStorage.getItem('chatTheme') || 'light';
             if (savedTheme === 'dark') document.body.classList.add('dark-theme');
-            // Accent color restore
             const savedAccent = localStorage.getItem('chatAccent');
             if (savedAccent) document.documentElement.style.setProperty('--accent-color', savedAccent);
         })();
 
         function hideLoadingScreen() {
             const ls = document.getElementById('loadingScreen');
+            if (!ls || !ls.classList.contains('active')) return;
             ls.classList.add('fade-out');
-            setTimeout(() => ls.classList.remove('active'), 420);
+            setTimeout(() => {
+                ls.classList.remove('active');
+                ls.classList.remove('fade-out');
+            }, 400);
         }
 
+        // Hide loading screen quickly — don't wait for socket/API
+        // The login modal or chat will appear right after
+        setTimeout(hideLoadingScreen, 600);
+
         // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
-        const socket = io();
+        const socket = io({
+            reconnectionAttempts: 5,
+            timeout: 10000
+        });
+
+        // Update loading screen based on socket status
+        socket.on('connect', () => {
+            const lt = document.getElementById('loadingText');
+            if (lt) lt.textContent = 'Подключено ✓';
+        });
+        socket.on('connect_error', () => {
+            const lt = document.getElementById('loadingText');
+            if (lt) lt.textContent = 'Ошибка соединения...';
+            // Still hide loading after short delay so user sees the error
+            setTimeout(hideLoadingScreen, 1200);
+        });
+        socket.on('reconnect_failed', () => {
+            hideLoadingScreen();
+            showToast('Не удалось подключиться к серверу', 'error', 6000);
+        });
         const messagesDiv = document.getElementById('messages');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -2593,6 +2619,7 @@
 
         const savedUser = localStorage.getItem('chatUser');
         if (savedUser) {
+            // Try to restore session — loading screen already fading out via timeout above
             fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2604,7 +2631,6 @@
                     currentUser = data.user.username;
                     userData = data.user;
                     applyTheme(userData.theme);
-                    // Restore accent color from localStorage (overrides server theme)
                     const savedAccent = localStorage.getItem('chatAccent');
                     if (savedAccent) document.documentElement.style.setProperty('--accent-color', savedAccent);
                     updateProfileUI();
@@ -2613,20 +2639,16 @@
                     enableChat();
                     initPeer();
                     switchRoom('general');
-                    hideLoadingScreen();
                 } else {
                     loginModal.classList.add('active');
                     localStorage.removeItem('chatUser');
-                    hideLoadingScreen();
                 }
             })
             .catch(() => {
                 loginModal.classList.add('active');
-                hideLoadingScreen();
             });
         } else {
             loginModal.classList.add('active');
-            hideLoadingScreen();
         }
 
         function enableChat() {
