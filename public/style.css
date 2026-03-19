@@ -159,7 +159,7 @@ body {
 /* ════════════════════════════════════════════════
    BUTTONS  ← КРАСОТА + УДОБСТВО
 ════════════════════════════════════════════════ */
-button { cursor: pointer; border: none; background: none; font-family: inherit; font-size: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; font-family: inherit; font-size: inherit; color: inherit; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
 
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
@@ -813,7 +813,6 @@ option { background: var(--surface2); color: var(--text); }
 .send-fab:disabled { background: var(--surface3); box-shadow: none; color: var(--text3); }
 
 .attach { color: var(--text2) !important; }
-.mic-hint { font-size: 11px; color: var(--text3); text-align: center; padding: 4px 0 0; display: flex; align-items: center; justify-content: center; gap: 5px; }
 
 /* ════════════════════════════════════════════════
    ATTACH MENU  ← КРАСОТА
