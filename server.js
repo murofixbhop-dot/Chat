@@ -436,6 +436,7 @@ async function saveHistory() {
 const onlineUsers = new Map();    // socketId -> { username, lastSeen }
 const userSockets = new Map();    // username -> socketId
 const peerIdRegistry = new Map(); // username -> peerId
+const missedCalls    = new Map(); // username -> [{ from, isVid, time }]
 
 function broadcastOnlineCount() {
   const now = Date.now();
@@ -460,6 +461,15 @@ io.on('connection', (socket) => {
     const userData = users.get(username);
     if (userData?.friendRequests?.length) {
       socket.emit('friend-requests-sync', { requests: userData.friendRequests });
+    }
+    // Deliver missed calls as one batch
+    const missed = missedCalls.get(username);
+    if (missed?.length) {
+      const fresh = missed.filter(c => Date.now() - c.time < 10 * 60 * 1000); // 10 min
+      missedCalls.delete(username);
+      if (fresh.length) {
+        socket.emit('missed-calls', { calls: fresh });
+      }
     }
   });
 
@@ -558,7 +568,14 @@ io.on('connection', (socket) => {
     if (tid) {
       io.to(tid).emit(event, data);
     } else {
-      console.warn(`[Call] ${event}: target "${target}" not found`);
+      // Target offline — store missed call so they see it when they reconnect
+      if (event === 'call-invite') {
+        const calls = missedCalls.get(target) || [];
+        calls.push({ from: data.from, isVid: data.isVid, time: Date.now() });
+        // Keep only last 10 missed calls
+        missedCalls.set(target, calls.slice(-10));
+        console.log(`[Call] Missed call stored for offline user "${target}"`);
+      }
     }
   }
   socket.on('call-invite',       data => relayTo('call-invite',       data));
