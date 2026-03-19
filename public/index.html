@@ -3,6 +3,19 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Aura"/>
+  <meta name="theme-color" content="#6366f1"/>
+  <meta name="description" content="Aura — современный мессенджер"/>
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json"/>
+  <!-- iOS icons -->
+  <link rel="apple-touch-icon" href="/icons/icon-192.png"/>
+  <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png"/>
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png"/>
+  <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png"/>
   <title>Aura · Messenger</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -325,14 +338,10 @@
           <textarea id="msgInput" class="msg-ta" placeholder="Сообщение…" rows="1"
             oninput="autoGrow(this);refreshSendBtn()" onkeydown="onMsgKey(event)" autocomplete="off"
             aria-label="Текст сообщения"></textarea>
-          <button class="emoji-ico" id="emojiBtn" onclick="toggleEmoji(event)"><i class="ti ti-mood-smile"></i></button>
         </div>
         <button class="send-fab" id="sendBtn" onclick="handleSend()" disabled aria-label="Отправить">
           <i class="ti ti-send" id="sendIco"></i>
         </button>
-      </div>
-      <div id="micHint" class="mic-hint hidden">
-        <i class="ti ti-microphone"></i> Удерживай — голосовое &nbsp;·&nbsp; ПКМ / свайп ↑ — видеокружок
       </div>
     </div>
   </main>
@@ -344,5 +353,42 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="script.js"></script>
+<script>
+  // Register Service Worker for PWA install
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('SW registered:', reg.scope))
+        .catch(err => console.warn('SW registration failed:', err));
+    });
+  }
+  // PWA install prompt
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Show install button after login if not already installed
+    setTimeout(() => {
+      if (deferredPrompt) showInstallToast();
+    }, 5000);
+  });
+  function showInstallToast() {
+    if (typeof toast !== 'function') return;
+    const t = document.createElement('div');
+    t.className = 'toast info install-toast';
+    t.style.cursor = 'pointer';
+    t.innerHTML = `<i class="ti ti-download"></i><span>Установить приложение</span>`;
+    t.onclick = async () => {
+      t.remove();
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      if (outcome === 'accepted') toast('Приложение установлено!', 'success');
+    };
+    document.getElementById('toastContainer').appendChild(t);
+    setTimeout(() => t.remove(), 12000);
+  }
+</script>
 </body>
 </html>
