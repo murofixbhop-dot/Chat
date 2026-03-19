@@ -600,12 +600,13 @@ function autoGrow(el) {
 // ══════════════════════════════════════════════
 // Attach menu ← КРАСОТА
 attachMenu.innerHTML = `
-  <div class="att-item" onclick="pickFiles('image/*')"><i class="ti ti-photo"></i> Фото</div>
-  <div class="att-item" onclick="pickFiles('video/*')"><i class="ti ti-video"></i> Видео</div>
-  <div class="att-item" onclick="pickFiles('audio/*')"><i class="ti ti-music"></i> Аудио</div>
-  <div class="att-item" onclick="pickFiles('*/*')"><i class="ti ti-file"></i> Файл</div>
-  <div class="att-item" onclick="startCircleRecord()"><i class="ti ti-circle"></i> Кружок</div>`;
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('image/*')"><i class="ti ti-photo"></i> Фото</div>
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('video/*')"><i class="ti ti-video"></i> Видео</div>
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('audio/*')"><i class="ti ti-music"></i> Аудио</div>
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('*/*')"><i class="ti ti-file"></i> Файл</div>
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="startCircleRecord()"><i class="ti ti-circle"></i> Кружок</div>`;
 
+attachBtn.addEventListener('mousedown', e => e.preventDefault()); // prevent text selection popup
 attachBtn.addEventListener('click', e => {
   e.stopPropagation();
   const open = attachMenu.classList.contains('open');
@@ -734,13 +735,6 @@ function audioConstraints() {
 if (!isMobile) {
   let holdT = null, didRecord = false;
 
-  sendBtn.addEventListener('mouseenter', () => {
-    const empty = !msgInput.value.trim() && !selectedFiles.length;
-    if (empty) { const h = $('micHint'); if (h) h.classList.remove('hidden'); }
-  });
-  sendBtn.addEventListener('mouseleave', () => {
-    const h = $('micHint'); if (h) h.classList.add('hidden');
-  });
   sendBtn.addEventListener('mousedown', e => {
     if (msgInput.value.trim() || selectedFiles.length) return;
     didRecord = false;
@@ -863,7 +857,7 @@ async function uploadVoice(blob, ext) {
     const d = await r.json();
     if (d.success) {
       socket.emit('media-message', {
-        mediaData: { type: 'audio', url: d.url, fileName: d.name, text: `🎤 Голосовое (${recSeconds}с)` },
+        mediaData: { type: 'audio', url: d.url, fileName: d.name, text: '' },
         room: currentRoom
       });
     } else toast('Ошибка загрузки голосового', 'error');
@@ -930,7 +924,7 @@ async function sendCircleRecord() {
     const d = await r.json();
     if (d.success) {
       socket.emit('media-message', {
-        mediaData: { type: 'video_circle', url: d.url, fileName: d.name, text: `⭕ Видео (${circleSecs}с)` },
+        mediaData: { type: 'video_circle', url: d.url, fileName: d.name, text: '' },
         room: currentRoom
       });
     } else toast('Ошибка отправки кружка', 'error');
