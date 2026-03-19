@@ -1113,3 +1113,15 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
   border: 1px solid rgba(255,255,255,.08);
   flex-shrink: 0;
 }
+
+/* ── Password field toggle ── */
+.field-wrap { position: relative; }
+.pass-toggle {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer;
+  color: var(--color-text-secondary, #9898b0);
+  font-size: 16px; padding: 4px;
+  transition: color .15s;
+}
+.pass-toggle:hover { color: var(--accent, #6366f1); }
+.field-wrap .field { padding-right: 44px; }
