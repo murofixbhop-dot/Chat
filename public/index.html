@@ -171,12 +171,12 @@
     <div id="st_theme" class="stab-pane hidden">
       <label class="lbl">Акцентный цвет</label>
       <div class="clr-grid">
-        <button class="clr active" style="--cc:#6366f1" onclick="setAccent('#6366f1',this)"><i class="ti ti-check"></i></button>
-        <button class="clr" style="--cc:#06b6d4" onclick="setAccent('#06b6d4',this)"></button>
-        <button class="clr" style="--cc:#f43f5e" onclick="setAccent('#f43f5e',this)"></button>
-        <button class="clr" style="--cc:#10b981" onclick="setAccent('#10b981',this)"></button>
-        <button class="clr" style="--cc:#f59e0b" onclick="setAccent('#f59e0b',this)"></button>
-        <button class="clr" style="--cc:#ec4899" onclick="setAccent('#ec4899',this)"></button>
+        <button class="clr active" style="--cc:#6366f1" data-accent="#6366f1" onclick="setAccent('#6366f1',this)"><i class="ti ti-check"></i></button>
+        <button class="clr" style="--cc:#06b6d4" data-accent="#06b6d4" onclick="setAccent('#06b6d4',this)"></button>
+        <button class="clr" style="--cc:#f43f5e" data-accent="#f43f5e" onclick="setAccent('#f43f5e',this)"></button>
+        <button class="clr" style="--cc:#10b981" data-accent="#10b981" onclick="setAccent('#10b981',this)"></button>
+        <button class="clr" style="--cc:#f59e0b" data-accent="#f59e0b" onclick="setAccent('#f59e0b',this)"></button>
+        <button class="clr" style="--cc:#ec4899" data-accent="#ec4899" onclick="setAccent('#ec4899',this)"></button>
       </div>
       <label class="lbl mt">Тема</label>
       <div class="theme-toggle">
@@ -367,40 +367,46 @@
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="script.js"></script>
 <script>
-  // Register Service Worker for PWA install
+  // ── Service Worker ──
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then(reg => console.log('SW registered:', reg.scope))
-        .catch(err => console.warn('SW registration failed:', err));
-    });
+    navigator.serviceWorker.register('/sw.js')
+      .then(r => console.log('SW:', r.scope))
+      .catch(e => console.warn('SW fail:', e));
   }
-  // PWA install prompt
-  let deferredPrompt;
+
+  // ── PWA Install ──
+  let _installPrompt = null;
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
-    deferredPrompt = e;
-    // Show install button after login if not already installed
-    setTimeout(() => {
-      if (deferredPrompt) showInstallToast();
-    }, 5000);
+    _installPrompt = e;
+    // Show install button in sidebar after small delay
+    setTimeout(showInstallBtn, 1500);
   });
-  function showInstallToast() {
-    if (typeof toast !== 'function') return;
-    const t = document.createElement('div');
-    t.className = 'toast info install-toast';
-    t.style.cursor = 'pointer';
-    t.innerHTML = `<i class="ti ti-download"></i><span>Установить приложение</span>`;
-    t.onclick = async () => {
-      t.remove();
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      if (outcome === 'accepted') toast('Приложение установлено!', 'success');
+  window.addEventListener('appinstalled', () => {
+    _installPrompt = null;
+    const btn = document.getElementById('pwaInstallBtn');
+    if (btn) btn.remove();
+  });
+  function showInstallBtn() {
+    if (!_installPrompt) return;
+    if (document.getElementById('pwaInstallBtn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'pwaInstallBtn';
+    btn.className = 'pwa-install-btn';
+    btn.innerHTML = '<i class="ti ti-download"></i> Установить приложение';
+    btn.onclick = async () => {
+      if (!_installPrompt) return;
+      _installPrompt.prompt();
+      const { outcome } = await _installPrompt.userChoice;
+      _installPrompt = null;
+      btn.remove();
+      if (outcome === 'accepted' && typeof toast === 'function')
+        toast('Приложение установлено!', 'success');
     };
-    document.getElementById('toastContainer').appendChild(t);
-    setTimeout(() => t.remove(), 12000);
+    // Insert before sidebar profile strip
+    const profile = document.querySelector('.sb-profile');
+    if (profile) profile.parentNode.insertBefore(btn, profile);
+    else document.body.appendChild(btn);
   }
 </script>
 </body>
