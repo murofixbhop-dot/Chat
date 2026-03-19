@@ -427,10 +427,10 @@ function gotoRoom(room) {
   if (currentRoom === room) return;
   currentRoom = room;
 
-  // Header update  ← КРАСОТА
   const callBtnsHtml = `
-    <button class="icon-btn call-voice" title="Аудиозвонок" onclick="startCall(false)"><i class="ti ti-phone"></i></button>
-    <button class="icon-btn call-video" title="Видеозвонок" onclick="startCall(true)"><i class="ti ti-video"></i></button>`;
+    <button class="icon-btn" title="Аудиозвонок" onclick="startCall(false)"><i class="ti ti-phone"></i></button>
+    <button class="icon-btn" title="Видеозвонок" onclick="startCall(true)"><i class="ti ti-video"></i></button>
+    <button class="icon-btn" title="Демонстрация экрана" onclick="startScreenShare()"><i class="ti ti-screen-share"></i></button>`;
 
   if (room === 'general') {
     roomName.textContent = 'Общий чат';
@@ -459,7 +459,7 @@ function gotoRoom(room) {
   }
 
   socket.emit('join-room', room);
-  renderFriends(); // update active state
+  renderFriends();
 }
 
 // ══════════════════════════════════════════════
@@ -1328,7 +1328,8 @@ function initPeer() {
     config: { iceServers: [{ urls:'stun:stun.l.google.com:19302' },{ urls:'stun:stun1.l.google.com:19302' }] }
   });
   peer.on('open', () => {});
-  peer.on('call', handleIncoming);
+  // Use screen-aware handler — detects screen share vs normal call
+  peer.on('call', call => handleIncomingWithScreen(call));
   peer.on('error', err => { if (!['unavailable-id','peer-unavailable'].includes(err.type)) setTimeout(initPeer, 3000); });
   peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
 }
@@ -1389,7 +1390,7 @@ function startCall(isVid) {
   navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid })
     .then(stream => {
       localStream = stream;
-      const call = peer.call(target, stream, { metadata: { video: isVid } });
+      const call = peer.call(target, stream, { metadata: { video: isVid, screen: false } });
       call.on('stream', remote => showCallWindow(target, remote, isVid));
       call.on('close', endCall); call.on('error', endCall);
       currentCall = call;
@@ -1425,6 +1426,7 @@ function showCallWindow(peerId, stream, isVid) {
       <div class="call-content" style="position:relative;z-index:1;justify-content:flex-end;padding-bottom:36px">
         <div class="call-actions">
           <button class="call-btn call-mute" onclick="toggleMuteWin(this)"><i class="ti ti-microphone"></i></button>
+          <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Показать экран"><i class="ti ti-screen-share"></i></button>
           <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>
         </div>
       </div>`;
@@ -1441,6 +1443,7 @@ function showCallWindow(peerId, stream, isVid) {
         <div class="call-status" id="caStat">🔊 Разговор</div>
         <div class="call-actions">
           <button class="call-btn call-mute" onclick="toggleMuteWin(this)"><i class="ti ti-microphone"></i></button>
+          <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Показать экран"><i class="ti ti-screen-share"></i></button>
           <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>
         </div>
       </div>`;
@@ -1453,9 +1456,56 @@ function showCallWindow(peerId, stream, isVid) {
     audio.play().catch(() => {});
     win.appendChild(audio);
     let secs = 0;
-    win._timer = setInterval(() => { secs++; const st = $('caStat'); if (st) st.textContent = `🔊 ${Math.floor(secs/60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`; }, 1000);
+    win._timer = setInterval(() => {
+      secs++;
+      const st = $('caStat');
+      if (st) st.textContent = `🔊 ${Math.floor(secs/60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`;
+    }, 1000);
   }
   callModal.classList.remove('open');
+}
+
+// Switch to screen share mid-call
+async function switchToScreenShare() {
+  if (!currentCall) return;
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} },
+      audio: true
+    });
+
+    // Replace video track in the existing call
+    const screenTrack = screenStream.getVideoTracks()[0];
+    const sender = currentCall.peerConnection?.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) {
+      await sender.replaceTrack(screenTrack);
+    }
+
+    // Update local preview
+    const lv = document.querySelector('#lv');
+    if (lv) {
+      lv.srcObject = screenStream;
+      lv.style.width = '180px';
+    }
+
+    _screenSharing = true;
+    toast('Демонстрация экрана начата', 'success', 2000);
+
+    screenTrack.onended = async () => {
+      // Switch back to camera
+      _screenSharing = false;
+      try {
+        const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const camTrack = camStream.getVideoTracks()[0];
+        const s = currentCall?.peerConnection?.getSenders().find(s => s.track?.kind === 'video');
+        if (s) await s.replaceTrack(camTrack);
+        if (lv) { lv.srcObject = camStream; lv.style.width = '140px'; }
+      } catch {}
+      toast('Демонстрация завершена', 'info', 2000);
+    };
+  } catch (err) {
+    if (err.name !== 'NotAllowedError') toast('Не удалось начать демонстрацию', 'error');
+  }
 }
 
 function toggleMuteWin(btn) {
@@ -1470,10 +1520,220 @@ function endCall() {
   clearInterval(document.querySelector('.call-win')?._timer);
   currentCall?.close(); currentCall = null;
   localStream?.getTracks().forEach(t => t.stop()); localStream = null;
-  _muted = false;
+  screenStream?.getTracks().forEach(t => t.stop()); screenStream = null;
+  _muted = false; _screenSharing = false;
   document.querySelectorAll('.call-modal, .call-win').forEach(el => { if (el.id !== 'callModal') el.remove(); });
   callModal.classList.remove('open');
 }
+
+// ══════════════════════════════════════════════
+// SCREEN SHARE (Discord-style)
+// ══════════════════════════════════════════════
+let screenStream    = null;
+let _screenSharing  = false;
+
+async function startScreenShare() {
+  const target = callTarget();
+  if (!target) { toast('Демонстрация доступна только в личном чате', 'warning'); return; }
+  if (!peer || peer.disconnected) { toast('Нет соединения', 'error'); return; }
+
+  try {
+    // Get screen stream
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+      audio: true  // system audio if supported
+    });
+
+    // Get mic audio to mix in
+    let audioStream = null;
+    try {
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints() });
+    } catch {}
+
+    // Combine screen video + mic audio
+    const tracks = [...screenStream.getTracks()];
+    if (audioStream) tracks.push(...audioStream.getAudioTracks());
+    const combined = new MediaStream(tracks);
+
+    localStream = combined;
+
+    // Call peer with screen stream
+    const call = peer.call(target, combined, { metadata: { video: true, screen: true } });
+    call.on('stream', remote => showScreenShareWindow(target, remote, combined));
+    call.on('close', endCall);
+    call.on('error', endCall);
+    currentCall = call;
+
+    // Show outgoing screen share UI
+    showScreenShareSending(target, combined);
+
+    // Stop screen share when user clicks "stop sharing" in browser
+    screenStream.getVideoTracks()[0].onended = () => {
+      endCall();
+      toast('Демонстрация экрана завершена', 'info', 2000);
+    };
+
+    _screenSharing = true;
+    toast('Демонстрация экрана начата', 'success', 2000);
+
+  } catch (err) {
+    if (err.name !== 'NotAllowedError') {
+      toast('Не удалось начать демонстрацию экрана', 'error');
+    }
+    screenStream?.getTracks().forEach(t => t.stop());
+    screenStream = null;
+  }
+}
+
+function showScreenShareSending(peerId, stream) {
+  document.querySelectorAll('.call-win').forEach(w => w.remove());
+  const win = document.createElement('div');
+  win.className = 'call-modal open call-win screen-win';
+  win.style.zIndex = 7000;
+  win.innerHTML = `
+    <div class="call-bg" style="background:linear-gradient(135deg,rgba(17,24,39,.96),rgba(17,24,39,.98))"></div>
+    <div class="screen-share-ui">
+      <div class="ss-header">
+        <div class="ss-badge"><i class="ti ti-screen-share"></i> Демонстрация экрана</div>
+        <div class="ss-peer">→ ${peerId}</div>
+      </div>
+      <div class="ss-preview-wrap">
+        <video id="ssLocal" autoplay muted playsinline class="ss-preview"></video>
+        <div class="ss-overlay-text">Вы показываете экран</div>
+      </div>
+      <div class="ss-controls">
+        <button class="call-btn call-mute" id="ssMuteBtn" onclick="toggleScreenMic(this)" title="Микрофон">
+          <i class="ti ti-microphone"></i>
+        </button>
+        <button class="call-btn call-end" onclick="endCall()" title="Остановить">
+          <i class="ti ti-screen-share-off"></i>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(win);
+  const vid = win.querySelector('#ssLocal');
+  vid.srcObject = stream;
+  vid.play().catch(() => {});
+  callModal.classList.remove('open');
+}
+
+function showScreenShareWindow(peerId, remoteStream, localStr) {
+  // Receiver side: show the shared screen
+  document.querySelectorAll('.call-win').forEach(w => w.remove());
+  const win = document.createElement('div');
+  win.className = 'call-modal open call-win screen-win';
+  win.style.zIndex = 7000;
+  win.innerHTML = `
+    <div class="call-bg" style="background:#000"></div>
+    <div class="screen-share-ui screen-share-viewer">
+      <div class="ss-header">
+        <div class="ss-badge"><i class="ti ti-screen-share"></i> ${peerId} показывает экран</div>
+        <button class="icon-btn sm" onclick="toggleFullscreenShare()" title="Полный экран"><i class="ti ti-maximize"></i></button>
+      </div>
+      <div class="ss-preview-wrap ss-main-view">
+        <video id="ssRemote" autoplay playsinline class="ss-preview ss-remote"></video>
+      </div>
+      <div class="ss-controls">
+        <button class="call-btn call-mute" id="ssViewMute" onclick="toggleScreenMic(this)" title="Микрофон">
+          <i class="ti ti-microphone"></i>
+        </button>
+        <button class="call-btn" style="background:rgba(255,255,255,.15)" onclick="toggleFullscreenShare()" title="Полный экран">
+          <i class="ti ti-maximize"></i>
+        </button>
+        <button class="call-btn call-end" onclick="endCall()" title="Выйти">
+          <i class="ti ti-x"></i>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(win);
+
+  const remote = win.querySelector('#ssRemote');
+  remote.srcObject = remoteStream;
+  remote.play().catch(() => {});
+
+  // Audio
+  const audio = new Audio();
+  audio.srcObject = remoteStream;
+  audio.autoplay = true;
+  const spk = localStorage.getItem('aura_spk');
+  if (spk && spk !== 'default' && audio.setSinkId) audio.setSinkId(spk).catch(() => {});
+  audio.play().catch(() => {});
+  win.appendChild(audio);
+
+  callModal.classList.remove('open');
+}
+
+// Handle incoming screen share call (peer sends screen metadata)
+// Override handleIncoming to detect screen share
+const _origHandleIncoming = handleIncomingCallRef;
+
+function handleIncomingWithScreen(call) {
+  if (currentCall) { call.close(); return; }
+  currentCall = call;
+  const caller = call.peer;
+  const isVid    = call.metadata?.video  || false;
+  const isScreen = call.metadata?.screen || false;
+
+  setAvatar(callAva, caller, userAvatars[caller]);
+  callNm.textContent = caller;
+
+  if (isScreen) {
+    callSt.textContent = '🖥️ Запрос демонстрации экрана';
+    callAct.innerHTML = `
+      <button class="call-btn call-ans" onclick="answerScreenShare()"><i class="ti ti-eye"></i></button>
+      <button class="call-btn call-end" onclick="declineCall()"><i class="ti ti-x"></i></button>`;
+  } else {
+    callSt.textContent = isVid ? '📹 Видеозвонок…' : '📞 Входящий…';
+    callAct.innerHTML = `
+      <button class="call-btn call-ans" onclick="answerCall(${isVid})"><i class="ti ti-phone"></i></button>
+      <button class="call-btn call-end" onclick="declineCall()"><i class="ti ti-phone-off"></i></button>`;
+  }
+  callModal.classList.add('open');
+  ringBeep();
+}
+
+function answerScreenShare() {
+  stopRing();
+  // Just answer with mic audio, no video needed from receiver side
+  navigator.mediaDevices.getUserMedia({ audio: audioConstraints() })
+    .then(stream => {
+      localStream = stream;
+      currentCall.answer(stream);
+      currentCall.on('stream', remote => showScreenShareWindow(currentCall.peer, remote, stream));
+      currentCall.on('close', endCall);
+      callModal.classList.remove('open');
+    })
+    .catch(() => {
+      // Answer without audio too
+      const empty = new MediaStream();
+      currentCall.answer(empty);
+      currentCall.on('stream', remote => showScreenShareWindow(currentCall.peer, remote, empty));
+      currentCall.on('close', endCall);
+      callModal.classList.remove('open');
+    });
+}
+
+function toggleScreenMic(btn) {
+  _muted = !_muted;
+  localStream?.getAudioTracks().forEach(t => t.enabled = !_muted);
+  const ico = btn.querySelector('i');
+  ico.className = _muted ? 'ti ti-microphone-off' : 'ti ti-microphone';
+  btn.style.background = _muted ? 'var(--danger)' : '';
+}
+
+function toggleFullscreenShare() {
+  const vid = document.querySelector('.ss-remote');
+  if (!vid) return;
+  if (!document.fullscreenElement) {
+    vid.requestFullscreen?.() || vid.webkitRequestFullscreen?.();
+  } else {
+    document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+  }
+}
+
+// Patch initPeer to use screen-aware incoming handler
+function handleIncomingCallRef(call) { handleIncomingWithScreen(call); }
+
 
 // ══════════════════════════════════════════════
 // KEYBOARD SHORTCUTS  ← УДОБСТВО
