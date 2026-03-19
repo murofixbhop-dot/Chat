@@ -7,7 +7,7 @@
 'use strict';
 
 // ── Socket (must be first) ──────────────────────────
-const socket = io({ reconnectionAttempts: 5, timeout: 10000 });
+const socket = io({ reconnectionAttempts: Infinity, timeout: 20000, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
 
 // ══════════════════════════════════════════════
 // SPLASH / LOADING  ← КРАСОТА
@@ -36,9 +36,9 @@ socket.on('connect', () => {
   if (splashText) splashText.textContent = 'Подключено ✓';
   if (currentUser) {
     socket.emit('identify', currentUser);
+    // Rejoin current room after reconnect
+    if (currentRoom) socket.emit('join-room', currentRoom);
     loadUserData();
-    // Re-broadcast our peerId after reconnect
-    if (myPeerId) socket.emit('peer-id', { username: currentUser, peerId: myPeerId });
   }
 });
 socket.on('connect_error', () => {
@@ -774,7 +774,14 @@ const isMobile = 'ontouchstart' in window;
 // Helper: get audio constraints using saved mic
 function audioConstraints() {
   const mic = localStorage.getItem('aura_mic');
-  const c = { echoCancellation:true, noiseSuppression:true, autoGainControl:true, sampleRate:48000 };
+  const c = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl:  true,
+    sampleRate:       48000,
+    channelCount:     1,
+    latency:          0,
+  };
   if (mic && mic !== 'default') c.deviceId = { exact: mic };
   return c;
 }
@@ -1164,13 +1171,25 @@ async function rejectReq(req) {
 
 // Real-time friend events
 socket.on('friend-request', ({ from }) => {
-  if (!currentUser) return; // not logged in yet — will re-identify after login
+  if (!currentUser) return;
   if (!friendRequests.includes(from)) {
     friendRequests.push(from);
-    renderRequests();
-    updateReqBadge();
+    renderRequests(); updateReqBadge();
     showFriendRequestPopup(from);
   }
+});
+
+// Sync friend requests on reconnect (server sends all pending)
+socket.on('friend-requests-sync', ({ requests }) => {
+  if (!currentUser || !requests?.length) return;
+  let changed = false;
+  requests.forEach(from => {
+    if (!friendRequests.includes(from)) {
+      friendRequests.push(from);
+      changed = true;
+    }
+  });
+  if (changed) { renderRequests(); updateReqBadge(); }
 });
 
 socket.on('friends-updated', ({ friends: nf }) => {
@@ -1555,16 +1574,16 @@ socket.on('call-answer-ready', async ({ from }) => {
   } catch (e) { console.error('[SDP] offer error:', e); endCall(); }
 });
 
-// Callee receives offer → creates answer
+// Callee receives offer → creates answer (also handles renegotiation mid-call)
 socket.on('call-offer', async ({ from, sdp }) => {
-  if (_isCaller || !rtcPeer) return;
-  console.log('[SDP] Got offer from', from);
+  if (!rtcPeer) return;
+  console.log('[SDP] Got offer from', from, 'signalingState:', rtcPeer.signalingState);
   try {
     await rtcPeer.setRemoteDescription(new RTCSessionDescription(sdp));
     const answer = await rtcPeer.createAnswer();
     await rtcPeer.setLocalDescription(answer);
     socket.emit('call-answer', { to: from, from: currentUser, sdp: answer });
-  } catch (e) { console.error('[SDP] answer error:', e); endCall(); }
+  } catch (e) { console.error('[SDP] answer error:', e); }
 });
 
 // Caller receives answer
@@ -1593,17 +1612,46 @@ function _setupRTC() {
   localStream.getTracks().forEach(t => rtcPeer.addTrack(t, localStream));
 
   // ICE candidate → send to peer
+  // Handle renegotiation (screen share mid-call)
+  rtcPeer.onnegotiationneeded = async () => {
+    if (!_isCaller || !_callActive) return;
+    try {
+      const offer = await rtcPeer.createOffer();
+      await rtcPeer.setLocalDescription(offer);
+      socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
+    } catch (e) { console.error('[RTC] renegotiation error:', e); }
+  };
+
   rtcPeer.onicecandidate = ({ candidate }) => {
     if (candidate) {
       socket.emit('call-ice', { to: _callTarget, from: currentUser, candidate });
     }
   };
 
-  // Remote stream arrived → show call window
+  // Collect remote tracks — ontrack fires once per track (audio+video)
+  let _remoteStream = new MediaStream();
+  let _callWindowShown = false;
   rtcPeer.ontrack = (event) => {
-    console.log('[RTC] Remote track received:', event.track.kind);
-    const remoteStream = event.streams[0] || new MediaStream([event.track]);
-    showCallWindow(_callTarget, remoteStream, _callIsVid);
+    console.log('[RTC] Remote track:', event.track.kind);
+    // Use the stream from the event if available, else build manually
+    if (event.streams && event.streams[0]) {
+      _remoteStream = event.streams[0];
+    } else {
+      _remoteStream.addTrack(event.track);
+    }
+    // Show window once — on first track, delay to collect all tracks
+    if (!_callWindowShown) {
+      _callWindowShown = true;
+      setTimeout(() => {
+        showCallWindow(_callTarget, _remoteStream, _callIsVid);
+      }, 200);
+    } else {
+      // Update existing audio element if video track came later
+      const audio = document.querySelector('.call-win audio');
+      if (audio) audio.srcObject = _remoteStream;
+      const vid = document.querySelector('#rv');
+      if (vid) vid.srcObject = _remoteStream;
+    }
   };
 
   rtcPeer.oniceconnectionstatechange = () => {
@@ -1669,19 +1717,94 @@ function toggleMuteWin(btn) {
   btn.style.background = _muted ? 'var(--danger)' : '';
 }
 
+
+function showScreenQualityPicker(callback) {
+  const overlay = $('dialogOverlay');
+  const box     = $('dialogBox');
+  if (!overlay || !box) { callback({ res: '720p', fps: '30' }); return; }
+
+  box.innerHTML = `
+    <div class="dlg-ico info"><i class="ti ti-screen-share"></i></div>
+    <h3>Настройки демонстрации</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div>
+        <p style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Разрешение</p>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label class="sq-opt"><input type="radio" name="sqres" value="1080p"> 1080p</label>
+          <label class="sq-opt sq-sel"><input type="radio" name="sqres" value="720p" checked> 720p</label>
+          <label class="sq-opt"><input type="radio" name="sqres" value="480p"> 480p</label>
+        </div>
+      </div>
+      <div>
+        <p style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">FPS</p>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label class="sq-opt"><input type="radio" name="sqfps" value="60"> 60 FPS</label>
+          <label class="sq-opt sq-sel"><input type="radio" name="sqfps" value="30" checked> 30 FPS</label>
+          <label class="sq-opt"><input type="radio" name="sqfps" value="15"> 15 FPS</label>
+        </div>
+      </div>
+    </div>
+    <div class="dlg-btns">
+      <button class="btn-secondary" id="dlgNo">Отмена</button>
+      <button class="btn-primary"   id="dlgOk"><i class="ti ti-screen-share"></i> Начать</button>
+    </div>`;
+
+  // Add styles for radio options
+  if (!document.getElementById('sqStyle')) {
+    const st = document.createElement('style');
+    st.id = 'sqStyle';
+    st.textContent = '.sq-opt{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:13px;border:1.5px solid var(--border);transition:background .12s}.sq-opt:hover,.sq-opt.sq-sel{background:var(--active,rgba(99,102,241,.12));border-color:var(--accent)}.sq-opt input{accent-color:var(--accent)}';
+    document.head.appendChild(st);
+  }
+
+  overlay.classList.add('open');
+
+  box.querySelectorAll('input[type=radio]').forEach(r => {
+    r.addEventListener('change', () => {
+      box.querySelectorAll(`[name=${r.name}]`).forEach(x => x.closest('label').classList.remove('sq-sel'));
+      r.closest('label').classList.add('sq-sel');
+    });
+  });
+
+  const close = (v) => { overlay.classList.remove('open'); callback(v); };
+
+  $('dlgOk').onclick = () => {
+    const res = box.querySelector('input[name=sqres]:checked')?.value || '720p';
+    const fps = box.querySelector('input[name=sqfps]:checked')?.value || '30';
+    close({ res, fps });
+  };
+  $('dlgNo').onclick = () => close(null);
+  overlay.onclick = e => { if (e.target === overlay) close(null); };
+}
+
 // ── SCREEN SHARE (mid-call) ───────────────────────────────
 async function switchToScreenShare() {
   if (!rtcPeer || !_callActive) return;
+
+  // ── Stop screen share ──
   if (_screenSharing) {
     screenStream?.getTracks().forEach(t => t.stop());
     screenStream = null; _screenSharing = false;
+    // Restore camera if it was a video call
+    if (_callIsVid) {
+      try {
+        const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const camTrack = cam.getVideoTracks()[0];
+        const sender = rtcPeer?.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(camTrack);
+        const lv = document.querySelector('#lv');
+        if (lv) { lv.srcObject = cam; lv.style.width = '140px'; }
+      } catch {}
+    }
     document.querySelectorAll('.ss-toggle').forEach(b => {
       b.style.background = 'rgba(255,255,255,.18)';
-      b.querySelector('i').className = 'ti ti-screen-share';
+      if (b.querySelector('i')) b.querySelector('i').className = 'ti ti-screen-share';
     });
     toast('Демонстрация остановлена', 'info', 1800);
     return;
   }
+
+  // ── Start screen share ──
   showScreenQualityPicker(async (opts) => {
     if (!opts) return;
     const resMap = { '1080p':{w:1920,h:1080},'720p':{w:1280,h:720},'480p':{w:854,h:480},'360p':{w:640,h:360} };
@@ -1691,22 +1814,167 @@ async function switchToScreenShare() {
         video: { width:{ideal:dim.w}, height:{ideal:dim.h}, frameRate:{ideal:parseInt(opts.fps)} },
         audio: true
       });
-      const track = screenStream.getVideoTracks()[0];
-      const sender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) await sender.replaceTrack(track);
+      const screenVid = screenStream.getVideoTracks()[0];
+
+      // Replace video track in peer connection
+      const senders = rtcPeer.getSenders();
+      const vidSender = senders.find(s => s.track?.kind === 'video');
+      if (vidSender) {
+        await vidSender.replaceTrack(screenVid);
+      } else {
+        // Audio call — add video track + renegotiate
+        rtcPeer.addTrack(screenVid, screenStream);
+        // Must renegotiate after addTrack
+        const offer = await rtcPeer.createOffer();
+        await rtcPeer.setLocalDescription(offer);
+        socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
+      }
+
+      // Also send screen audio if available
+      const audioTrack = screenStream.getAudioTracks()[0];
+      if (audioTrack) {
+        const audioSender = senders.find(s => s.track?.kind === 'audio');
+        if (audioSender) await audioSender.replaceTrack(audioTrack);
+      }
+
+      // Show local preview
+      const lv = document.querySelector('#lv');
+      if (lv) { lv.srcObject = screenStream; lv.style.cssText += ';width:200px;object-fit:contain;border-radius:8px'; }
+
       _screenSharing = true;
       document.querySelectorAll('.ss-toggle').forEach(b => {
         b.style.background = 'var(--accent)';
-        b.querySelector('i').className = 'ti ti-screen-share-off';
+        if (b.querySelector('i')) b.querySelector('i').className = 'ti ti-screen-share-off';
       });
       toast(`Демонстрация: ${opts.res} / ${opts.fps} FPS`, 'success', 2000);
-      track.onended = () => switchToScreenShare(); // stop
+
+      screenVid.onended = () => switchToScreenShare(); // auto-stop on browser stop-share
     } catch (e) {
       if (e.name !== 'NotAllowedError') toast('Не удалось начать демонстрацию', 'error');
     }
   });
 }
 
+
+// ── CALL WINDOW UI ──────────────────────────────────────
+function showCallWindow(peerId, remoteStream, isVid) {
+  document.querySelectorAll('.call-win').forEach(w => w.remove());
+  const win = document.createElement('div');
+  win.className = 'call-modal open call-win';
+  win.style.zIndex = '7000';
+
+  if (isVid) {
+    win.innerHTML = `
+      <div class="call-bg"></div>
+      <video id="rv" autoplay playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
+      <video id="lv" autoplay playsinline muted style="position:absolute;bottom:90px;right:20px;width:140px;border-radius:14px;border:2px solid rgba(255,255,255,.3);"></video>
+      <div class="call-content" style="position:relative;z-index:1;justify-content:flex-end;padding-bottom:40px">
+        <div class="call-timer" id="callTimer" style="color:rgba(255,255,255,.7);font-size:14px;margin-bottom:10px">0:00</div>
+        <div class="call-actions">
+          <button class="call-btn call-mute" onclick="toggleMuteWin(this)" title="Микрофон"><i class="ti ti-microphone"></i></button>
+          <button class="call-btn ss-toggle" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Демонстрация экрана"><i class="ti ti-screen-share"></i></button>
+          <button class="call-btn call-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>
+        </div>
+      </div>`;
+    document.body.appendChild(win);
+    const rv = win.querySelector('#rv');
+    const lv = win.querySelector('#lv');
+    rv.srcObject = remoteStream;
+    rv.play().catch(() => {});
+    if (localStream) { lv.srcObject = localStream; lv.play().catch(() => {}); }
+  } else {
+    win.innerHTML = `
+      <div class="call-bg"></div>
+      <div class="call-content" style="position:relative;z-index:1">
+        <div class="call-ring"><div class="call-ava" id="caWin"></div></div>
+        <div class="call-name">${peerId}</div>
+        <div class="call-status" id="caStat">Разговор</div>
+        <div class="call-timer" id="callTimer" style="color:rgba(255,255,255,.6);font-size:15px;font-variant-numeric:tabular-nums">0:00</div>
+        <div class="call-actions">
+          <button class="call-btn call-mute" onclick="toggleMuteWin(this)" title="Микрофон"><i class="ti ti-microphone"></i></button>
+          <button class="call-btn ss-toggle" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Демонстрация экрана"><i class="ti ti-screen-share"></i></button>
+          <button class="call-btn call-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>
+        </div>
+      </div>`;
+    document.body.appendChild(win);
+    setAvatar(win.querySelector('#caWin'), peerId, userAvatars[peerId]);
+    // Audio — use a real element attached to DOM for reliable playback
+    const audio = document.createElement('audio');
+    audio.id = 'remoteAudio';
+    audio.autoplay = true;
+    audio.style.display = 'none';
+    audio.srcObject = remoteStream;
+    // Apply volume
+    audio.volume = (parseInt(localStorage.getItem('aura_vol') || '100')) / 100;
+    const spk = localStorage.getItem('aura_spk');
+    if (spk && spk !== 'default' && audio.setSinkId) audio.setSinkId(spk).catch(() => {});
+    win.appendChild(audio);
+    // Force play after interaction — browsers may block autoplay
+    audio.play().catch(() => {
+      document.addEventListener('click', () => audio.play().catch(() => {}), { once: true });
+    });
+  }
+
+  // Call timer
+  let secs = 0;
+  win._timer = setInterval(() => {
+    secs++;
+    const m = Math.floor(secs / 60), s = secs % 60;
+    const t = win.querySelector('#callTimer');
+    if (t) t.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  }, 1000);
+
+  // Hide the ringing modal
+  if (callModal) callModal.classList.remove('open');
+}
+
+// ── SCREEN SHARE WINDOW (full-screen viewer) ─────────────
+function showScreenShareWindow(peerId, remoteStream) {
+  document.querySelectorAll('.call-win').forEach(w => {
+    if (w._timer) clearInterval(w._timer);
+    w.remove();
+  });
+  const win = document.createElement('div');
+  win.className = 'call-modal open call-win screen-win';
+  win.style.zIndex = '7000';
+  win.innerHTML = `
+    <div class="call-bg" style="background:#000"></div>
+    <div class="screen-share-ui screen-share-viewer">
+      <div class="ss-header">
+        <div class="ss-badge"><i class="ti ti-screen-share"></i> ${peerId} показывает экран</div>
+        <button class="icon-btn sm" onclick="toggleFullscreenShare()"><i class="ti ti-maximize"></i></button>
+      </div>
+      <div class="ss-preview-wrap ss-main-view">
+        <video id="ssRemote" autoplay playsinline class="ss-preview ss-remote"></video>
+      </div>
+      <div class="ss-controls">
+        <button class="call-btn call-mute" onclick="toggleMuteWin(this)"><i class="ti ti-microphone"></i></button>
+        <button class="call-btn" style="background:rgba(255,255,255,.15)" onclick="toggleFullscreenShare()"><i class="ti ti-maximize"></i></button>
+        <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-x"></i></button>
+      </div>
+    </div>`;
+  document.body.appendChild(win);
+  const vid = win.querySelector('#ssRemote');
+  vid.srcObject = remoteStream;
+  vid.play().catch(() => {});
+  // Play audio too
+  const audio = new Audio();
+  audio.srcObject = remoteStream;
+  audio.autoplay = true;
+  audio.play().catch(() => {});
+  win.appendChild(audio);
+  if (callModal) callModal.classList.remove('open');
+}
+
+function toggleFullscreenShare() {
+  const vid = document.querySelector('.ss-remote');
+  if (!vid) return;
+  if (!document.fullscreenElement) {
+    (vid.requestFullscreen || vid.webkitRequestFullscreen).call(vid);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  }
+}
 
 // ══════════════════════════════════════════════
 // KEYBOARD SHORTCUTS  ← УДОБСТВО
@@ -1757,8 +2025,36 @@ document.addEventListener('touchend', e => {
 // ══════════════════════════════════════════════
 // REALTIME POLLING  ← УДОБСТВО: fallback
 // ══════════════════════════════════════════════
-setInterval(() => { if (currentUser) loadUserData(); }, 30000);
-setInterval(() => { if (currentUser) socket.emit('ping'); }, 3000);
+// Smart real-time polling — every 8s as fallback for socket misses
+let _lastFriendsHash = '';
+let _lastReqsHash    = '';
+setInterval(async () => {
+  if (!currentUser) return;
+  try {
+    const r = await fetch('/api/get-user-data', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser })
+    });
+    const d = await r.json();
+    // Only re-render if data actually changed (compare hashes)
+    const newFrHash = JSON.stringify((d.friends||[]).sort());
+    const newRqHash = JSON.stringify((d.friendRequests||[]).sort());
+    if (newFrHash !== _lastFriendsHash) {
+      _lastFriendsHash = newFrHash;
+      friends = d.friends || [];
+      renderFriends();
+    }
+    if (newRqHash !== _lastReqsHash) {
+      _lastReqsHash = newRqHash;
+      friendRequests = d.friendRequests || [];
+      renderRequests();
+      updateReqBadge();
+    }
+    groups = d.groups || [];
+  } catch {}
+}, 8000);
+// Keep-alive ping every 5s
+setInterval(() => { if (currentUser) socket.emit('ping'); }, 5000);
 
 // ══════════════════════════════════════════════
 // ONLINE BADGE  ← УДОБСТВО
