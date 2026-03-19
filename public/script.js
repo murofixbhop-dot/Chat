@@ -277,10 +277,39 @@ function startSession(user) {
   loadUserData();
   enableInput();
   initCallDOM();
-  // initPeer() removed — using Socket.IO signaling instead
   gotoRoom('general');
   setupDragDrop();
-  setupKeyboardShortcuts(); // ← УДОБСТВО
+  setupKeyboardShortcuts();
+  requestNotificationPermission();
+}
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    // Ask after small delay so it doesn't feel abrupt
+    setTimeout(async () => {
+      await Notification.requestPermission();
+    }, 3000);
+  }
+  // Subscribe to push if SW and permission granted
+  if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+    const sw = await navigator.serviceWorker.ready.catch(() => null);
+    if (sw) {
+      socket.emit('sw-ready', { username: currentUser });
+    }
+  }
+}
+
+function showPushNotification(title, body, tag) {
+  if (Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible') return; // only when tab hidden
+  new Notification(title, {
+    body,
+    icon: '/icons/icon-192.svg',
+    badge: '/icons/icon-192.svg',
+    tag: tag || 'aura',
+    silent: false,
+  });
 }
 
 // Auto-restore session
@@ -579,6 +608,12 @@ function addMessage(msg) {
   row.appendChild(bub);
   messagesDiv.appendChild(row);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  // Notification for messages when tab is hidden
+  if (msg.user !== currentUser && document.visibilityState !== 'visible') {
+    const nick = msg.user;
+    const txt  = msg.type === 'text' ? msg.text : (msg.type === 'audio' ? 'Голосовое сообщение' : 'Медиафайл');
+    showPushNotification(nick, txt, 'msg-' + msg.user);
+  }
 }
 
 function addSystem(text) {
@@ -1478,7 +1513,7 @@ function startCall(isVid) {
     .then(stream => {
       localStream = stream;
       _setupRTC();
-      // Notify callee via socket BEFORE offer
+      // Send call-invite via socket (server will relay if online, queue if offline)
       socket.emit('call-invite', {
         to: target, from: currentUser, isVid
       });
@@ -1503,6 +1538,13 @@ function startCall(isVid) {
 
 // ── INCOMING CALL (socket event) ─────────────────────────
 socket.on('call-invite', ({ from, isVid }) => {
+  // Browser notification when tab not focused
+  if (document.hidden) {
+    sendBrowserNotification(
+      isVid ? `Видеозвонок от ${from}` : `Звонок от ${from}`,
+      'Нажмите чтобы ответить', from
+    );
+  }
   if (_callActive) {
     socket.emit('call-busy', { to: from, from: currentUser });
     return;
@@ -1511,6 +1553,13 @@ socket.on('call-invite', ({ from, isVid }) => {
   _callTarget = from;
   _callIsVid  = isVid;
   _isCaller   = false;
+
+  // Push notification if tab not focused
+  showPushNotification(
+    isVid ? `Видеозвонок от ${from}` : `Звонок от ${from}`,
+    'Нажмите чтобы ответить',
+    'incoming-call'
+  );
 
   setAvatar(callAva, from, userAvatars[from]);
   callNm.textContent = from;
@@ -1524,6 +1573,8 @@ socket.on('call-invite', ({ from, isVid }) => {
     </button>`;
   callModal.classList.add('open');
   ringBeep();
+  // Focus window if possible
+  window.focus();
 });
 
 socket.on('call-busy', ({ from }) => {
@@ -1559,6 +1610,40 @@ function declineCall() {
 socket.on('call-decline', ({ from }) => {
   toast(from + ' отклонил звонок', 'info', 2500);
   endCall();
+});
+
+// Target is offline when we tried to call
+socket.on('call-target-offline', ({ target }) => {
+  toast(`${target} сейчас не в сети. Они получат уведомление о пропущенном звонке.`, 'info', 4000);
+  endCall();
+});
+
+// Missed calls delivered when user comes online
+socket.on('missed-calls', ({ calls }) => {
+  if (!calls?.length) return;
+  calls.forEach(c => {
+    const age = Math.round((Date.now() - c.time) / 60000);
+    const ageStr = age < 1 ? 'только что' : age < 60 ? `${age} мин. назад` : `${Math.round(age/60)} ч. назад`;
+    const icon = c.isVid ? 'ti-video' : 'ti-phone';
+    const t = document.createElement('div');
+    t.className = 'toast warning';
+    t.style.cursor = 'pointer';
+    t.innerHTML = `<i class="ti ${icon}"></i><span>Пропущенный звонок от <b>${c.from}</b> — ${ageStr}</span>`;
+    t.onclick = () => { t.remove(); gotoPrivate(c.from); };
+    $('toastContainer')?.appendChild(t);
+    setTimeout(() => {
+      t.style.animation = 'toastOut .3s ease forwards';
+      setTimeout(() => t.remove(), 300);
+    }, 10000);
+  });
+  // Browser notification for missed calls
+  if (document.hidden && calls.length > 0) {
+    sendBrowserNotification(
+      `Пропущенный звонок от ${calls[0].from}`,
+      calls.length > 1 ? `Итого пропущено: ${calls.length} звонков` : 'Нажмите чтобы ответить',
+      calls[0].from
+    );
+  }
 });
 
 // ── SIGNALING EXCHANGE ────────────────────────────────────
@@ -1606,20 +1691,29 @@ socket.on('call-ice', async ({ from, candidate }) => {
 // ── RTC SETUP ─────────────────────────────────────────────
 function _setupRTC() {
   rtcPeer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  _callActive = true;
+  // _callActive stays false until after initial offer/answer completes
+  // onnegotiationneeded guards on _callActive so won't fire during setup
+  _callActive = false; // set true after connection established
 
-  // Add local tracks
+  // Add local tracks (this may trigger onnegotiationneeded — it's blocked by _callActive=false)
   localStream.getTracks().forEach(t => rtcPeer.addTrack(t, localStream));
 
-  // ICE candidate → send to peer
-  // Handle renegotiation (screen share mid-call)
+  // Renegotiation (e.g. screen share added mid-call)
+  // Guard: only fire when connection is already established, not during initial setup
+  let _negotiating = false;
   rtcPeer.onnegotiationneeded = async () => {
-    if (!_isCaller || !_callActive) return;
+    // Skip during initial setup (signalingState is 'stable' only after first exchange)
+    if (!_callActive || _negotiating) return;
+    if (rtcPeer.signalingState !== 'stable') return;
+    if (!_isCaller) return; // only caller renegotiates
+    _negotiating = true;
     try {
       const offer = await rtcPeer.createOffer();
+      if (rtcPeer.signalingState !== 'stable') { _negotiating = false; return; }
       await rtcPeer.setLocalDescription(offer);
       socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
-    } catch (e) { console.error('[RTC] renegotiation error:', e); }
+    } catch (e) { console.error('[RTC] renegotiation:', e); }
+    finally { setTimeout(() => { _negotiating = false; }, 500); }
   };
 
   rtcPeer.onicecandidate = ({ candidate }) => {
@@ -1658,6 +1752,7 @@ function _setupRTC() {
     const state = rtcPeer?.iceConnectionState;
     console.log('[RTC] ICE state:', state);
     if (state === 'connected' || state === 'completed') {
+      _callActive = true; // NOW it's safe for renegotiation
       if (callSt) callSt.textContent = 'Разговор';
     } else if (state === 'failed' || state === 'closed') {
       endCall();
@@ -1681,6 +1776,15 @@ function endCall() {
 socket.on('call-end', ({ from }) => {
   console.log('[Call] Ended by', from);
   _cleanupCall();
+});
+
+// Missed call notification (delivered when user comes online)
+socket.on('missed-call', ({ from, isVid, time }) => {
+  const ago = Math.round((Date.now() - time) / 60000);
+  const label = isVid ? 'Видеозвонок' : 'Звонок';
+  const when  = ago < 1 ? 'только что' : ago + ' мин назад';
+  toast(`Пропущен: ${label} от ${from} (${when})`, 'warning', 6000);
+  showPushNotification(`Пропущен ${label}`, `От ${from} · ${when}`, 'missed-call');
 });
 
 function _cleanupCall() {
@@ -1805,54 +1909,62 @@ async function switchToScreenShare() {
   }
 
   // ── Start screen share ──
-  showScreenQualityPicker(async (opts) => {
-    if (!opts) return;
-    const resMap = { '1080p':{w:1920,h:1080},'720p':{w:1280,h:720},'480p':{w:854,h:480},'360p':{w:640,h:360} };
-    const dim = resMap[opts.res] || resMap['720p'];
-    try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width:{ideal:dim.w}, height:{ideal:dim.h}, frameRate:{ideal:parseInt(opts.fps)} },
-        audio: true
-      });
-      const screenVid = screenStream.getVideoTracks()[0];
-
-      // Replace video track in peer connection
-      const senders = rtcPeer.getSenders();
-      const vidSender = senders.find(s => s.track?.kind === 'video');
-      if (vidSender) {
-        await vidSender.replaceTrack(screenVid);
-      } else {
-        // Audio call — add video track + renegotiate
-        rtcPeer.addTrack(screenVid, screenStream);
-        // Must renegotiate after addTrack
-        const offer = await rtcPeer.createOffer();
-        await rtcPeer.setLocalDescription(offer);
-        socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
-      }
-
-      // Also send screen audio if available
-      const audioTrack = screenStream.getAudioTracks()[0];
-      if (audioTrack) {
-        const audioSender = senders.find(s => s.track?.kind === 'audio');
-        if (audioSender) await audioSender.replaceTrack(audioTrack);
-      }
-
-      // Show local preview
-      const lv = document.querySelector('#lv');
-      if (lv) { lv.srcObject = screenStream; lv.style.cssText += ';width:200px;object-fit:contain;border-radius:8px'; }
-
-      _screenSharing = true;
-      document.querySelectorAll('.ss-toggle').forEach(b => {
-        b.style.background = 'var(--accent)';
-        if (b.querySelector('i')) b.querySelector('i').className = 'ti ti-screen-share-off';
-      });
-      toast(`Демонстрация: ${opts.res} / ${opts.fps} FPS`, 'success', 2000);
-
-      screenVid.onended = () => switchToScreenShare(); // auto-stop on browser stop-share
-    } catch (e) {
-      if (e.name !== 'NotAllowedError') toast('Не удалось начать демонстрацию', 'error');
+  // IMPORTANT: getDisplayMedia MUST be called directly in user gesture,
+  // not inside a dialog callback (browsers block it otherwise).
+  // So: get stream first, then show settings picker (or skip it and use defaults).
+  try {
+    // Get screen stream immediately on button click (user gesture context)
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} },
+      audio: true
+    });
+  } catch (e) {
+    if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') {
+      toast('Не удалось захватить экран: ' + e.message, 'error');
     }
+    return;
+  }
+
+  const screenVid = screenStream.getVideoTracks()[0];
+
+  // Replace video sender OR add new track
+  const senders = rtcPeer.getSenders();
+  const vidSender = senders.find(s => s.track?.kind === 'video');
+  if (vidSender) {
+    await vidSender.replaceTrack(screenVid);
+  } else {
+    // Audio-only call: add screen track, renegotiate
+    rtcPeer.addTrack(screenVid, screenStream);
+    try {
+      const offer = await rtcPeer.createOffer();
+      await rtcPeer.setLocalDescription(offer);
+      socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
+    } catch(e) { console.error('[SS] renegotiate error:', e); }
+  }
+
+  // Replace audio with screen audio if available
+  const screenAudio = screenStream.getAudioTracks()[0];
+  if (screenAudio) {
+    const audSender = senders.find(s => s.track?.kind === 'audio');
+    if (audSender) await audSender.replaceTrack(screenAudio).catch(() => {});
+  }
+
+  // Local preview
+  const lv = document.querySelector('#lv');
+  if (lv) {
+    lv.srcObject = screenStream;
+    lv.style.width = '200px';
+    lv.style.objectFit = 'contain';
+    lv.style.borderRadius = '8px';
+  }
+
+  _screenSharing = true;
+  document.querySelectorAll('.ss-toggle').forEach(b => {
+    b.style.background = 'var(--accent)';
+    if (b.querySelector('i')) b.querySelector('i').className = 'ti ti-screen-share-off';
   });
+  toast('Демонстрация экрана активна', 'success', 2000);
+  screenVid.onended = () => switchToScreenShare();
 }
 
 
