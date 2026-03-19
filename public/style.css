@@ -1135,3 +1135,16 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
   transition: color .15s; z-index: 1;
 }
 .pass-toggle:hover { color: var(--accent, #6366f1); }
+
+/* ── PWA install button in sidebar ── */
+.pwa-install-btn {
+  display: flex; align-items: center; gap: 8px;
+  width: calc(100% - 16px); margin: 0 8px 6px;
+  padding: 10px 14px; border-radius: 12px;
+  background: var(--accent-dim, rgba(99,102,241,.15));
+  border: 1.5px dashed var(--accent, #6366f1);
+  color: var(--accent, #6366f1); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background .15s;
+}
+.pwa-install-btn:hover { background: var(--active, rgba(99,102,241,.22)); }
+.pwa-install-btn i { font-size: 16px; }
