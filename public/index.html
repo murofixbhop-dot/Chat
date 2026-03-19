@@ -2113,6 +2113,9 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script>
+        // ========== SOCKET (должен быть первым) ==========
+        const socket = io({ reconnectionAttempts: 5, timeout: 10000 });
+
         // ========== КАСТОМНЫЕ ДИАЛОГИ И ТОСТЫ ==========
         const dialogOverlay = document.getElementById('customDialogOverlay');
         const dialogBox = document.getElementById('customDialogBox');
@@ -2247,15 +2250,7 @@
 
         // Hide loading screen quickly — don't wait for socket/API
         // The login modal or chat will appear right after
-        setTimeout(hideLoadingScreen, 600);
-
-        // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
-        const socket = io({
-            reconnectionAttempts: 5,
-            timeout: 10000
-        });
-
-        // Update loading screen based on socket status
+        // Socket connection status → update loading screen text
         socket.on('connect', () => {
             const lt = document.getElementById('loadingText');
             if (lt) lt.textContent = 'Подключено ✓';
@@ -2263,13 +2258,15 @@
         socket.on('connect_error', () => {
             const lt = document.getElementById('loadingText');
             if (lt) lt.textContent = 'Ошибка соединения...';
-            // Still hide loading after short delay so user sees the error
-            setTimeout(hideLoadingScreen, 1200);
+            setTimeout(hideLoadingScreen, 1000);
         });
         socket.on('reconnect_failed', () => {
             hideLoadingScreen();
-            showToast('Не удалось подключиться к серверу', 'error', 6000);
         });
+
+        setTimeout(hideLoadingScreen, 600);
+
+        // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
         const messagesDiv = document.getElementById('messages');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
