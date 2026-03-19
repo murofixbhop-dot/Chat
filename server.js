@@ -449,6 +449,8 @@ io.on('connection', (socket) => {
     broadcastOnlineCount();
     socket.join('general');
     socket.emit('history', messageHistory.filter(m => m.room === 'general').slice(-100));
+    // Ask all online users to re-broadcast their peer IDs to this new socket
+    socket.broadcast.emit('request-peer-id', { from: username });
   });
 
   socket.on('join-room', (room) => {
@@ -510,6 +512,14 @@ io.on('connection', (socket) => {
     saveUsers();
     // Рассылаем всем, чтобы обновились аватары в интерфейсе
     io.emit('avatar-updated', { username, avatar });
+  });
+
+  // PeerJS ID registration — broadcast to all so everyone knows how to call this user
+  socket.on('peer-id', ({ username, peerId }) => {
+    if (!username || !peerId) return;
+    console.log(`[PeerID] ${username} → ${peerId}`);
+    // Broadcast to everyone (they need this to call us)
+    socket.broadcast.emit('peer-id', { username, peerId });
   });
 
   socket.on('disconnect', () => {
