@@ -34,6 +34,11 @@ function hideSplash() {
 
 socket.on('connect', () => {
   if (splashText) splashText.textContent = 'Подключено ✓';
+  // Re-identify and reload if user was logged in (handles socket reconnection)
+  if (currentUser) {
+    socket.emit('identify', currentUser);
+    loadUserData();
+  }
 });
 socket.on('connect_error', () => {
   if (splashText) splashText.textContent = 'Ошибка соединения…';
@@ -820,8 +825,14 @@ async function startVoice() {
 }
 
 function stopVoice() {
-  if (mediaRecorder?.state !== 'inactive') mediaRecorder.stop();
-  else stopRecUI();
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') { stopRecUI(); return; }
+  // requestData flushes the current chunk BEFORE stop fires onstop
+  try { mediaRecorder.requestData(); } catch {}
+  // Small delay so the final chunk arrives before stop
+  setTimeout(() => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    else stopRecUI();
+  }, 80);
 }
 
 function cancelRecording() {
@@ -1071,14 +1082,17 @@ async function rejectReq(req) {
 
 // Real-time friend events
 socket.on('friend-request', ({ from }) => {
+  if (!currentUser) return; // not logged in yet — will re-identify after login
   if (!friendRequests.includes(from)) {
     friendRequests.push(from);
-    renderRequests(); updateReqBadge();
+    renderRequests();
+    updateReqBadge();
     showFriendRequestPopup(from);
   }
 });
 
 socket.on('friends-updated', ({ friends: nf }) => {
+  if (!currentUser) return;
   friends = nf || [];
   renderFriends();
   toast('Список друзей обновлён', 'success', 2000);
@@ -1338,20 +1352,7 @@ function callTarget() {
   return currentRoom.split(':').slice(1).find(p => p !== currentUser) || null;
 }
 
-function handleIncoming(call) {
-  if (currentCall) { call.close(); return; }
-  currentCall = call;
-  const caller = call.peer;
-  const isVid  = call.metadata?.video || false;
-  setAvatar(callAva, caller, userAvatars[caller]);
-  callNm.textContent = caller;
-  callSt.textContent = isVid ? 'Видеозвонок…' : 'Входящий звонок…';
-  callAct.innerHTML = `
-    <button class="call-btn call-ans" onclick="answerCall(${isVid})"><i class="ti ti-phone"></i></button>
-    <button class="call-btn call-end" onclick="declineCall()"><i class="ti ti-phone-off"></i></button>`;
-  callModal.classList.add('open');
-  ringBeep();
-}
+// handleIncoming replaced by handleIncomingWithScreen
 
 function ringBeep() {
   try {
@@ -1616,12 +1617,13 @@ function endCall() {
   _screenSharing = false;
   // Remove all call windows
   document.querySelectorAll('.call-win').forEach(el => el.remove());
-  // Hide the incoming call modal
+  // Reset call modal
   if (callModal) {
-    callModal.style.display = 'none';
     callModal.classList.remove('open');
-    // Reset for next call
-    setTimeout(() => { callModal.style.display = ''; }, 100);
+    // Reset contents for next call
+    if (callAct) callAct.innerHTML = '';
+    if (callNm)  callNm.textContent = '';
+    if (callSt)  callSt.textContent = '';
   }
 }
 
