@@ -429,8 +429,7 @@ function gotoRoom(room) {
 
   const callBtnsHtml = `
     <button class="icon-btn" title="Аудиозвонок" onclick="startCall(false)"><i class="ti ti-phone"></i></button>
-    <button class="icon-btn" title="Видеозвонок" onclick="startCall(true)"><i class="ti ti-video"></i></button>
-    <button class="icon-btn" title="Демонстрация экрана" onclick="startScreenShare()"><i class="ti ti-screen-share"></i></button>`;
+    <button class="icon-btn" title="Видеозвонок" onclick="startCall(true)"><i class="ti ti-video"></i></button>`;
 
   if (room === 'general') {
     roomName.textContent = 'Общий чат';
@@ -1346,7 +1345,7 @@ function handleIncoming(call) {
   const isVid  = call.metadata?.video || false;
   setAvatar(callAva, caller, userAvatars[caller]);
   callNm.textContent = caller;
-  callSt.textContent = isVid ? '📹 Видеозвонок…' : '📞 Входящий…';
+  callSt.textContent = isVid ? 'Видеозвонок…' : 'Входящий звонок…';
   callAct.innerHTML = `
     <button class="call-btn call-ans" onclick="answerCall(${isVid})"><i class="ti ti-phone"></i></button>
     <button class="call-btn call-end" onclick="declineCall()"><i class="ti ti-phone-off"></i></button>`;
@@ -1396,7 +1395,7 @@ function startCall(isVid) {
       currentCall = call;
       setAvatar(callAva, target, userAvatars[target]);
       callNm.textContent = target;
-      callSt.textContent = isVid ? '📹 Звоним…' : '📞 Звоним…';
+      callSt.textContent = isVid ? 'Видеозвонок…' : 'Звоним…';
       callAct.innerHTML = `
         <button class="call-btn call-mute" id="callMuteBtn" onclick="toggleMute()"><i class="ti ti-microphone"></i></button>
         <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>`;
@@ -1426,7 +1425,7 @@ function showCallWindow(peerId, stream, isVid) {
       <div class="call-content" style="position:relative;z-index:1;justify-content:flex-end;padding-bottom:36px">
         <div class="call-actions">
           <button class="call-btn call-mute" onclick="toggleMuteWin(this)"><i class="ti ti-microphone"></i></button>
-          <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Показать экран"><i class="ti ti-screen-share"></i></button>
+          <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Демонстрация экрана" class="call-btn ss-toggle"><i class="ti ti-screen-share"></i></button>
           <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>
         </div>
       </div>`;
@@ -1443,7 +1442,7 @@ function showCallWindow(peerId, stream, isVid) {
         <div class="call-status" id="caStat">🔊 Разговор</div>
         <div class="call-actions">
           <button class="call-btn call-mute" onclick="toggleMuteWin(this)"><i class="ti ti-microphone"></i></button>
-          <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Показать экран"><i class="ti ti-screen-share"></i></button>
+          <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Демонстрация экрана" class="call-btn ss-toggle"><i class="ti ti-screen-share"></i></button>
           <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>
         </div>
       </div>`;
@@ -1459,53 +1458,137 @@ function showCallWindow(peerId, stream, isVid) {
     win._timer = setInterval(() => {
       secs++;
       const st = $('caStat');
-      if (st) st.textContent = `🔊 ${Math.floor(secs/60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`;
+      if (st) st.textContent = `${Math.floor(secs/60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`;
     }, 1000);
   }
   callModal.classList.remove('open');
 }
 
-// Switch to screen share mid-call
+// Switch to screen share mid-call — with quality picker
 async function switchToScreenShare() {
   if (!currentCall) return;
-  try {
-    screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} },
-      audio: true
+  if (_screenSharing) {
+    // Stop screen share
+    screenStream?.getTracks().forEach(t => t.stop());
+    screenStream = null;
+    _screenSharing = false;
+    toast('Демонстрация остановлена', 'info', 1800);
+    // Revert button
+    document.querySelectorAll('.ss-toggle').forEach(b => {
+      b.style.background = 'rgba(255,255,255,.18)';
+      b.querySelector('i').className = 'ti ti-screen-share';
     });
-
-    // Replace video track in the existing call
-    const screenTrack = screenStream.getVideoTracks()[0];
-    const sender = currentCall.peerConnection?.getSenders().find(s => s.track?.kind === 'video');
-    if (sender) {
-      await sender.replaceTrack(screenTrack);
-    }
-
-    // Update local preview
-    const lv = document.querySelector('#lv');
-    if (lv) {
-      lv.srcObject = screenStream;
-      lv.style.width = '180px';
-    }
-
-    _screenSharing = true;
-    toast('Демонстрация экрана начата', 'success', 2000);
-
-    screenTrack.onended = async () => {
-      // Switch back to camera
-      _screenSharing = false;
-      try {
-        const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        const camTrack = camStream.getVideoTracks()[0];
-        const s = currentCall?.peerConnection?.getSenders().find(s => s.track?.kind === 'video');
-        if (s) await s.replaceTrack(camTrack);
-        if (lv) { lv.srcObject = camStream; lv.style.width = '140px'; }
-      } catch {}
-      toast('Демонстрация завершена', 'info', 2000);
-    };
-  } catch (err) {
-    if (err.name !== 'NotAllowedError') toast('Не удалось начать демонстрацию', 'error');
+    return;
   }
+
+  // Show quality picker
+  showScreenQualityPicker(async (res, fps) => {
+    if (!res) return; // cancelled
+    const resMap = {
+      '1080p': {width:1920,height:1080},
+      '720p':  {width:1280,height:720},
+      '480p':  {width:854, height:480},
+      '360p':  {width:640, height:360},
+    };
+    const dim = resMap[res] || resMap['720p'];
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width:{ideal:dim.width}, height:{ideal:dim.height}, frameRate:{ideal:parseInt(fps)} },
+        audio: true
+      });
+
+      const screenTrack = screenStream.getVideoTracks()[0];
+      // Replace video track in existing peer connection
+      const pc = currentCall?.peerConnection;
+      if (pc) {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(screenTrack);
+        } else {
+          // Add track if no video sender yet (audio-only call)
+          pc.addTrack(screenTrack, screenStream);
+        }
+      }
+
+      // Update local preview
+      const lv = document.querySelector('#lv');
+      if (lv) { lv.srcObject = screenStream; lv.style.cssText += ';width:180px;object-fit:contain;border-radius:8px'; }
+
+      _screenSharing = true;
+      // Update button appearance
+      document.querySelectorAll('.ss-toggle').forEach(b => {
+        b.style.background = 'var(--accent)';
+        b.querySelector('i').className = 'ti ti-screen-share-off';
+      });
+      toast(`Демонстрация: ${res} / ${fps} FPS`, 'success', 2000);
+
+      screenTrack.onended = () => {
+        _screenSharing = false;
+        screenStream = null;
+        document.querySelectorAll('.ss-toggle').forEach(b => {
+          b.style.background = 'rgba(255,255,255,.18)';
+          b.querySelector('i').className = 'ti ti-screen-share';
+        });
+        toast('Демонстрация остановлена', 'info', 1800);
+      };
+    } catch (err) {
+      if (err.name !== 'NotAllowedError') toast('Не удалось начать демонстрацию', 'error');
+    }
+  });
+}
+
+function showScreenQualityPicker(callback) {
+  const overlay = $('dialogOverlay');
+  const box = $('dialogBox');
+  box.innerHTML = `
+    <div class="dlg-ico info"><i class="ti ti-screen-share"></i></div>
+    <h3>Настройки демонстрации</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div>
+        <p style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Разрешение</p>
+        <div style="display:flex;flex-direction:column;gap:6px" id="resOpts">
+          <label class="sq-opt"><input type="radio" name="res" value="1080p"> 1080p (Full HD)</label>
+          <label class="sq-opt sq-sel"><input type="radio" name="res" value="720p" checked> 720p (HD)</label>
+          <label class="sq-opt"><input type="radio" name="res" value="480p"> 480p</label>
+          <label class="sq-opt"><input type="radio" name="res" value="360p"> 360p</label>
+        </div>
+      </div>
+      <div>
+        <p style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">FPS</p>
+        <div style="display:flex;flex-direction:column;gap:6px" id="fpsOpts">
+          <label class="sq-opt"><input type="radio" name="fps" value="60"> 60 FPS</label>
+          <label class="sq-opt sq-sel"><input type="radio" name="fps" value="30" checked> 30 FPS</label>
+          <label class="sq-opt"><input type="radio" name="fps" value="15"> 15 FPS</label>
+          <label class="sq-opt"><input type="radio" name="fps" value="5"> 5 FPS</label>
+        </div>
+      </div>
+    </div>
+    <div class="dlg-btns">
+      <button class="btn-secondary" id="dlgNo">Отмена</button>
+      <button class="btn-primary" id="dlgOk"><i class="ti ti-screen-share"></i> Начать</button>
+    </div>`;
+  overlay.classList.add('open');
+  // Style radio options
+  const style = document.createElement('style');
+  style.textContent = `.sq-opt{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:13px;transition:background .12s;border:1.5px solid var(--color-border-tertiary)}
+  .sq-opt:hover,.sq-opt.sq-sel{background:var(--accent-dim,rgba(99,102,241,.12));border-color:var(--accent,#6366f1)}
+  .sq-opt input{accent-color:var(--accent,#6366f1)}`;
+  document.head.appendChild(style);
+  // Highlight on change
+  box.querySelectorAll('input[type=radio]').forEach(r => {
+    r.addEventListener('change', () => {
+      box.querySelectorAll(`[name=${r.name}]`).forEach(x => x.closest('label').classList.remove('sq-sel'));
+      r.closest('label').classList.add('sq-sel');
+    });
+  });
+  const close = (v) => { overlay.classList.remove('open'); style.remove(); callback(v); };
+  $('dlgOk').onclick = () => {
+    const res = box.querySelector('input[name=res]:checked')?.value || '720p';
+    const fps = box.querySelector('input[name=fps]:checked')?.value || '30';
+    close({ res, fps });
+  };
+  $('dlgNo').onclick = () => close(null);
+  overlay.onclick = e => { if (e.target === overlay) close(null); };
 }
 
 function toggleMuteWin(btn) {
@@ -1517,13 +1600,29 @@ function toggleMuteWin(btn) {
 
 function endCall() {
   stopRing();
-  clearInterval(document.querySelector('.call-win')?._timer);
-  currentCall?.close(); currentCall = null;
-  localStream?.getTracks().forEach(t => t.stop()); localStream = null;
-  screenStream?.getTracks().forEach(t => t.stop()); screenStream = null;
-  _muted = false; _screenSharing = false;
-  document.querySelectorAll('.call-modal, .call-win').forEach(el => { if (el.id !== 'callModal') el.remove(); });
-  callModal.classList.remove('open');
+  // Stop all timers
+  document.querySelectorAll('.call-win').forEach(w => {
+    if (w._timer) clearInterval(w._timer);
+  });
+  // Close peer connection
+  try { currentCall?.close(); } catch {}
+  currentCall = null;
+  // Stop all media tracks
+  localStream?.getTracks().forEach(t => t.stop());
+  localStream = null;
+  screenStream?.getTracks().forEach(t => t.stop());
+  screenStream = null;
+  _muted = false;
+  _screenSharing = false;
+  // Remove all call windows
+  document.querySelectorAll('.call-win').forEach(el => el.remove());
+  // Hide the incoming call modal
+  if (callModal) {
+    callModal.style.display = 'none';
+    callModal.classList.remove('open');
+    // Reset for next call
+    setTimeout(() => { callModal.style.display = ''; }, 100);
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -1532,57 +1631,9 @@ function endCall() {
 let screenStream    = null;
 let _screenSharing  = false;
 
-async function startScreenShare() {
-  const target = callTarget();
-  if (!target) { toast('Демонстрация доступна только в личном чате', 'warning'); return; }
-  if (!peer || peer.disconnected) { toast('Нет соединения', 'error'); return; }
-
-  try {
-    // Get screen stream
-    screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
-      audio: true  // system audio if supported
-    });
-
-    // Get mic audio to mix in
-    let audioStream = null;
-    try {
-      audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints() });
-    } catch {}
-
-    // Combine screen video + mic audio
-    const tracks = [...screenStream.getTracks()];
-    if (audioStream) tracks.push(...audioStream.getAudioTracks());
-    const combined = new MediaStream(tracks);
-
-    localStream = combined;
-
-    // Call peer with screen stream
-    const call = peer.call(target, combined, { metadata: { video: true, screen: true } });
-    call.on('stream', remote => showScreenShareWindow(target, remote, combined));
-    call.on('close', endCall);
-    call.on('error', endCall);
-    currentCall = call;
-
-    // Show outgoing screen share UI
-    showScreenShareSending(target, combined);
-
-    // Stop screen share when user clicks "stop sharing" in browser
-    screenStream.getVideoTracks()[0].onended = () => {
-      endCall();
-      toast('Демонстрация экрана завершена', 'info', 2000);
-    };
-
-    _screenSharing = true;
-    toast('Демонстрация экрана начата', 'success', 2000);
-
-  } catch (err) {
-    if (err.name !== 'NotAllowedError') {
-      toast('Не удалось начать демонстрацию экрана', 'error');
-    }
-    screenStream?.getTracks().forEach(t => t.stop());
-    screenStream = null;
-  }
+// startScreenShare is only available mid-call via switchToScreenShare()
+function startScreenShare() {
+  toast('Демонстрация доступна во время звонка', 'info', 2500);
 }
 
 function showScreenShareSending(peerId, stream) {
@@ -1665,8 +1716,6 @@ function showScreenShareWindow(peerId, remoteStream, localStr) {
 
 // Handle incoming screen share call (peer sends screen metadata)
 // Override handleIncoming to detect screen share
-const _origHandleIncoming = handleIncomingCallRef;
-
 function handleIncomingWithScreen(call) {
   if (currentCall) { call.close(); return; }
   currentCall = call;
@@ -1678,12 +1727,12 @@ function handleIncomingWithScreen(call) {
   callNm.textContent = caller;
 
   if (isScreen) {
-    callSt.textContent = '🖥️ Запрос демонстрации экрана';
+    callSt.textContent = 'Демонстрация экрана';
     callAct.innerHTML = `
       <button class="call-btn call-ans" onclick="answerScreenShare()"><i class="ti ti-eye"></i></button>
       <button class="call-btn call-end" onclick="declineCall()"><i class="ti ti-x"></i></button>`;
   } else {
-    callSt.textContent = isVid ? '📹 Видеозвонок…' : '📞 Входящий…';
+    callSt.textContent = isVid ? 'Видеозвонок…' : 'Входящий звонок…';
     callAct.innerHTML = `
       <button class="call-btn call-ans" onclick="answerCall(${isVid})"><i class="ti ti-phone"></i></button>
       <button class="call-btn call-end" onclick="declineCall()"><i class="ti ti-phone-off"></i></button>`;
@@ -1731,8 +1780,6 @@ function toggleFullscreenShare() {
   }
 }
 
-// Patch initPeer to use screen-aware incoming handler
-function handleIncomingCallRef(call) { handleIncomingWithScreen(call); }
 
 
 // ══════════════════════════════════════════════
