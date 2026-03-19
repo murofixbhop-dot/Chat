@@ -354,6 +354,28 @@ const HISTORY_FILE = 'history.json';
 const MAX_HISTORY = 2000;
 let messageHistory = [];
 
+// Удаление сообщения
+app.post('/api/delete-message', async (req, res) => {
+  const { messageId, username } = req.body;
+  if (!messageId || !username) return res.status(400).json({ error: 'Нет данных' });
+
+  const idx = messageHistory.findIndex(m => String(m.id) === String(messageId));
+  if (idx === -1) return res.status(404).json({ error: 'Сообщение не найдено' });
+
+  const msg = messageHistory[idx];
+  // Only author can delete
+  if (msg.user !== username) return res.status(403).json({ error: 'Нет прав' });
+
+  const room = msg.room;
+  messageHistory.splice(idx, 1);
+  saveHistory(); // async, don't await — respond immediately
+
+  // Notify everyone in the room
+  io.to(room).emit('message-deleted', { messageId, room });
+
+  res.json({ success: true });
+});
+
 async function loadHistory() {
   try {
     const url = await getDownloadUrl(HISTORY_FILE);
