@@ -1757,15 +1757,25 @@ function _createPeer() {
     if (candidate) socket.emit('call-ice', { to: _callTarget, from: currentUser, candidate });
   };
 
-  // Build remote stream from incoming tracks
+  // Build remote stream — update video element on every new track (handles screen share)
   let remoteStream = new MediaStream();
   rtcPeer.ontrack = ({ track, streams }) => {
-    const s = streams?.[0] || remoteStream;
-    s.addTrack(track);
-    remoteStream = s;
+    console.log('[RTC] ontrack:', track.kind, track.id);
+    if (streams?.[0]) {
+      remoteStream = streams[0];
+    } else {
+      remoteStream.addTrack(track);
+    }
     if (!_connected) {
       _connected = true;
       _showCallWindow(remoteStream);
+    } else {
+      // Update existing video element (e.g. screen share video track added)
+      const rv = document.querySelector('#rv');
+      if (rv && track.kind === 'video') {
+        rv.srcObject = remoteStream;
+        console.log('[RTC] Updated rv with new video track');
+      }
     }
   };
 
@@ -1787,7 +1797,7 @@ function _createPeer() {
 
 // ── CALL WINDOW ──────────────────────────────────────────
 function _showCallWindow(remoteStream) {
-  document.querySelectorAll('.call-win').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
+  document.querySelectorAll('.call-win, .call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
   const win = document.createElement('div');
   win.className = 'call-win-float';
 
@@ -1847,15 +1857,10 @@ function _showCallWindow(remoteStream) {
 
 // Make call window draggable ← УДОБСТВО
 function makeDraggable(el) {
-  let ox=0, oy=0, x=0, y=0;
-  // Position initially — bottom right
-  el.style.right = '24px';
-  el.style.bottom = '24px';
-  el.style.left = 'auto';
-  el.style.top  = 'auto';
+  let ox=0, oy=0;
+  // Position from CSS (top-right) — let CSS handle initial position
 
   const onDown = (e) => {
-    // Don't drag if clicking buttons
     if (e.target.closest('button, video')) return;
     e.preventDefault();
     const isTouch = e.type === 'touchstart';
@@ -1863,6 +1868,7 @@ function makeDraggable(el) {
     const cy = isTouch ? e.touches[0].clientY : e.clientY;
     const rect = el.getBoundingClientRect();
     ox = cx - rect.left; oy = cy - rect.top;
+    // Switch from right/top to left/top for dragging
     el.style.right = 'auto'; el.style.bottom = 'auto';
     el.style.left = rect.left + 'px'; el.style.top = rect.top + 'px';
 
@@ -1901,6 +1907,12 @@ function toggleMuteWin(btn) {
 // ── SCREEN SHARE ─────────────────────────────────────────
 async function switchToScreenShare() {
   if (!rtcPeer || !_connected) return;
+
+  // Check if screen share is supported
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    toast('Демонстрация экрана не поддерживается на этом устройстве', 'warning', 4000);
+    return;
+  }
   if (_screenSharing) {
     screenStream?.getTracks().forEach(t => t.stop());
     screenStream = null; _screenSharing = false;
@@ -1940,8 +1952,18 @@ async function switchToScreenShare() {
           }, 100);
         }
       }
+      // Show screen preview locally
       const localPreview = document.querySelector('#lv');
-      if (localPreview) { localPreview.srcObject = screenStream; localPreview.style.width = '200px'; }
+      if (localPreview) {
+        localPreview.srcObject = screenStream;
+        localPreview.style.width = '180px';
+        localPreview.style.height = '120px';
+        localPreview.style.objectFit = 'contain';
+        localPreview.style.borderRadius = '8px';
+        localPreview.style.bottom = '72px';
+        localPreview.style.right = '14px';
+        localPreview.style.position = 'absolute';
+      }
       _screenSharing = true;
       document.querySelectorAll('.ss-toggle').forEach(b => {
         b.style.background = 'var(--accent)';
@@ -2057,8 +2079,16 @@ function _vpGetOrCreate(pid, url) {
     a.volume  = (parseInt(localStorage.getItem('aura_vol') || '100')) / 100;
     const spk = localStorage.getItem('aura_spk');
     if (spk && spk !== 'default' && a.setSinkId) a.setSinkId(spk).catch(() => {});
-    a.addEventListener('timeupdate', () => _vpUpdate(pid, a));
-    a.addEventListener('ended',      () => _vpReset(pid, a));
+    // Use rAF instead of timeupdate for smooth waveform scrubbing
+    let _vpRaf = null;
+    const _vpTick = () => {
+      if (!a.paused) _vpUpdate(pid, a);
+      _vpRaf = requestAnimationFrame(_vpTick);
+    };
+    a.addEventListener('play',  () => { cancelAnimationFrame(_vpRaf); _vpRaf = requestAnimationFrame(_vpTick); });
+    a.addEventListener('pause', () => { cancelAnimationFrame(_vpRaf); _vpUpdate(pid, a); });
+    a.addEventListener('ended', () => { cancelAnimationFrame(_vpRaf); _vpReset(pid, a); });
+    a.addEventListener('seeked', () => _vpUpdate(pid, a));
     a.addEventListener('loadedmetadata', () => {
       const c = document.getElementById(pid);
       if (c) {
@@ -2087,8 +2117,17 @@ function vpToggle(pid, url) {
     }
   });
   if (a.paused) {
-    a.play();
-    if (btn) btn.className = 'ti ti-player-pause';
+    // Ensure audio is loaded before play
+    if (a.readyState < 3) {
+      a.load();
+      a.addEventListener('canplay', () => {
+        a.play().catch(() => {});
+        if (btn) btn.className = 'ti ti-player-pause';
+      }, { once: true });
+    } else {
+      a.play().catch(() => {});
+      if (btn) btn.className = 'ti ti-player-pause';
+    }
   } else {
     a.pause();
     if (btn) btn.className = 'ti ti-player-play';
@@ -2104,16 +2143,35 @@ function vpSeek(e, pid, url) {
   _vpUpdate(pid, a);
 }
 
+let _vpLastUpdate = 0;
 function _vpUpdate(pid, a) {
+  // Throttle: max 30fps
+  const now = performance.now();
+  if (now - _vpLastUpdate < 33) return;
+  _vpLastUpdate = now;
+
   const c = document.getElementById(pid);
   if (!c) return;
-  const pct = a.duration ? a.currentTime / a.duration : 0;
+  const dur = a.duration;
+  if (!dur || !isFinite(dur)) return;
+  const pct = a.currentTime / dur;
   const bars = c.querySelectorAll('.vp-bar');
-  bars.forEach((b, i) => b.classList.toggle('played', i / bars.length < pct));
+  const playedCount = Math.floor(pct * bars.length);
+  // Use index comparison instead of classList.toggle for speed
+  bars.forEach((b, i) => {
+    const shouldPlay = i < playedCount;
+    if (shouldPlay !== b._played) {
+      b._played = shouldPlay;
+      b.style.background = shouldPlay
+        ? (c.closest('.msg-row.own') ? 'rgba(255,255,255,.95)' : 'var(--accent)')
+        : '';
+    }
+  });
   const pos = c.querySelector('.vp-pos');
   if (pos) {
     const m = Math.floor(a.currentTime/60), s = Math.floor(a.currentTime%60);
-    pos.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    const txt = `${m}:${s.toString().padStart(2,'0')}`;
+    if (pos.textContent !== txt) pos.textContent = txt;
   }
 }
 
@@ -2121,7 +2179,7 @@ function _vpReset(pid, a) {
   a.currentTime = 0;
   const c = document.getElementById(pid);
   if (!c) return;
-  c.querySelectorAll('.vp-bar').forEach(b => b.classList.remove('played'));
+  c.querySelectorAll('.vp-bar').forEach(b => { b._played = false; b.style.background = ''; });
   const btn = c.querySelector('.vp-play i');
   if (btn) btn.className = 'ti ti-player-play';
   const pos = c.querySelector('.vp-pos');
