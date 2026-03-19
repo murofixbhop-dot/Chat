@@ -232,6 +232,7 @@ option { background: var(--surface2); color: var(--text); }
 .field-wrap { position: relative; }
 .field-ico { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 16px; pointer-events: none; }
 .field-wrap .field { padding-left: 44px; }
+.field-wrap.has-toggle .field { padding-left: 44px; padding-right: 44px; }
 
 .lbl { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 7px; }
 
@@ -1115,13 +1116,11 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
 }
 
 /* ── Password field toggle ── */
-.field-wrap { position: relative; }
 .pass-toggle {
   position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
   background: none; border: none; cursor: pointer;
-  color: var(--color-text-secondary, #9898b0);
+  color: var(--text3, #9898b0);
   font-size: 16px; padding: 4px;
-  transition: color .15s;
+  transition: color .15s; z-index: 1;
 }
 .pass-toggle:hover { color: var(--accent, #6366f1); }
-.field-wrap .field { padding-right: 44px; }
