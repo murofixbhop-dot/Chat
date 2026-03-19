@@ -154,33 +154,54 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 // ========== API ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
 app.use(express.json());
 
-// Вход/регистрация с проверкой уникальности
+// Хэш пароля (простой SHA-256 без внешних зависимостей)
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password + 'aura_salt_2026').digest('hex');
+}
+
+// Вход/регистрация с паролем
 app.post('/api/login', async (req, res) => {
-  const { username } = req.body;
+  const { username, password } = req.body;
   if (!username || username.trim() === '') {
     return res.status(400).json({ error: 'Имя не может быть пустым' });
   }
+  if (!password || password.trim().length < 4) {
+    return res.status(400).json({ error: 'Пароль должен быть не менее 4 символов' });
+  }
   const cleanName = username.trim();
+  const pwHash = hashPassword(password.trim());
 
   if (users.has(cleanName)) {
     const userData = users.get(cleanName);
+    // Check password
+    if (userData.passwordHash && userData.passwordHash !== pwHash) {
+      return res.status(401).json({ error: 'Неверный пароль' });
+    }
+    // If no password set yet (old account) — set it now
+    if (!userData.passwordHash) {
+      userData.passwordHash = pwHash;
+      users.set(cleanName, userData);
+      await saveUsers();
+    }
     return res.json({
       success: true,
       user: {
         username: cleanName,
         nickname: userData.nickname || cleanName,
         avatar: userData.avatar || null,
-        theme: userData.theme || 'light',
+        theme: userData.theme || 'dark',
         friends: userData.friends || [],
         friendRequests: userData.friendRequests || [],
         groups: userData.groups || []
       }
     });
   } else {
+    // New registration
     const newUser = {
       nickname: cleanName,
+      passwordHash: pwHash,
       avatar: null,
-      theme: 'light',
+      theme: 'dark',
       friends: [],
       friendRequests: [],
       groups: []
@@ -189,11 +210,12 @@ app.post('/api/login', async (req, res) => {
     await saveUsers();
     return res.json({
       success: true,
+      isNew: true,
       user: {
         username: cleanName,
         nickname: cleanName,
         avatar: null,
-        theme: 'light',
+        theme: 'dark',
         friends: [],
         friendRequests: [],
         groups: []
