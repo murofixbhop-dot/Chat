@@ -352,6 +352,11 @@ app.post('/api/create-group', async (req, res) => {
     }
   }
   await saveUsers();
+  // Notify all group members in real-time
+  [...members, creator].forEach(m => {
+    const sid = userSockets.get(m);
+    if (sid) io.to(sid).emit('group-created', { groupId, name, creator });
+  });
   res.json({ success: true, groupId });
 });
 
