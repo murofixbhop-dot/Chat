@@ -661,8 +661,8 @@ option { background: var(--surface2); color: var(--text); }
 
 /* ← КРАСОТА: dot-grid background */
 .msgs {
-  flex: 1; overflow-y: auto; padding: 20px 20px 12px;
-  display: flex; flex-direction: column; gap: 4px;
+  flex: 1; overflow-y: auto; padding: 12px 16px 8px;
+  display: flex; flex-direction: column; gap: 2px;
   background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,.025) 1px, transparent 0);
   background-size: 24px 24px;
   position: relative;
@@ -731,9 +731,10 @@ option { background: var(--surface2); color: var(--text); }
 
 /* Video circle ← КРАСОТА */
 .msg-circle {
-  width: 200px; height: 200px; border-radius: 50%;
-  object-fit: cover; cursor: pointer; display: block; margin-top: 6px;
-  border: 3px solid rgba(255,255,255,.15);
+  width: 180px; height: 180px;
+  border-radius: 16px;
+  object-fit: cover; cursor: pointer; display: block; margin-top: 4px;
+  border: none; outline: none;
 }
 
 /* Reaction row */
@@ -1408,46 +1409,39 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
    MESSAGE TYPES — optimized layout  ← КРАСОТА
 ════════════════════════════════════════════════ */
 
-/* Video circle → square with rounded corners */
-.msg-circle {
-  width: 200px; height: 200px;
-  border-radius: 18px !important;  /* square, not circle */
-  object-fit: cover; cursor: pointer; display: block;
-  margin-top: 4px;
-  border: none !important;
-}
+/* msg-circle defined above */
 
 /* Custom voice player — no default browser controls */
 .voice-player {
   display: flex; align-items: center; gap: 10px;
-  background: rgba(0,0,0,.15);
-  border-radius: 14px; padding: 10px 14px;
-  margin-top: 4px; min-width: 200px; max-width: 280px;
-  user-select: none;
+  background: rgba(0,0,0,.12);
+  border-radius: 12px; padding: 8px 12px;
+  margin-top: 2px; min-width: 220px; max-width: 260px;
+  user-select: none; -webkit-user-select: none;
 }
-.msg-row.own .voice-player { background: rgba(0,0,0,.2); }
+.msg-row.own .voice-player { background: rgba(0,0,0,.18); }
 .vp-play {
-  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-  background: #fff; color: #000; display: flex; align-items: center; justify-content: center;
-  font-size: 14px; cursor: pointer; border: none;
-  transition: transform .12s, opacity .12s;
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(255,255,255,.9); color: #111;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; cursor: pointer; border: none;
+  transition: transform .12s; box-shadow: 0 1px 4px rgba(0,0,0,.2);
 }
-.msg-row.own .vp-play { background: rgba(255,255,255,.9); }
 .vp-play:hover  { transform: scale(1.08); }
-.vp-play:active { transform: scale(.93); }
+.vp-play:active { transform: scale(.91); }
 .vp-body { flex: 1; min-width: 0; }
 .vp-waveform {
-  height: 28px; display: flex; align-items: center; gap: 2px;
+  height: 24px; display: flex; align-items: center; gap: 1.5px;
   cursor: pointer; margin-bottom: 2px;
 }
 .vp-bar {
-  flex: 1; background: rgba(255,255,255,.35); border-radius: 2px;
-  transition: background .1s; min-height: 3px;
+  flex: 1; background: rgba(255,255,255,.28); border-radius: 2px;
+  transition: background .08s; min-height: 2px;
 }
-.vp-bar.played { background: rgba(255,255,255,.85); }
-.msg-row:not(.own) .vp-bar { background: rgba(0,0,0,.2); }
+.vp-bar.played { background: rgba(255,255,255,.9); }
+.msg-row:not(.own) .vp-bar { background: rgba(0,0,0,.18); }
 .msg-row:not(.own) .vp-bar.played { background: var(--accent); }
-.vp-meta { display: flex; justify-content: space-between; font-size: 10px; opacity: .6; }
+.vp-meta { display: flex; justify-content: space-between; font-size: 10px; opacity: .55; }
 
 /* File message — compact */
 .msg-file {
