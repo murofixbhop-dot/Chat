@@ -34,10 +34,11 @@ function hideSplash() {
 
 socket.on('connect', () => {
   if (splashText) splashText.textContent = 'Подключено ✓';
-  // Re-identify and reload if user was logged in (handles socket reconnection)
   if (currentUser) {
     socket.emit('identify', currentUser);
     loadUserData();
+    // Re-broadcast our peerId after reconnect
+    if (myPeerId) socket.emit('peer-id', { username: currentUser, peerId: myPeerId });
   }
 });
 socket.on('connect_error', () => {
@@ -59,9 +60,16 @@ setTimeout(hideSplash, 700);
   document.documentElement.setAttribute('data-theme', theme);
   document.documentElement.setAttribute('data-pal', pal);
   document.documentElement.style.setProperty('--accent', accent);
-  // secondary accent
   const secondMap = { '#6366f1':'#8b5cf6','#06b6d4':'#0891b2','#f43f5e':'#e11d48','#10b981':'#059669','#f59e0b':'#d97706','#ec4899':'#db2777' };
   document.documentElement.style.setProperty('--accent2', secondMap[accent] || '#8b5cf6');
+  const glow = accent + '59'; // ~35% opacity
+  document.documentElement.style.setProperty('--accent-glow', glow);
+  // Sync palette buttons once DOM is ready
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.pal').forEach(b => {
+      b.classList.toggle('active', b.dataset.pal === pal);
+    });
+  });
 })();
 
 // ══════════════════════════════════════════════
@@ -180,6 +188,9 @@ const palMap       = { violet:'#6366f1', cyan:'#06b6d4', rose:'#f43f5e' };
 function applyAccent(hex) {
   document.documentElement.style.setProperty('--accent', hex);
   document.documentElement.style.setProperty('--accent2', accentSecond[hex] || '#8b5cf6');
+  // Update glow and dim so logo, buttons and orbs all update instantly
+  document.documentElement.style.setProperty('--accent-glow', hex + '59');
+  document.documentElement.style.setProperty('--accent-dim',  hex + '2e');
 }
 
 function applyPalette(name) {
@@ -1403,14 +1414,19 @@ const callNm    = $('callName');
 const callSt    = $('callStatus');
 const callAct   = $('callActions');
 
+// myPeerId stores our actual PeerJS ID (username + random suffix)
+let myPeerId = null;
+// peerIds maps username -> peerId (received from others via socket)
+const peerIds = {};
+
 function initPeer() {
   if (!currentUser) return;
-  // Destroy previous instance cleanly
-  if (peer) {
-    try { peer.destroy(); } catch {}
-    peer = null;
-  }
-  peer = new Peer(currentUser, {
+  if (peer) { try { peer.destroy(); } catch {} peer = null; }
+
+  // Generate a unique peer ID to avoid conflicts on reconnect
+  myPeerId = currentUser + '_' + Math.random().toString(36).slice(2, 8);
+
+  peer = new Peer(myPeerId, {
     host: '0.peerjs.com', port: 443, path: '/', secure: true,
     debug: 0,
     config: {
@@ -1421,31 +1437,56 @@ function initPeer() {
       ]
     }
   });
+
   peer.on('open', id => {
-    console.log('[Peer] Connected, id:', id);
+    console.log('[Peer] Open, id:', id);
+    myPeerId = id;
+    // Broadcast our peerId to the server so others can call us
+    socket.emit('peer-id', { username: currentUser, peerId: id });
   });
+
   peer.on('call', call => {
-    console.log('[Peer] Incoming call from:', call.peer);
+    console.log('[Peer] Incoming call from peer:', call.peer, 'meta:', call.metadata);
     handleIncomingWithScreen(call);
   });
+
   peer.on('error', err => {
-    console.error('[Peer] Error:', err.type, err);
-    // Retry on network errors, not on ID conflicts
-    if (!['unavailable-id', 'peer-unavailable', 'browser-incompatible'].includes(err.type)) {
-      setTimeout(initPeer, 3000);
-    }
+    console.error('[Peer] Error:', err.type, err.message || err);
     if (err.type === 'unavailable-id') {
-      toast('Ваш ID занят, перезагрузите страницу', 'error');
+      // Retry with different suffix
+      setTimeout(initPeer, 500);
+    } else if (!['peer-unavailable', 'browser-incompatible'].includes(err.type)) {
+      setTimeout(initPeer, 4000);
     }
   });
+
   peer.on('disconnected', () => {
-    console.log('[Peer] Disconnected, reconnecting...');
-    try { peer.reconnect(); } catch {}
+    console.log('[Peer] Disconnected');
+    try { peer.reconnect(); } catch { setTimeout(initPeer, 2000); }
   });
+
   peer.on('close', () => {
     console.log('[Peer] Closed');
     peer = null;
   });
+}
+
+// When someone new connects, they ask for our peer ID
+socket.on('request-peer-id', () => {
+  if (myPeerId && currentUser) {
+    socket.emit('peer-id', { username: currentUser, peerId: myPeerId });
+  }
+});
+
+// Receive peer IDs from other users
+socket.on('peer-id', ({ username, peerId }) => {
+  console.log('[Socket] Got peerId for', username, ':', peerId);
+  peerIds[username] = peerId;
+});
+
+// Get the peerId for a given username
+function getPeerId(username) {
+  return peerIds[username] || null;
 }
 
 function callTarget() {
@@ -1498,29 +1539,35 @@ function declineCall() {
 function startCall(isVid) {
   const target = callTarget();
   if (!target) { toast('Звонок доступен только в личном чате', 'warning'); return; }
-  if (!peer) { toast('Соединение не готово, попробуйте снова', 'error'); return; }
+  if (!peer || !myPeerId) { toast('Соединение не готово, попробуйте снова', 'error'); return; }
+
+  const targetPeerId = getPeerId(target);
+  if (!targetPeerId) {
+    toast(`${target} недоступен для звонка (не в сети)`, 'warning');
+    return;
+  }
+
+  console.log('[Call] Calling', target, 'via peerId:', targetPeerId);
 
   navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid })
     .then(stream => {
       localStream = stream;
-      const call = peer.call(target, stream, { metadata: { video: isVid, screen: false } });
+      const call = peer.call(targetPeerId, stream, {
+        metadata: { video: isVid, screen: false, callerName: currentUser }
+      });
 
-      // Set currentCall BEFORE attaching listeners to avoid race
       currentCall = call;
 
       call.on('stream', remote => {
         showCallWindow(target, remote, isVid);
       });
-      call.on('close', () => {
-        endCall();
-      });
+      call.on('close', () => endCall());
       call.on('error', err => {
-        console.error('Call error:', err);
+        console.error('[Call] Error:', err);
         endCall();
-        toast('Ошибка звонка', 'error');
+        toast('Ошибка звонка: ' + (err.type || err.message || ''), 'error');
       });
 
-      // Show outgoing UI
       setAvatar(callAva, target, userAvatars[target]);
       callNm.textContent = target;
       callSt.textContent = isVid ? 'Видеозвонок…' : 'Звоним…';
@@ -1534,7 +1581,7 @@ function startCall(isVid) {
       callModal.classList.add('open');
     })
     .catch(err => {
-      console.error('getUserMedia error:', err);
+      console.error('[Call] getUserMedia error:', err);
       toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error');
     });
 }
@@ -1855,9 +1902,12 @@ function showScreenShareWindow(peerId, remoteStream, localStr) {
 function handleIncomingWithScreen(call) {
   if (currentCall) { call.close(); return; }
   currentCall = call;
-  const caller = call.peer;
+  // caller name is in metadata.callerName; fall back to parsing the peerId
+  const caller = call.metadata?.callerName || call.peer.split('_')[0];
   const isVid    = call.metadata?.video  || false;
   const isScreen = call.metadata?.screen || false;
+
+  console.log('[Incoming] From:', caller, 'isVid:', isVid, 'isScreen:', isScreen);
 
   setAvatar(callAva, caller, userAvatars[caller]);
   callNm.textContent = caller;
