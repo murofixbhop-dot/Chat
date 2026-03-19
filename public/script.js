@@ -276,7 +276,8 @@ function startSession(user) {
   socket.emit('identify', currentUser);
   loadUserData();
   enableInput();
-  initPeer();
+  initCallDOM();
+  // initPeer() removed — using Socket.IO signaling instead
   gotoRoom('general');
   setupDragDrop();
   setupKeyboardShortcuts(); // ← УДОБСТВО
@@ -1413,228 +1414,56 @@ async function deleteAccount() {
   location.reload();
 }
 
-// ══════════════════════════════════════════════
-// CALLS (PeerJS)  ← УДОБСТВО
-// ══════════════════════════════════════════════
-const callModal = $('callModal');
-const callAva   = $('callAvatar');
-const callNm    = $('callName');
-const callSt    = $('callStatus');
-const callAct   = $('callActions');
+// ══════════════════════════════════════════════════════════
+//  CALLS — чистый WebRTC + Socket.IO сигналинг (без PeerJS)
+//  Работает надёжно: сигналы идут через Socket.IO,
+//  медиа — напрямую peer-to-peer через ICE/STUN
+// ══════════════════════════════════════════════════════════
 
-// myPeerId = username + random suffix, пересоздаётся при каждом reconnect
-let myPeerId = null;
-// peerIds: username -> peerId  (получаем от сервера)
-const peerIds = {};
+// --- STATE ---
+let rtcPeer      = null;   // RTCPeerConnection
+let _callTarget  = null;   // username собеседника
+let _callIsVid   = false;
+let _isCaller    = false;
+let _callActive  = false;
 
-function makePeerId() {
-  return currentUser + '_' + Math.random().toString(36).slice(2, 8);
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+];
+
+// --- DOM REFS (set after DOM ready) ---
+let callModal, callAva, callNm, callSt, callAct;
+function initCallDOM() {
+  callModal = $('callModal');
+  callAva   = $('callAvatar');
+  callNm    = $('callName');
+  callSt    = $('callStatus');
+  callAct   = $('callActions');
 }
 
-function peerConfig() {
-  const h = window.location.hostname;
-  const p = window.location.port ? parseInt(window.location.port)
-          : (window.location.protocol === 'https:' ? 443 : 80);
-  const ssl = window.location.protocol === 'https:';
-  return {
-    ownHost: h, ownPort: p, ssl,
-    ice: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-    ]
-  };
-}
-
-function initPeer() {
-  if (!currentUser) return;
-  if (peer) { try { peer.destroy(); } catch {} peer = null; }
-  myPeerId = makePeerId();
-  const cfg = peerConfig();
-
-  // Connect to our own PeerJS server (installed via npm)
-  peer = new Peer(myPeerId, {
-    host: cfg.ownHost,
-    port: cfg.ownPort,
-    path: '/peerjs',
-    secure: cfg.ssl,
-    debug: 1,
-    config: { iceServers: cfg.ice }
-  });
-
-  peer.on('open', id => {
-    console.log('[Peer] Own server connected, id:', id);
-    myPeerId = id;
-    socket.emit('peer-id', { username: currentUser, peerId: id });
-  });
-
-  peer.on('call', call => {
-    console.log('[Peer] Incoming call peer:', call.peer, 'meta:', call.metadata);
-    handleIncomingWithScreen(call);
-  });
-
-  peer.on('error', err => {
-    console.error('[Peer] Error type:', err.type, err.message || '');
-    if (err.type === 'unavailable-id') {
-      setTimeout(initPeer, 600);
-    } else if (err.type === 'server-error' || err.type === 'network' || err.type === 'socket-error') {
-      console.warn('[Peer] Own server unreachable, trying cloud...');
-      setTimeout(initPeerCloud, 1000);
-    } else if (!['peer-unavailable','browser-incompatible'].includes(err.type)) {
-      setTimeout(initPeer, 4000);
-    }
-  });
-
-  peer.on('disconnected', () => {
-    console.log('[Peer] Disconnected');
-    try { peer.reconnect(); } catch { setTimeout(initPeer, 2000); }
-  });
-
-  peer.on('close', () => { peer = null; });
-}
-
-// Запасной вариант — публичный PeerJS облако
-function initPeerCloud() {
-  if (!currentUser) return;
-  if (peer) { try { peer.destroy(); } catch {} peer = null; }
-  myPeerId = makePeerId();
-  peer = new Peer(myPeerId, {
-    host: '0.peerjs.com', port: 443, path: '/', secure: true,
-    debug: 0,
-    config: { iceServers: peerConfig().ice }
-  });
-  peer.on('open', id => {
-    console.log('[Peer] Cloud connected, id:', id);
-    myPeerId = id;
-    socket.emit('peer-id', { username: currentUser, peerId: id });
-  });
-  peer.on('call', call => handleIncomingWithScreen(call));
-  peer.on('error', err => {
-    console.error('[Peer] Cloud error:', err.type);
-    if (err.type === 'unavailable-id') setTimeout(initPeerCloud, 600);
-    else if (!['peer-unavailable','browser-incompatible'].includes(err.type))
-      setTimeout(initPeerCloud, 5000);
-  });
-  peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
-  peer.on('close', () => { peer = null; });
-}
-
-// When someone new connects, they ask for our peer ID
-// Server asks us to re-broadcast our peerId
-socket.on('request-peer-id', () => {
-  if (myPeerId && currentUser) {
-    socket.emit('peer-id', { username: currentUser, peerId: myPeerId });
-  }
-});
-
-// Bulk registry from server when we first connect
-socket.on('peer-id-registry', (registry) => {
-  Object.assign(peerIds, registry);
-  console.log('[PeerIDs] Registry loaded:', Object.keys(registry));
-});
-
-// Individual peer ID update
-socket.on('peer-id', ({ username, peerId }) => {
-  console.log('[PeerID] Got', username, '→', peerId);
-  peerIds[username] = peerId;
-});
-
-function getPeerId(username) {
-  return peerIds[username] || null;
-}
-
-function callTarget() {
-  if (!currentRoom.startsWith('private:')) return null;
-  return currentRoom.split(':').slice(1).find(p => p !== currentUser) || null;
-}
-
-// handleIncoming replaced by handleIncomingWithScreen
-
-function ringBeep() {
-  try {
-    const ctx = new AudioContext();
-    const beep = () => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=440; g.gain.setValueAtTime(.25,ctx.currentTime); g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.5); o.start(ctx.currentTime); o.stop(ctx.currentTime+.5); };
-    beep(); window._ring = setInterval(beep, 1500);
-  } catch {}
-}
-
-function stopRing() { clearInterval(window._ring); }
-
-function answerCall(isVid) {
-  stopRing();
-  const call = currentCall; // capture ref before async
-  navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid })
-    .then(stream => {
-      localStream = stream;
-      call.answer(stream);
-      call.on('stream', remote => {
-        showCallWindow(call.peer, remote, isVid);
-      });
-      call.on('close', () => endCall());
-      call.on('error', err => {
-        console.error('Answer error:', err);
-        endCall();
-      });
-      callModal.classList.remove('open');
-    })
-    .catch(err => {
-      console.error('getUserMedia error:', err);
-      toast('Нет доступа к медиа', 'error');
-      declineCall();
-    });
-}
-
-function declineCall() {
-  stopRing();
-  currentCall?.close(); currentCall = null;
-  callModal.classList.remove('open');
-}
-
+// ── OUTGOING CALL ────────────────────────────────────────
 function startCall(isVid) {
   const target = callTarget();
-  if (!target) { toast('Звонок доступен только в личном чате', 'warning'); return; }
-  if (!peer || !myPeerId) { toast('Соединение не готово', 'error'); return; }
+  if (!target) { toast('Открой личный чат для звонка', 'warning'); return; }
+  if (_callActive) { toast('Звонок уже идёт', 'warning'); return; }
+  _callTarget = target;
+  _callIsVid  = isVid;
+  _isCaller   = true;
 
-  const pid = getPeerId(target);
-  if (pid) {
-    _doCall(target, pid, isVid);
-  } else {
-    // Ask server for their latest peerId, wait up to 3s
-    socket.emit('get-peer-id', { target });
-    toast('Подключение к ' + target + '…', 'info', 2000);
-    let attempts = 0;
-    const check = setInterval(() => {
-      attempts++;
-      const fresh = getPeerId(target);
-      if (fresh) {
-        clearInterval(check);
-        _doCall(target, fresh, isVid);
-      } else if (attempts >= 6) {
-        clearInterval(check);
-        toast(target + ' сейчас недоступен', 'warning');
-      }
-    }, 500);
-  }
-}
+  console.log('[Call] Calling', target, 'video:', isVid);
 
-function _doCall(target, targetPeerId, isVid) {
-  console.log('[Call] Calling', target, '@ peerId:', targetPeerId, 'video:', isVid);
   navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid })
     .then(stream => {
       localStream = stream;
-      const call = peer.call(targetPeerId, stream, {
-        metadata: { video: isVid, screen: false, callerName: currentUser }
+      _setupRTC();
+      // Notify callee via socket BEFORE offer
+      socket.emit('call-invite', {
+        to: target, from: currentUser, isVid
       });
-      currentCall = call;
-
-      call.on('stream', remote => showCallWindow(target, remote, isVid));
-      call.on('close',  () => endCall());
-      call.on('error',  err => {
-        console.error('[Call] peer error:', err.type, err);
-        endCall();
-        toast('Ошибка звонка: ' + (err.type || ''), 'error');
-      });
-
+      // Show outgoing UI
       setAvatar(callAva, target, userAvatars[target]);
       callNm.textContent = target;
       callSt.textContent = isVid ? 'Видеозвонок…' : 'Звоним…';
@@ -1648,198 +1477,191 @@ function _doCall(target, targetPeerId, isVid) {
       callModal.classList.add('open');
     })
     .catch(err => {
-      console.error('[Call] getUserMedia:', err.name, err.message);
+      console.error('[Call] getUserMedia:', err);
       toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error');
     });
 }
 
-let _muted = false;
+// ── INCOMING CALL (socket event) ─────────────────────────
+socket.on('call-invite', ({ from, isVid }) => {
+  if (_callActive) {
+    socket.emit('call-busy', { to: from, from: currentUser });
+    return;
+  }
+  console.log('[Call] Incoming from', from, 'video:', isVid);
+  _callTarget = from;
+  _callIsVid  = isVid;
+  _isCaller   = false;
+
+  setAvatar(callAva, from, userAvatars[from]);
+  callNm.textContent = from;
+  callSt.textContent = isVid ? 'Видеозвонок…' : 'Входящий звонок…';
+  callAct.innerHTML = `
+    <button class="call-btn call-ans" onclick="answerCall()">
+      <i class="ti ti-phone"></i>
+    </button>
+    <button class="call-btn call-end" onclick="declineCall()">
+      <i class="ti ti-phone-off"></i>
+    </button>`;
+  callModal.classList.add('open');
+  ringBeep();
+});
+
+socket.on('call-busy', ({ from }) => {
+  toast(from + ' сейчас занят', 'warning');
+  endCall();
+});
+
+// ── ANSWER ───────────────────────────────────────────────
+function answerCall() {
+  stopRing();
+  navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: _callIsVid })
+    .then(stream => {
+      localStream = stream;
+      _setupRTC();
+      // Tell caller we answered — they create and send the offer
+      socket.emit('call-answer-ready', { to: _callTarget, from: currentUser });
+      callModal.classList.remove('open');
+    })
+    .catch(err => {
+      console.error('[Call] answer getUserMedia:', err);
+      toast('Нет доступа к медиа', 'error');
+      declineCall();
+    });
+}
+
+function declineCall() {
+  stopRing();
+  socket.emit('call-decline', { to: _callTarget, from: currentUser });
+  _cleanupCall();
+  callModal.classList.remove('open');
+}
+
+socket.on('call-decline', ({ from }) => {
+  toast(from + ' отклонил звонок', 'info', 2500);
+  endCall();
+});
+
+// ── SIGNALING EXCHANGE ────────────────────────────────────
+// Callee is ready → caller creates offer
+socket.on('call-answer-ready', async ({ from }) => {
+  if (!_isCaller || !rtcPeer) return;
+  console.log('[SDP] Creating offer for', from);
+  callSt.textContent = 'Соединение…';
+  try {
+    const offer = await rtcPeer.createOffer();
+    await rtcPeer.setLocalDescription(offer);
+    socket.emit('call-offer', { to: from, from: currentUser, sdp: offer });
+  } catch (e) { console.error('[SDP] offer error:', e); endCall(); }
+});
+
+// Callee receives offer → creates answer
+socket.on('call-offer', async ({ from, sdp }) => {
+  if (_isCaller || !rtcPeer) return;
+  console.log('[SDP] Got offer from', from);
+  try {
+    await rtcPeer.setRemoteDescription(new RTCSessionDescription(sdp));
+    const answer = await rtcPeer.createAnswer();
+    await rtcPeer.setLocalDescription(answer);
+    socket.emit('call-answer', { to: from, from: currentUser, sdp: answer });
+  } catch (e) { console.error('[SDP] answer error:', e); endCall(); }
+});
+
+// Caller receives answer
+socket.on('call-answer', async ({ from, sdp }) => {
+  if (!_isCaller || !rtcPeer) return;
+  console.log('[SDP] Got answer from', from);
+  try {
+    await rtcPeer.setRemoteDescription(new RTCSessionDescription(sdp));
+  } catch (e) { console.error('[SDP] set answer error:', e); }
+});
+
+// ICE candidates exchange
+socket.on('call-ice', async ({ from, candidate }) => {
+  if (!rtcPeer) return;
+  try {
+    await rtcPeer.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (e) { /* ignore stale candidates */ }
+});
+
+// ── RTC SETUP ─────────────────────────────────────────────
+function _setupRTC() {
+  rtcPeer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  _callActive = true;
+
+  // Add local tracks
+  localStream.getTracks().forEach(t => rtcPeer.addTrack(t, localStream));
+
+  // ICE candidate → send to peer
+  rtcPeer.onicecandidate = ({ candidate }) => {
+    if (candidate) {
+      socket.emit('call-ice', { to: _callTarget, from: currentUser, candidate });
+    }
+  };
+
+  // Remote stream arrived → show call window
+  rtcPeer.ontrack = (event) => {
+    console.log('[RTC] Remote track received:', event.track.kind);
+    const remoteStream = event.streams[0] || new MediaStream([event.track]);
+    showCallWindow(_callTarget, remoteStream, _callIsVid);
+  };
+
+  rtcPeer.oniceconnectionstatechange = () => {
+    const state = rtcPeer?.iceConnectionState;
+    console.log('[RTC] ICE state:', state);
+    if (state === 'connected' || state === 'completed') {
+      if (callSt) callSt.textContent = 'Разговор';
+    } else if (state === 'failed' || state === 'closed') {
+      endCall();
+    }
+  };
+
+  rtcPeer.onconnectionstatechange = () => {
+    console.log('[RTC] Connection state:', rtcPeer?.connectionState);
+  };
+}
+
+// ── END CALL ──────────────────────────────────────────────
+function endCall() {
+  stopRing();
+  if (_callTarget && _callActive) {
+    socket.emit('call-end', { to: _callTarget, from: currentUser });
+  }
+  _cleanupCall();
+}
+
+socket.on('call-end', ({ from }) => {
+  console.log('[Call] Ended by', from);
+  _cleanupCall();
+});
+
+function _cleanupCall() {
+  stopRing();
+  _callActive = false;
+  _screenSharing = false;
+  _muted = false;
+  rtcPeer?.close(); rtcPeer = null;
+  localStream?.getTracks().forEach(t => t.stop()); localStream = null;
+  screenStream?.getTracks().forEach(t => t.stop()); screenStream = null;
+  // Remove call windows
+  document.querySelectorAll('.call-win').forEach(w => w.remove());
+  if (callModal) callModal.classList.remove('open');
+  if (callAct)  callAct.innerHTML = '';
+  if (callNm)   callNm.textContent = '';
+  if (callSt)   callSt.textContent = '';
+  _callTarget = null;
+}
+
+// ── MUTE ─────────────────────────────────────────────────
 function toggleMute() {
   _muted = !_muted;
   localStream?.getAudioTracks().forEach(t => t.enabled = !_muted);
   const btn = $('callMuteBtn');
-  if (btn) { btn.querySelector('i').className = _muted ? 'ti ti-microphone-off' : 'ti ti-microphone'; btn.style.background = _muted ? 'var(--danger)' : ''; }
-}
-
-function showCallWindow(peerId, stream, isVid) {
-  document.querySelectorAll('.call-win').forEach(w => w.remove());
-  const win = document.createElement('div');
-  win.className = 'call-modal open call-win';
-  win.style.zIndex = 7000;
-  if (isVid) {
-    win.innerHTML = `
-      <div class="call-bg"></div>
-      <video id="rv" autoplay playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
-      <video id="lv" autoplay playsinline muted style="position:absolute;bottom:90px;right:20px;width:140px;border-radius:12px;border:2px solid rgba(255,255,255,.3);"></video>
-      <div class="call-content" style="position:relative;z-index:1;justify-content:flex-end;padding-bottom:36px">
-        <div class="call-actions">
-          <button class="call-btn call-mute" onclick="toggleMuteWin(this)"><i class="ti ti-microphone"></i></button>
-          <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Демонстрация экрана" class="call-btn ss-toggle"><i class="ti ti-screen-share"></i></button>
-          <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>
-        </div>
-      </div>`;
-    document.body.appendChild(win);
-    win.querySelector('#rv').srcObject = stream;
-    win.querySelector('#lv').srcObject = localStream;
-    win.querySelector('#rv').play().catch(() => {});
-  } else {
-    win.innerHTML = `
-      <div class="call-bg"></div>
-      <div class="call-content" style="position:relative;z-index:1">
-        <div class="call-ring"><div class="call-ava" id="caWin"></div></div>
-        <div class="call-name">${peerId}</div>
-        <div class="call-status" id="caStat"> Разговор</div>
-        <div class="call-actions">
-          <button class="call-btn call-mute" onclick="toggleMuteWin(this)"><i class="ti ti-microphone"></i></button>
-          <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Демонстрация экрана" class="call-btn ss-toggle"><i class="ti ti-screen-share"></i></button>
-          <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>
-        </div>
-      </div>`;
-    document.body.appendChild(win);
-    setAvatar(win.querySelector('#caWin'), peerId, userAvatars[peerId]);
-    const audio = new Audio();
-    audio.srcObject = stream; audio.autoplay = true;
-    const spk = localStorage.getItem('aura_spk');
-    if (spk && spk !== 'default' && audio.setSinkId) audio.setSinkId(spk).catch(() => {});
-    audio.play().catch(() => {});
-    win.appendChild(audio);
-    let secs = 0;
-    win._timer = setInterval(() => {
-      secs++;
-      const st = $('caStat');
-      if (st) st.textContent = `${Math.floor(secs/60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`;
-    }, 1000);
+  if (btn) {
+    btn.querySelector('i').className = _muted ? 'ti ti-microphone-off' : 'ti ti-microphone';
+    btn.style.background = _muted ? 'var(--danger)' : '';
   }
-  callModal.classList.remove('open');
 }
-
-// Switch to screen share mid-call — with quality picker
-async function switchToScreenShare() {
-  if (!currentCall) return;
-  if (_screenSharing) {
-    // Stop screen share
-    screenStream?.getTracks().forEach(t => t.stop());
-    screenStream = null;
-    _screenSharing = false;
-    toast('Демонстрация остановлена', 'info', 1800);
-    // Revert button
-    document.querySelectorAll('.ss-toggle').forEach(b => {
-      b.style.background = 'rgba(255,255,255,.18)';
-      b.querySelector('i').className = 'ti ti-screen-share';
-    });
-    return;
-  }
-
-  // Show quality picker
-  showScreenQualityPicker(async (res, fps) => {
-    if (!res) return; // cancelled
-    const resMap = {
-      '1080p': {width:1920,height:1080},
-      '720p':  {width:1280,height:720},
-      '480p':  {width:854, height:480},
-      '360p':  {width:640, height:360},
-    };
-    const dim = resMap[res] || resMap['720p'];
-    try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width:{ideal:dim.width}, height:{ideal:dim.height}, frameRate:{ideal:parseInt(fps)} },
-        audio: true
-      });
-
-      const screenTrack = screenStream.getVideoTracks()[0];
-      // Replace video track in existing peer connection
-      const pc = currentCall?.peerConnection;
-      if (pc) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          await sender.replaceTrack(screenTrack);
-        } else {
-          // Add track if no video sender yet (audio-only call)
-          pc.addTrack(screenTrack, screenStream);
-        }
-      }
-
-      // Update local preview
-      const lv = document.querySelector('#lv');
-      if (lv) { lv.srcObject = screenStream; lv.style.cssText += ';width:180px;object-fit:contain;border-radius:8px'; }
-
-      _screenSharing = true;
-      // Update button appearance
-      document.querySelectorAll('.ss-toggle').forEach(b => {
-        b.style.background = 'var(--accent)';
-        b.querySelector('i').className = 'ti ti-screen-share-off';
-      });
-      toast(`Демонстрация: ${res} / ${fps} FPS`, 'success', 2000);
-
-      screenTrack.onended = () => {
-        _screenSharing = false;
-        screenStream = null;
-        document.querySelectorAll('.ss-toggle').forEach(b => {
-          b.style.background = 'rgba(255,255,255,.18)';
-          b.querySelector('i').className = 'ti ti-screen-share';
-        });
-        toast('Демонстрация остановлена', 'info', 1800);
-      };
-    } catch (err) {
-      if (err.name !== 'NotAllowedError') toast('Не удалось начать демонстрацию', 'error');
-    }
-  });
-}
-
-function showScreenQualityPicker(callback) {
-  const overlay = $('dialogOverlay');
-  const box = $('dialogBox');
-  box.innerHTML = `
-    <div class="dlg-ico info"><i class="ti ti-screen-share"></i></div>
-    <h3>Настройки демонстрации</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-      <div>
-        <p style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Разрешение</p>
-        <div style="display:flex;flex-direction:column;gap:6px" id="resOpts">
-          <label class="sq-opt"><input type="radio" name="res" value="1080p"> 1080p (Full HD)</label>
-          <label class="sq-opt sq-sel"><input type="radio" name="res" value="720p" checked> 720p (HD)</label>
-          <label class="sq-opt"><input type="radio" name="res" value="480p"> 480p</label>
-          <label class="sq-opt"><input type="radio" name="res" value="360p"> 360p</label>
-        </div>
-      </div>
-      <div>
-        <p style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">FPS</p>
-        <div style="display:flex;flex-direction:column;gap:6px" id="fpsOpts">
-          <label class="sq-opt"><input type="radio" name="fps" value="60"> 60 FPS</label>
-          <label class="sq-opt sq-sel"><input type="radio" name="fps" value="30" checked> 30 FPS</label>
-          <label class="sq-opt"><input type="radio" name="fps" value="15"> 15 FPS</label>
-          <label class="sq-opt"><input type="radio" name="fps" value="5"> 5 FPS</label>
-        </div>
-      </div>
-    </div>
-    <div class="dlg-btns">
-      <button class="btn-secondary" id="dlgNo">Отмена</button>
-      <button class="btn-primary" id="dlgOk"><i class="ti ti-screen-share"></i> Начать</button>
-    </div>`;
-  overlay.classList.add('open');
-  // Style radio options
-  const style = document.createElement('style');
-  style.textContent = `.sq-opt{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:13px;transition:background .12s;border:1.5px solid var(--color-border-tertiary)}
-  .sq-opt:hover,.sq-opt.sq-sel{background:var(--accent-dim,rgba(99,102,241,.12));border-color:var(--accent,#6366f1)}
-  .sq-opt input{accent-color:var(--accent,#6366f1)}`;
-  document.head.appendChild(style);
-  // Highlight on change
-  box.querySelectorAll('input[type=radio]').forEach(r => {
-    r.addEventListener('change', () => {
-      box.querySelectorAll(`[name=${r.name}]`).forEach(x => x.closest('label').classList.remove('sq-sel'));
-      r.closest('label').classList.add('sq-sel');
-    });
-  });
-  const close = (v) => { overlay.classList.remove('open'); style.remove(); callback(v); };
-  $('dlgOk').onclick = () => {
-    const res = box.querySelector('input[name=res]:checked')?.value || '720p';
-    const fps = box.querySelector('input[name=fps]:checked')?.value || '30';
-    close({ res, fps });
-  };
-  $('dlgNo').onclick = () => close(null);
-  overlay.onclick = e => { if (e.target === overlay) close(null); };
-}
-
 function toggleMuteWin(btn) {
   _muted = !_muted;
   localStream?.getAudioTracks().forEach(t => t.enabled = !_muted);
@@ -1847,192 +1669,43 @@ function toggleMuteWin(btn) {
   btn.style.background = _muted ? 'var(--danger)' : '';
 }
 
-function endCall() {
-  stopRing();
-  // Stop all timers
-  document.querySelectorAll('.call-win').forEach(w => {
-    if (w._timer) clearInterval(w._timer);
-  });
-  // Close peer connection
-  try { currentCall?.close(); } catch {}
-  currentCall = null;
-  // Stop all media tracks
-  localStream?.getTracks().forEach(t => t.stop());
-  localStream = null;
-  screenStream?.getTracks().forEach(t => t.stop());
-  screenStream = null;
-  _muted = false;
-  _screenSharing = false;
-  // Remove all call windows
-  document.querySelectorAll('.call-win').forEach(el => el.remove());
-  // Reset call modal
-  if (callModal) {
-    callModal.classList.remove('open');
-    // Reset contents for next call
-    if (callAct) callAct.innerHTML = '';
-    if (callNm)  callNm.textContent = '';
-    if (callSt)  callSt.textContent = '';
-  }
-}
-
-// ══════════════════════════════════════════════
-// SCREEN SHARE (Discord-style)
-// ══════════════════════════════════════════════
-let screenStream    = null;
-let _screenSharing  = false;
-
-// startScreenShare is only available mid-call via switchToScreenShare()
-function startScreenShare() {
-  toast('Демонстрация доступна во время звонка', 'info', 2500);
-}
-
-function showScreenShareSending(peerId, stream) {
-  document.querySelectorAll('.call-win').forEach(w => w.remove());
-  const win = document.createElement('div');
-  win.className = 'call-modal open call-win screen-win';
-  win.style.zIndex = 7000;
-  win.innerHTML = `
-    <div class="call-bg" style="background:linear-gradient(135deg,rgba(17,24,39,.96),rgba(17,24,39,.98))"></div>
-    <div class="screen-share-ui">
-      <div class="ss-header">
-        <div class="ss-badge"><i class="ti ti-screen-share"></i> Демонстрация экрана</div>
-        <div class="ss-peer">→ ${peerId}</div>
-      </div>
-      <div class="ss-preview-wrap">
-        <video id="ssLocal" autoplay muted playsinline class="ss-preview"></video>
-        <div class="ss-overlay-text">Вы показываете экран</div>
-      </div>
-      <div class="ss-controls">
-        <button class="call-btn call-mute" id="ssMuteBtn" onclick="toggleScreenMic(this)" title="Микрофон">
-          <i class="ti ti-microphone"></i>
-        </button>
-        <button class="call-btn call-end" onclick="endCall()" title="Остановить">
-          <i class="ti ti-screen-share-off"></i>
-        </button>
-      </div>
-    </div>`;
-  document.body.appendChild(win);
-  const vid = win.querySelector('#ssLocal');
-  vid.srcObject = stream;
-  vid.play().catch(() => {});
-  callModal.classList.remove('open');
-}
-
-function showScreenShareWindow(peerId, remoteStream, localStr) {
-  // Receiver side: show the shared screen
-  document.querySelectorAll('.call-win').forEach(w => w.remove());
-  const win = document.createElement('div');
-  win.className = 'call-modal open call-win screen-win';
-  win.style.zIndex = 7000;
-  win.innerHTML = `
-    <div class="call-bg" style="background:#000"></div>
-    <div class="screen-share-ui screen-share-viewer">
-      <div class="ss-header">
-        <div class="ss-badge"><i class="ti ti-screen-share"></i> ${peerId} показывает экран</div>
-        <button class="icon-btn sm" onclick="toggleFullscreenShare()" title="Полный экран"><i class="ti ti-maximize"></i></button>
-      </div>
-      <div class="ss-preview-wrap ss-main-view">
-        <video id="ssRemote" autoplay playsinline class="ss-preview ss-remote"></video>
-      </div>
-      <div class="ss-controls">
-        <button class="call-btn call-mute" id="ssViewMute" onclick="toggleScreenMic(this)" title="Микрофон">
-          <i class="ti ti-microphone"></i>
-        </button>
-        <button class="call-btn" style="background:rgba(255,255,255,.15)" onclick="toggleFullscreenShare()" title="Полный экран">
-          <i class="ti ti-maximize"></i>
-        </button>
-        <button class="call-btn call-end" onclick="endCall()" title="Выйти">
-          <i class="ti ti-x"></i>
-        </button>
-      </div>
-    </div>`;
-  document.body.appendChild(win);
-
-  const remote = win.querySelector('#ssRemote');
-  remote.srcObject = remoteStream;
-  remote.play().catch(() => {});
-
-  // Audio
-  const audio = new Audio();
-  audio.srcObject = remoteStream;
-  audio.autoplay = true;
-  const spk = localStorage.getItem('aura_spk');
-  if (spk && spk !== 'default' && audio.setSinkId) audio.setSinkId(spk).catch(() => {});
-  audio.play().catch(() => {});
-  win.appendChild(audio);
-
-  callModal.classList.remove('open');
-}
-
-// Handle incoming screen share call (peer sends screen metadata)
-// Override handleIncoming to detect screen share
-function handleIncomingWithScreen(call) {
-  if (currentCall) { call.close(); return; }
-  currentCall = call;
-  // caller name is in metadata.callerName; fall back to parsing the peerId
-  const caller = call.metadata?.callerName || call.peer.split('_')[0];
-  const isVid    = call.metadata?.video  || false;
-  const isScreen = call.metadata?.screen || false;
-
-  console.log('[Incoming] From:', caller, 'isVid:', isVid, 'isScreen:', isScreen);
-
-  setAvatar(callAva, caller, userAvatars[caller]);
-  callNm.textContent = caller;
-
-  if (isScreen) {
-    callSt.textContent = 'Демонстрация экрана';
-    callAct.innerHTML = `
-      <button class="call-btn call-ans" onclick="answerScreenShare()"><i class="ti ti-eye"></i></button>
-      <button class="call-btn call-end" onclick="declineCall()"><i class="ti ti-x"></i></button>`;
-  } else {
-    callSt.textContent = isVid ? 'Видеозвонок…' : 'Входящий звонок…';
-    callAct.innerHTML = `
-      <button class="call-btn call-ans" onclick="answerCall(${isVid})"><i class="ti ti-phone"></i></button>
-      <button class="call-btn call-end" onclick="declineCall()"><i class="ti ti-phone-off"></i></button>`;
-  }
-  callModal.classList.add('open');
-  ringBeep();
-}
-
-function answerScreenShare() {
-  stopRing();
-  // Just answer with mic audio, no video needed from receiver side
-  navigator.mediaDevices.getUserMedia({ audio: audioConstraints() })
-    .then(stream => {
-      localStream = stream;
-      currentCall.answer(stream);
-      currentCall.on('stream', remote => showScreenShareWindow(currentCall.peer, remote, stream));
-      currentCall.on('close', endCall);
-      callModal.classList.remove('open');
-    })
-    .catch(() => {
-      // Answer without audio too
-      const empty = new MediaStream();
-      currentCall.answer(empty);
-      currentCall.on('stream', remote => showScreenShareWindow(currentCall.peer, remote, empty));
-      currentCall.on('close', endCall);
-      callModal.classList.remove('open');
+// ── SCREEN SHARE (mid-call) ───────────────────────────────
+async function switchToScreenShare() {
+  if (!rtcPeer || !_callActive) return;
+  if (_screenSharing) {
+    screenStream?.getTracks().forEach(t => t.stop());
+    screenStream = null; _screenSharing = false;
+    document.querySelectorAll('.ss-toggle').forEach(b => {
+      b.style.background = 'rgba(255,255,255,.18)';
+      b.querySelector('i').className = 'ti ti-screen-share';
     });
-}
-
-function toggleScreenMic(btn) {
-  _muted = !_muted;
-  localStream?.getAudioTracks().forEach(t => t.enabled = !_muted);
-  const ico = btn.querySelector('i');
-  ico.className = _muted ? 'ti ti-microphone-off' : 'ti ti-microphone';
-  btn.style.background = _muted ? 'var(--danger)' : '';
-}
-
-function toggleFullscreenShare() {
-  const vid = document.querySelector('.ss-remote');
-  if (!vid) return;
-  if (!document.fullscreenElement) {
-    vid.requestFullscreen?.() || vid.webkitRequestFullscreen?.();
-  } else {
-    document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+    toast('Демонстрация остановлена', 'info', 1800);
+    return;
   }
+  showScreenQualityPicker(async (opts) => {
+    if (!opts) return;
+    const resMap = { '1080p':{w:1920,h:1080},'720p':{w:1280,h:720},'480p':{w:854,h:480},'360p':{w:640,h:360} };
+    const dim = resMap[opts.res] || resMap['720p'];
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width:{ideal:dim.w}, height:{ideal:dim.h}, frameRate:{ideal:parseInt(opts.fps)} },
+        audio: true
+      });
+      const track = screenStream.getVideoTracks()[0];
+      const sender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(track);
+      _screenSharing = true;
+      document.querySelectorAll('.ss-toggle').forEach(b => {
+        b.style.background = 'var(--accent)';
+        b.querySelector('i').className = 'ti ti-screen-share-off';
+      });
+      toast(`Демонстрация: ${opts.res} / ${opts.fps} FPS`, 'success', 2000);
+      track.onended = () => switchToScreenShare(); // stop
+    } catch (e) {
+      if (e.name !== 'NotAllowedError') toast('Не удалось начать демонстрацию', 'error');
+    }
+  });
 }
-
 
 
 // ══════════════════════════════════════════════
