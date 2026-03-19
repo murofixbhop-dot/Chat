@@ -9,6 +9,20 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// ========== PEERJS SERVER (встроенный, без внешних зависимостей) ==========
+// Запускаем на том же HTTP-сервере по пути /peerjs
+try {
+  const { ExpressPeerServer } = require('peer');
+  const peerServer = ExpressPeerServer(server, {
+    path: '/peerjs',
+    allow_discovery: false,
+  });
+  app.use('/peerjs', peerServer);
+  console.log('✅ PeerJS сервер запущен на /peerjs');
+} catch (e) {
+  console.warn('⚠️  peer пакет не установлен, звонки через 0.peerjs.com');
+}
+
 // ========== НАСТРОЙКА BACKBLAZE B2 ==========
 const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;
 const B2_APP_KEY = process.env.B2_APP_KEY;
