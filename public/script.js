@@ -201,31 +201,57 @@ function showLogin() {
 }
 
 async function doLogin() {
-  const raw = $('loginInput').value.trim();
-  if (!raw) { $('loginErr').textContent = 'Введите имя'; return; }
+  const username = $('loginInput').value.trim();
+  const password = $('loginPassInput')?.value?.trim() || '';
+  const errEl    = $('loginErr');
+  errEl.textContent = '';
+
+  if (!username) {
+    errEl.textContent = 'Введите имя пользователя';
+    $('loginInput').focus();
+    return;
+  }
+  if (password.length < 4) {
+    errEl.textContent = 'Пароль должен быть не менее 4 символов';
+    $('loginPassInput').focus();
+    return;
+  }
+
   const btn = $('loginBtn');
   btn.disabled = true;
   btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>';
-  $('loginErr').textContent = '';
+
   try {
     const r = await fetch('/api/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: raw })
+      body: JSON.stringify({ username, password })
     });
     const d = await r.json();
     if (d.success) {
       localStorage.setItem('aura_user', d.user.username);
+      localStorage.setItem('aura_pass', password); // for auto-restore
+      // Show welcome message for new registrations
+      if (d.isNew) toast(`Добро пожаловать, ${d.user.username}!`, 'success');
       startSession(d.user);
     } else {
-      $('loginErr').textContent = d.error || 'Ошибка';
-      $('loginInput').style.borderColor = 'var(--danger)';
+      errEl.textContent = d.error || 'Ошибка входа';
+      $('loginPassInput').focus();
+      $('loginPassInput').select();
     }
   } catch {
-    $('loginErr').textContent = 'Нет соединения';
+    errEl.textContent = 'Нет соединения с сервером';
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Продолжить <i class="ti ti-arrow-right"></i>';
+    btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
   }
+}
+
+function togglePassVisibility() {
+  const input = $('loginPassInput');
+  const icon  = $('passEyeIcon');
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+  icon.className = input.type === 'password' ? 'ti ti-eye' : 'ti ti-eye-off';
 }
 
 function startSession(user) {
@@ -247,15 +273,21 @@ function startSession(user) {
 
 // Auto-restore session
 const savedUser = localStorage.getItem('aura_user');
-if (savedUser) {
+const savedPass = localStorage.getItem('aura_pass');
+if (savedUser && savedPass) {
   fetch('/api/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: savedUser })
+    body: JSON.stringify({ username: savedUser, password: savedPass })
   })
   .then(r => r.json())
   .then(d => {
     if (d.success) { startSession(d.user); }
-    else { localStorage.removeItem('aura_user'); showLogin(); }
+    else {
+      // Password changed or account deleted — show login
+      localStorage.removeItem('aura_user');
+      localStorage.removeItem('aura_pass');
+      showLogin();
+    }
   })
   .catch(() => showLogin());
 } else {
@@ -1335,16 +1367,47 @@ const callAct   = $('callActions');
 
 function initPeer() {
   if (!currentUser) return;
-  if (peer) { try { peer.destroy(); } catch {} }
+  // Destroy previous instance cleanly
+  if (peer) {
+    try { peer.destroy(); } catch {}
+    peer = null;
+  }
   peer = new Peer(currentUser, {
     host: '0.peerjs.com', port: 443, path: '/', secure: true,
-    config: { iceServers: [{ urls:'stun:stun.l.google.com:19302' },{ urls:'stun:stun1.l.google.com:19302' }] }
+    debug: 0,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    }
   });
-  peer.on('open', () => {});
-  // Use screen-aware handler — detects screen share vs normal call
-  peer.on('call', call => handleIncomingWithScreen(call));
-  peer.on('error', err => { if (!['unavailable-id','peer-unavailable'].includes(err.type)) setTimeout(initPeer, 3000); });
-  peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
+  peer.on('open', id => {
+    console.log('[Peer] Connected, id:', id);
+  });
+  peer.on('call', call => {
+    console.log('[Peer] Incoming call from:', call.peer);
+    handleIncomingWithScreen(call);
+  });
+  peer.on('error', err => {
+    console.error('[Peer] Error:', err.type, err);
+    // Retry on network errors, not on ID conflicts
+    if (!['unavailable-id', 'peer-unavailable', 'browser-incompatible'].includes(err.type)) {
+      setTimeout(initPeer, 3000);
+    }
+    if (err.type === 'unavailable-id') {
+      toast('Ваш ID занят, перезагрузите страницу', 'error');
+    }
+  });
+  peer.on('disconnected', () => {
+    console.log('[Peer] Disconnected, reconnecting...');
+    try { peer.reconnect(); } catch {}
+  });
+  peer.on('close', () => {
+    console.log('[Peer] Closed');
+    peer = null;
+  });
 }
 
 function callTarget() {
@@ -1366,15 +1429,26 @@ function stopRing() { clearInterval(window._ring); }
 
 function answerCall(isVid) {
   stopRing();
+  const call = currentCall; // capture ref before async
   navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid })
     .then(stream => {
       localStream = stream;
-      currentCall.answer(stream);
-      currentCall.on('stream', remote => showCallWindow(currentCall.peer, remote, isVid));
-      currentCall.on('close', endCall);
+      call.answer(stream);
+      call.on('stream', remote => {
+        showCallWindow(call.peer, remote, isVid);
+      });
+      call.on('close', () => endCall());
+      call.on('error', err => {
+        console.error('Answer error:', err);
+        endCall();
+      });
       callModal.classList.remove('open');
     })
-    .catch(() => { toast('Нет доступа к медиа', 'error'); declineCall(); });
+    .catch(err => {
+      console.error('getUserMedia error:', err);
+      toast('Нет доступа к медиа', 'error');
+      declineCall();
+    });
 }
 
 function declineCall() {
@@ -1386,23 +1460,45 @@ function declineCall() {
 function startCall(isVid) {
   const target = callTarget();
   if (!target) { toast('Звонок доступен только в личном чате', 'warning'); return; }
-  if (!peer || peer.disconnected) { toast('Нет соединения', 'error'); return; }
+  if (!peer) { toast('Соединение не готово, попробуйте снова', 'error'); return; }
+
   navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid })
     .then(stream => {
       localStream = stream;
       const call = peer.call(target, stream, { metadata: { video: isVid, screen: false } });
-      call.on('stream', remote => showCallWindow(target, remote, isVid));
-      call.on('close', endCall); call.on('error', endCall);
+
+      // Set currentCall BEFORE attaching listeners to avoid race
       currentCall = call;
+
+      call.on('stream', remote => {
+        showCallWindow(target, remote, isVid);
+      });
+      call.on('close', () => {
+        endCall();
+      });
+      call.on('error', err => {
+        console.error('Call error:', err);
+        endCall();
+        toast('Ошибка звонка', 'error');
+      });
+
+      // Show outgoing UI
       setAvatar(callAva, target, userAvatars[target]);
       callNm.textContent = target;
       callSt.textContent = isVid ? 'Видеозвонок…' : 'Звоним…';
       callAct.innerHTML = `
-        <button class="call-btn call-mute" id="callMuteBtn" onclick="toggleMute()"><i class="ti ti-microphone"></i></button>
-        <button class="call-btn call-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>`;
+        <button class="call-btn call-mute" id="callMuteBtn" onclick="toggleMute()">
+          <i class="ti ti-microphone"></i>
+        </button>
+        <button class="call-btn call-end" onclick="endCall()">
+          <i class="ti ti-phone-off"></i>
+        </button>`;
       callModal.classList.add('open');
     })
-    .catch(() => toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error'));
+    .catch(err => {
+      console.error('getUserMedia error:', err);
+      toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error');
+    });
 }
 
 let _muted = false;
@@ -1440,7 +1536,7 @@ function showCallWindow(peerId, stream, isVid) {
       <div class="call-content" style="position:relative;z-index:1">
         <div class="call-ring"><div class="call-ava" id="caWin"></div></div>
         <div class="call-name">${peerId}</div>
-        <div class="call-status" id="caStat">🔊 Разговор</div>
+        <div class="call-status" id="caStat"> Разговор</div>
         <div class="call-actions">
           <button class="call-btn call-mute" onclick="toggleMuteWin(this)"><i class="ti ti-microphone"></i></button>
           <button class="call-btn" style="background:rgba(255,255,255,.18)" onclick="switchToScreenShare()" title="Демонстрация экрана" class="call-btn ss-toggle"><i class="ti ti-screen-share"></i></button>
