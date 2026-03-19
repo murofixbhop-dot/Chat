@@ -634,51 +634,66 @@
         .call-modal {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.9);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(10,15,30,0.95);
             z-index: 3000;
             align-items: center;
             justify-content: center;
             flex-direction: column;
             color: white;
+            gap: 12px;
         }
         .call-modal.active { display: flex; }
         .call-avatar {
-            width: 120px;
-            height: 120px;
+            width: 100px; height: 100px;
             border-radius: 50%;
-            background: var(--accent-color);
+            background: linear-gradient(135deg, var(--accent-color), #764ba2);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 60px;
+            font-size: 48px;
             color: white;
-            margin-bottom: 20px;
+            margin-bottom: 8px;
             background-size: cover;
+            background-position: center;
+            box-shadow: 0 0 0 8px rgba(0,136,204,0.2), 0 0 0 16px rgba(0,136,204,0.08);
+            animation: callRing 1.5s ease-in-out infinite;
         }
-        .call-name { font-size: 24px; margin-bottom: 10px; }
-        .call-status { font-size: 16px; opacity: 0.8; margin-bottom: 30px; }
-        .call-actions {
+        @keyframes callRing {
+            0%, 100% { box-shadow: 0 0 0 8px rgba(0,136,204,0.2), 0 0 0 16px rgba(0,136,204,0.08); }
+            50% { box-shadow: 0 0 0 12px rgba(0,136,204,0.25), 0 0 0 24px rgba(0,136,204,0.05); }
+        }
+        .call-name { font-size: 22px; font-weight: 700; }
+        .call-status { font-size: 15px; opacity: 0.7; }
+        .call-actions { display: flex; gap: 24px; margin-top: 12px; }
+        .call-win-controls {
+            position: absolute;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
             display: flex;
-            gap: 30px;
+            gap: 20px;
+            background: rgba(0,0,0,0.4);
+            padding: 12px 24px;
+            border-radius: 50px;
+            backdrop-filter: blur(8px);
         }
         .call-action-btn {
-            width: 60px;
-            height: 60px;
+            width: 58px; height: 58px;
             border-radius: 50%;
             border: none;
-            font-size: 24px;
+            font-size: 22px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: transform 0.15s, opacity 0.2s;
         }
-        .call-end { background: #dc3545; color: white; }
-        .call-answer { background: #28a745; color: white; }
-        .call-mute { background: #ffc107; color: black; }
+        .call-action-btn:hover { transform: scale(1.08); opacity: 0.9; }
+        .call-end { background: #ef4444; color: white; }
+        .call-answer { background: #10b981; color: white; }
+        .call-mute { background: rgba(255,255,255,0.15); color: white; }
 
         /* Модальные окна (общие) */
         .modal {
@@ -729,111 +744,258 @@
         }
         .close-btn:hover { background: var(--friend-hover); }
 
+        .settings-modal-content { max-width: 440px; padding: 24px 24px 28px; }
+
         .settings-tabs {
             display: flex;
-            border-bottom: 1px solid var(--border-color);
-            margin-bottom: 20px;
+            gap: 4px;
+            margin-bottom: 24px;
+            background: var(--bg-color);
+            border-radius: 16px;
+            padding: 6px;
         }
         .settings-tab {
             flex: 1;
-            padding: 10px;
+            padding: 10px 6px 8px;
             text-align: center;
             cursor: pointer;
             color: var(--text-secondary);
-            transition: 0.2s;
+            transition: all 0.2s;
+            border-radius: 12px;
+            font-size: 11px;
+            line-height: 1.4;
         }
+        .settings-tab i { font-size: 18px; display: block; margin-bottom: 3px; }
         .settings-tab.active {
-            border-bottom: 2px solid var(--accent-color);
+            background: var(--sidebar-bg);
             color: var(--accent-color);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
+        .settings-tab:hover:not(.active) { background: rgba(0,0,0,0.04); }
 
-        .settings-pane {
-            padding: 10px 0;
-        }
-        .settings-pane label {
-            display: block;
-            margin-bottom: 5px;
-            color: var(--text-secondary);
-        }
-        .settings-pane input, .settings-pane select {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            background: var(--input-bg);
-            color: var(--text-color);
-        }
+        .settings-pane { animation: fadeIn 0.15s ease; }
 
-        .avatar-upload {
-            text-align: center;
-            margin-bottom: 20px;
+        .settings-avatar-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 24px;
         }
-        .avatar-upload .avatar {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 10px;
+        .settings-avatar-wrap {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 8px;
         }
-        .avatar-upload button {
+        .settings-avatar-wrap .avatar {
+            width: 80px; height: 80px;
+            font-size: 32px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0,136,204,0.3);
+        }
+        .settings-avatar-btn {
+            position: absolute;
+            bottom: 0; right: 0;
+            width: 28px; height: 28px;
+            border-radius: 50%;
             background: var(--accent-color);
             color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 5px;
+            border: 2px solid var(--sidebar-bg);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px;
             cursor: pointer;
+        }
+        .settings-avatar-hint { font-size: 12px; color: var(--text-secondary); }
+
+        .settings-field { margin-bottom: 16px; }
+        .settings-field label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .settings-input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1.5px solid var(--border-color);
+            border-radius: 12px;
+            background: var(--input-bg);
+            color: var(--text-color);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+            appearance: none;
+        }
+        .settings-input:focus { border-color: var(--accent-color); }
+
+        .settings-hint {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .volume-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .volume-slider {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+            accent-color: var(--accent-color);
+        }
+
+        .settings-btn {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: opacity 0.2s, transform 0.1s;
+            margin-top: 6px;
+        }
+        .settings-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .settings-btn:active { transform: translateY(0); }
+        .settings-btn-primary { background: var(--accent-color); color: white; }
+        .settings-btn-secondary { background: var(--friend-item-bg); color: var(--text-color); }
+        .settings-btn-danger { background: #ef4444; color: white; }
+
+        .theme-cards {
+            display: flex;
+            gap: 12px;
+        }
+        .theme-card {
+            flex: 1;
+            border-radius: 14px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid var(--border-color);
+            transition: border-color 0.2s, transform 0.15s;
+            text-align: center;
+            font-size: 13px;
+            padding-bottom: 8px;
+        }
+        .theme-card.selected { border-color: var(--accent-color); transform: scale(1.02); }
+        .theme-card-preview { height: 60px; margin-bottom: 6px; }
+        .light-preview { background: linear-gradient(135deg, #f0f2f5 60%, #0088cc 100%); }
+        .dark-preview { background: linear-gradient(135deg, #0f0f1a 60%, #4a9edd 100%); }
+        .theme-card span { font-weight: 500; color: var(--text-color); }
+
+        .settings-account-card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: var(--bg-color);
+            border-radius: 16px;
         }
 
         .theme-preview {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
-            margin: 15px 0;
+            margin-bottom: 4px;
         }
         .color-option {
-            width: 40px;
-            height: 40px;
+            width: 36px; height: 36px;
             border-radius: 50%;
             cursor: pointer;
-            border: 2px solid transparent;
-            transition: 0.2s;
+            border: 3px solid transparent;
+            transition: transform 0.15s, box-shadow 0.15s;
         }
+        .color-option:hover { transform: scale(1.1); }
         .color-option.selected {
             border-color: white;
-            box-shadow: 0 0 0 2px var(--accent-color);
+            box-shadow: 0 0 0 3px var(--accent-color);
+            transform: scale(1.1);
         }
 
         .danger-btn {
-            background: #dc3545;
+            background: #ef4444;
             color: white;
             border: none;
-            padding: 10px;
-            border-radius: 5px;
+            padding: 13px;
+            border-radius: 14px;
             cursor: pointer;
             width: 100%;
-            margin-top: 10px;
+            font-size: 15px;
+            font-weight: 600;
         }
 
-        /* Анимация загрузки */
+        /* Экран загрузки */
         .loading {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: var(--bg-color);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(10, 15, 30, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             z-index: 10000;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            flex-direction: column;
+            gap: 20px;
+            transition: opacity 0.4s ease;
         }
         .loading.active { display: flex; }
+        .loading.fade-out { opacity: 0; pointer-events: none; }
+        .loading-logo {
+            width: 64px; height: 64px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #0088cc, #764ba2);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; color: white;
+            box-shadow: 0 8px 32px rgba(0,136,204,0.4);
+            animation: logoFloat 2s ease-in-out infinite;
+        }
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        .loading-text {
+            color: rgba(255,255,255,0.9);
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+        }
+        .loading-dots {
+            display: flex; gap: 8px;
+        }
+        .loading-dots span {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.4);
+            animation: dotPulse 1.2s ease-in-out infinite;
+        }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes dotPulse {
+            0%, 80%, 100% { background: rgba(255,255,255,0.25); transform: scale(0.9); }
+            40% { background: #0088cc; transform: scale(1.2); }
+        }
     </style>
 </head>
 <body>
     <!-- Экран загрузки -->
     <div id="loadingScreen" class="loading active">
-        <i class="fas fa-circle-notch fa-spin"></i> Загрузка...
+        <div class="loading-logo"><i class="fas fa-comment-dots"></i></div>
+        <div class="loading-text">Подключение...</div>
+        <div class="loading-dots"><span></span><span></span><span></span></div>
     </div>
 
     <!-- Модальное окно входа -->
@@ -849,50 +1011,124 @@
 
     <!-- Модальное окно настроек -->
     <div id="settingsModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content settings-modal-content">
             <div class="modal-header">
-                <h2>Настройки</h2>
+                <h2><i class="fas fa-sliders-h" style="margin-right:8px;color:var(--accent-color);"></i>Настройки</h2>
                 <span class="close-btn" onclick="closeSettings()">&times;</span>
             </div>
             <div class="settings-tabs">
-                <div class="settings-tab active" onclick="switchSettingsTab('profile')">Профиль</div>
-                <div class="settings-tab" onclick="switchSettingsTab('theme')">Тема</div>
-                <div class="settings-tab" onclick="switchSettingsTab('account')">Аккаунт</div>
+                <div class="settings-tab active" onclick="switchSettingsTab('profile')">
+                    <i class="fas fa-user"></i><br><span>Профиль</span>
+                </div>
+                <div class="settings-tab" onclick="switchSettingsTab('sound')">
+                    <i class="fas fa-headphones"></i><br><span>Звук</span>
+                </div>
+                <div class="settings-tab" onclick="switchSettingsTab('theme')">
+                    <i class="fas fa-palette"></i><br><span>Тема</span>
+                </div>
+                <div class="settings-tab" onclick="switchSettingsTab('account')">
+                    <i class="fas fa-shield-alt"></i><br><span>Аккаунт</span>
+                </div>
             </div>
 
             <!-- Профиль -->
             <div id="settingsProfile" class="settings-pane">
-                <div class="avatar-upload">
-                    <div class="avatar" id="settingsAvatar"></div>
-                    <button onclick="triggerAvatarUpload()">Загрузить аватар</button>
+                <div class="settings-avatar-section">
+                    <div class="settings-avatar-wrap">
+                        <div class="avatar" id="settingsAvatar"></div>
+                        <button class="settings-avatar-btn" onclick="triggerAvatarUpload()">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                    </div>
                     <input type="file" id="avatarUpload" accept="image/*" style="display:none;">
+                    <div class="settings-avatar-hint">Нажмите для смены фото</div>
                 </div>
-                <label>Отображаемое имя (никнейм)</label>
-                <input type="text" id="settingsNickname" placeholder="Никнейм">
-                <button onclick="saveProfile()" style="width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px;">Сохранить</button>
+                <div class="settings-field">
+                    <label>Отображаемое имя</label>
+                    <input type="text" id="settingsNickname" placeholder="Никнейм" class="settings-input">
+                </div>
+                <button onclick="saveProfile()" class="settings-btn settings-btn-primary">
+                    <i class="fas fa-check"></i> Сохранить
+                </button>
+            </div>
+
+            <!-- Звук -->
+            <div id="settingsSound" class="settings-pane" style="display:none;">
+                <div class="settings-field">
+                    <label><i class="fas fa-microphone" style="color:var(--accent-color);margin-right:6px;"></i>Микрофон</label>
+                    <select id="micSelect" class="settings-input" onchange="saveSoundSettings()">
+                        <option value="default">По умолчанию</option>
+                    </select>
+                </div>
+                <div class="settings-field">
+                    <label><i class="fas fa-volume-up" style="color:var(--accent-color);margin-right:6px;"></i>Динамики / Наушники</label>
+                    <select id="speakerSelect" class="settings-input" onchange="saveSoundSettings()">
+                        <option value="default">По умолчанию</option>
+                    </select>
+                    <div class="settings-hint" id="speakerHint" style="display:none;">
+                        <i class="fas fa-info-circle"></i> Ваш браузер не поддерживает выбор устройства вывода
+                    </div>
+                </div>
+                <div class="settings-field">
+                    <label><i class="fas fa-sliders-h" style="color:var(--accent-color);margin-right:6px;"></i>Громкость</label>
+                    <div class="volume-row">
+                        <i class="fas fa-volume-down" style="color:var(--text-secondary);"></i>
+                        <input type="range" id="volumeRange" min="0" max="100" value="100" class="volume-slider" oninput="updateVolume(this.value)">
+                        <i class="fas fa-volume-up" style="color:var(--text-secondary);"></i>
+                        <span id="volumeLabel" style="min-width:36px;font-size:13px;color:var(--text-secondary);">100%</span>
+                    </div>
+                </div>
+                <button onclick="testMic()" class="settings-btn settings-btn-secondary" style="margin-top:4px;">
+                    <i class="fas fa-microphone"></i> Проверить микрофон
+                </button>
+                <div id="micTestResult" style="display:none;margin-top:10px;font-size:13px;color:var(--text-secondary);"></div>
             </div>
 
             <!-- Тема -->
             <div id="settingsTheme" class="settings-pane" style="display:none;">
-                <label>Акцентный цвет</label>
-                <div class="theme-preview">
-                    <div class="color-option selected" style="background:#0088cc;" onclick="selectAccentColor('#0088cc', this)"></div>
-                    <div class="color-option" style="background:#4a4a8a;" onclick="selectAccentColor('#4a4a8a', this)"></div>
-                    <div class="color-option" style="background:#28a745;" onclick="selectAccentColor('#28a745', this)"></div>
-                    <div class="color-option" style="background:#dc3545;" onclick="selectAccentColor('#dc3545', this)"></div>
+                <div class="settings-field">
+                    <label>Акцентный цвет</label>
+                    <div class="theme-preview">
+                        <div class="color-option selected" style="background:#0088cc;" onclick="selectAccentColor('#0088cc', this)" title="Синий"></div>
+                        <div class="color-option" style="background:#7c3aed;" onclick="selectAccentColor('#7c3aed', this)" title="Фиолетовый"></div>
+                        <div class="color-option" style="background:#059669;" onclick="selectAccentColor('#059669', this)" title="Зелёный"></div>
+                        <div class="color-option" style="background:#dc2626;" onclick="selectAccentColor('#dc2626', this)" title="Красный"></div>
+                        <div class="color-option" style="background:#d97706;" onclick="selectAccentColor('#d97706', this)" title="Оранжевый"></div>
+                        <div class="color-option" style="background:#db2777;" onclick="selectAccentColor('#db2777', this)" title="Розовый"></div>
+                    </div>
                 </div>
-                <label>Фон чата</label>
-                <select id="themeBg">
-                    <option value="light">Светлый</option>
-                    <option value="dark">Тёмный</option>
-                </select>
-                <button onclick="saveTheme()" style="width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px; margin-top:10px;">Применить</button>
+                <div class="settings-field">
+                    <label>Оформление</label>
+                    <div class="theme-cards">
+                        <div class="theme-card" id="themeCardLight" onclick="selectThemeBg('light')">
+                            <div class="theme-card-preview light-preview"></div>
+                            <span>Светлая</span>
+                        </div>
+                        <div class="theme-card" id="themeCardDark" onclick="selectThemeBg('dark')">
+                            <div class="theme-card-preview dark-preview"></div>
+                            <span>Тёмная</span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="saveTheme()" class="settings-btn settings-btn-primary">
+                    <i class="fas fa-check"></i> Применить
+                </button>
             </div>
 
             <!-- Аккаунт -->
             <div id="settingsAccount" class="settings-pane" style="display:none;">
-                <p>Ваш логин: <strong id="accountUsername"></strong></p>
-                <button class="danger-btn" onclick="deleteAccount()">Удалить аккаунт</button>
+                <div class="settings-account-card">
+                    <i class="fas fa-user-circle" style="font-size:40px;color:var(--accent-color);"></i>
+                    <div>
+                        <div style="font-size:13px;color:var(--text-secondary);">Ваш логин</div>
+                        <strong id="accountUsername" style="font-size:16px;"></strong>
+                    </div>
+                </div>
+                <div class="settings-field" style="margin-top:20px;">
+                    <button class="settings-btn settings-btn-danger" onclick="deleteAccount()">
+                        <i class="fas fa-trash-alt"></i> Удалить аккаунт
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1003,13 +1239,17 @@
         // ========== ПРИМЕНЕНИЕ ТЕМЫ ДО ЗАГРУЗКИ ==========
         (function() {
             const savedTheme = localStorage.getItem('chatTheme') || 'light';
-            if (savedTheme === 'dark') {
-                document.body.classList.add('dark-theme');
-            }
-            setTimeout(() => {
-                document.getElementById('loadingScreen').classList.remove('active');
-            }, 100);
+            if (savedTheme === 'dark') document.body.classList.add('dark-theme');
+            // Accent color restore
+            const savedAccent = localStorage.getItem('chatAccent');
+            if (savedAccent) document.documentElement.style.setProperty('--accent-color', savedAccent);
         })();
+
+        function hideLoadingScreen() {
+            const ls = document.getElementById('loadingScreen');
+            ls.classList.add('fade-out');
+            setTimeout(() => ls.classList.remove('active'), 420);
+        }
 
         // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
         const socket = io();
@@ -1068,100 +1308,247 @@
         // ========== ИНИЦИАЛИЗАЦИЯ PEER ==========
         function initPeer() {
             if (!currentUser) return;
+            // Destroy previous peer if exists
+            if (peer) { try { peer.destroy(); } catch(e){} }
             peer = new Peer(currentUser, {
                 host: '0.peerjs.com',
                 port: 443,
                 path: '/',
-                secure: true
+                secure: true,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
             });
+            peer.on('open', id => console.log('PeerJS connected:', id));
             peer.on('call', handleIncomingCall);
-            peer.on('error', (err) => console.error('Peer error:', err));
+            peer.on('error', err => {
+                console.error('Peer error:', err);
+                // Reconnect on ID_TAKEN or unavailable
+                if (err.type === 'unavailable-id' || err.type === 'peer-unavailable') return;
+                setTimeout(() => initPeer(), 3000);
+            });
+            peer.on('disconnected', () => { try { peer.reconnect(); } catch(e){} });
+        }
+
+        function getCallTarget() {
+            if (!currentRoom.startsWith('private:')) return null;
+            const parts = currentRoom.split(':'); // ['private', user1, user2]
+            return parts.slice(1).find(p => p !== currentUser) || null;
         }
 
         function handleIncomingCall(call) {
-            if (currentCall) {
-                call.close();
-                return;
-            }
+            if (currentCall) { call.close(); return; }
             const isVideo = call.metadata?.video || false;
             const caller = call.peer;
-            callAvatar.style.backgroundImage = '';
-            callAvatar.textContent = caller.charAt(0).toUpperCase();
+            callAvatar.style.backgroundImage = userAvatars[caller] ? `url(${userAvatars[caller]})` : '';
+            callAvatar.style.backgroundSize = 'cover';
+            callAvatar.textContent = userAvatars[caller] ? '' : caller.charAt(0).toUpperCase();
             callName.textContent = caller;
-            callStatus.textContent = 'Входящий звонок...';
+            callStatus.textContent = isVideo ? '📹 Входящий видеозвонок...' : '📞 Входящий звонок...';
             callActions.innerHTML = `
-                <button class="call-action-btn call-answer" onclick="answerCall(true, ${isVideo})"><i class="fas fa-phone-alt"></i></button>
-                <button class="call-action-btn call-end" onclick="endCall()"><i class="fas fa-phone-slash"></i></button>
+                <button class="call-action-btn call-answer" onclick="answerCall(${isVideo})" title="Принять">
+                    <i class="fas fa-phone-alt"></i>
+                </button>
+                <button class="call-action-btn call-end" onclick="rejectIncomingCall()" title="Отклонить">
+                    <i class="fas fa-phone-slash"></i>
+                </button>
             `;
             callModal.classList.add('active');
             currentCall = call;
+            // Ring sound
+            try {
+                const ctx = new AudioContext();
+                function beep() {
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.connect(g); g.connect(ctx.destination);
+                    o.frequency.value = 440;
+                    g.gain.setValueAtTime(0.3, ctx.currentTime);
+                    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+                    o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.5);
+                }
+                beep();
+                window._ringInterval = setInterval(beep, 1500);
+            } catch(e) {}
         }
 
-        function answerCall(withVideo, isVideo) {
-            navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo })
-                .then(stream => {
-                    localStream = stream;
-                    currentCall.answer(stream);
-                    currentCall.on('stream', remoteStream => {
-                        showCallWindow(currentCall.peer, remoteStream, isVideo);
-                    });
-                    callModal.classList.remove('active');
-                })
-                .catch(err => console.error('Failed to get media', err));
-        }
-
-        function startCall(isVideo) {
-            const target = currentRoom.startsWith('private:') ? currentRoom.split(':').find(p => p !== currentUser) : null;
-            if (!target) return alert('Можно звонить только в личный чат');
-            navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo })
-                .then(stream => {
-                    localStream = stream;
-                    const call = peer.call(target, stream, { metadata: { video: isVideo } });
-                    call.on('stream', remoteStream => {
-                        showCallWindow(target, remoteStream, isVideo);
-                    });
-                    call.on('close', () => {
-                        endCall();
-                    });
-                    currentCall = call;
-                    callAvatar.style.backgroundImage = '';
-                    callAvatar.textContent = target.charAt(0).toUpperCase();
-                    callName.textContent = target;
-                    callStatus.textContent = 'Звоним...';
-                    callActions.innerHTML = `<button class="call-action-btn call-end" onclick="endCall()"><i class="fas fa-phone-slash"></i></button>`;
-                    callModal.classList.add('active');
-                })
-                .catch(err => console.error('Failed to get media', err));
-        }
-
-        function showCallWindow(peerId, stream, isVideo) {
-            const modal = document.createElement('div');
-            modal.className = 'call-modal active';
-            modal.innerHTML = `
-                <video id="remoteVideo" autoplay style="width: 100%; height: 100%; object-fit: cover;"></video>
-                <video id="localVideo" autoplay muted style="position: absolute; bottom: 20px; right: 20px; width: 200px; border-radius: 10px;"></video>
-                <div style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);">
-                    <button class="call-action-btn call-end" onclick="endCall()"><i class="fas fa-phone-slash"></i></button>
-                </div>
-            `;
-            document.body.appendChild(modal);
-            const remoteVideo = modal.querySelector('#remoteVideo');
-            const localVideo = modal.querySelector('#localVideo');
-            remoteVideo.srcObject = stream;
-            localVideo.srcObject = localStream;
+        function rejectIncomingCall() {
+            clearInterval(window._ringInterval);
+            if (currentCall) { currentCall.close(); currentCall = null; }
             callModal.classList.remove('active');
         }
 
+        function answerCall(isVideo) {
+            clearInterval(window._ringInterval);
+            const constraints = { audio: getAudioConstraints(), video: isVideo };
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(stream => {
+                    localStream = stream;
+                    currentCall.answer(stream);
+                    currentCall.on('stream', remote => showCallWindow(currentCall.peer, remote, isVideo));
+                    currentCall.on('close', endCall);
+                    callModal.classList.remove('active');
+                })
+                .catch(err => {
+                    console.error('Media error:', err);
+                    alert('Не удалось получить доступ к микрофону/камере');
+                    rejectIncomingCall();
+                });
+        }
+
+        function startCall(isVideo) {
+            const target = getCallTarget();
+            if (!target) return alert('Можно звонить только в личный чат');
+            if (!peer || peer.disconnected) {
+                alert('Соединение не установлено. Попробуйте снова.');
+                return;
+            }
+            const constraints = { audio: getAudioConstraints(), video: isVideo };
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(stream => {
+                    localStream = stream;
+                    const call = peer.call(target, stream, { metadata: { video: isVideo } });
+                    call.on('stream', remote => showCallWindow(target, remote, isVideo));
+                    call.on('close', endCall);
+                    call.on('error', err => { console.error('Call error:', err); endCall(); });
+                    currentCall = call;
+                    callAvatar.style.backgroundImage = userAvatars[target] ? `url(${userAvatars[target]})` : '';
+                    callAvatar.style.backgroundSize = 'cover';
+                    callAvatar.textContent = userAvatars[target] ? '' : target.charAt(0).toUpperCase();
+                    callName.textContent = target;
+                    callStatus.textContent = isVideo ? '📹 Видеозвонок...' : '📞 Звоним...';
+                    callActions.innerHTML = `
+                        <button class="call-action-btn call-mute" id="muteBtn" onclick="toggleMute()" title="Микрофон">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <button class="call-action-btn call-end" onclick="endCall()" title="Завершить">
+                            <i class="fas fa-phone-slash"></i>
+                        </button>
+                    `;
+                    callModal.classList.add('active');
+                })
+                .catch(err => {
+                    console.error('Media error:', err);
+                    alert('Не удалось получить доступ к микрофону' + (isVideo ? '/камере' : ''));
+                });
+        }
+
+        let isMuted = false;
+        function toggleMute() {
+            if (!localStream) return;
+            isMuted = !isMuted;
+            localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+            const btn = document.getElementById('muteBtn');
+            if (btn) {
+                btn.innerHTML = isMuted
+                    ? '<i class="fas fa-microphone-slash"></i>'
+                    : '<i class="fas fa-microphone"></i>';
+                btn.style.background = isMuted ? '#ef4444' : '';
+            }
+        }
+
+        function showCallWindow(peerId, stream, isVideo) {
+            // Remove any existing call windows
+            document.querySelectorAll('.call-window').forEach(w => w.remove());
+            const win = document.createElement('div');
+            win.className = 'call-modal active call-window';
+            win.style.cssText = 'z-index:3500;';
+            if (isVideo) {
+                win.innerHTML = `
+                    <video id="remoteVideo" autoplay playsinline
+                        style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
+                    <video id="localVideo" autoplay playsinline muted
+                        style="position:absolute;bottom:80px;right:20px;width:160px;border-radius:12px;border:2px solid rgba(255,255,255,0.3);"></video>
+                    <div class="call-win-controls">
+                        <button class="call-action-btn call-mute" id="winMuteBtn" onclick="toggleMuteWin()" title="Микрофон">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <button class="call-action-btn call-end" onclick="endCall()" title="Завершить">
+                            <i class="fas fa-phone-slash"></i>
+                        </button>
+                    </div>
+                `;
+                const rv = win.querySelector('#remoteVideo');
+                const lv = win.querySelector('#localVideo');
+                rv.srcObject = stream;
+                lv.srcObject = localStream;
+                // Fix autoplay
+                rv.play().catch(() => rv.setAttribute('controls',''));
+            } else {
+                win.innerHTML = `
+                    <div class="call-avatar" style="width:90px;height:90px;font-size:40px;">
+                        ${userAvatars[peerId] ? `<img src="${userAvatars[peerId]}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : peerId.charAt(0).toUpperCase()}
+                    </div>
+                    <div class="call-name">${peerId}</div>
+                    <div class="call-status" id="callActiveStatus">🔊 Разговор...</div>
+                    <div class="call-win-controls">
+                        <button class="call-action-btn call-mute" id="winMuteBtn" onclick="toggleMuteWin()" title="Микрофон">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <button class="call-action-btn call-end" onclick="endCall()" title="Завершить">
+                            <i class="fas fa-phone-slash"></i>
+                        </button>
+                    </div>
+                `;
+                // Play audio
+                const audio = new Audio();
+                audio.srcObject = stream;
+                audio.autoplay = true;
+                audio.id = 'callAudio';
+                // Apply output device if selected
+                const savedSpeaker = localStorage.getItem('chatSpeaker');
+                if (savedSpeaker && audio.setSinkId) {
+                    audio.setSinkId(savedSpeaker).catch(() => {});
+                }
+                audio.play().catch(() => {});
+                win.appendChild(audio);
+            }
+            document.body.appendChild(win);
+            callModal.classList.remove('active');
+            // Call timer
+            let secs = 0;
+            window._callTimer = setInterval(() => {
+                secs++;
+                const st = document.getElementById('callActiveStatus');
+                if (st) st.textContent = `🔊 ${Math.floor(secs/60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`;
+            }, 1000);
+        }
+
+        function toggleMuteWin() {
+            toggleMute();
+            const btn = document.getElementById('winMuteBtn');
+            if (btn) {
+                btn.innerHTML = isMuted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
+                btn.style.background = isMuted ? '#ef4444' : '';
+            }
+        }
+
         function endCall() {
-            if (currentCall) {
-                currentCall.close();
-                currentCall = null;
-            }
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-                localStream = null;
-            }
-            document.querySelectorAll('.call-modal').forEach(m => m.remove());
+            clearInterval(window._ringInterval);
+            clearInterval(window._callTimer);
+            if (currentCall) { try { currentCall.close(); } catch(e){} currentCall = null; }
+            if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+            isMuted = false;
+            document.querySelectorAll('.call-modal, .call-window').forEach(m => {
+                if (!m.id || m.id !== 'callModal') m.remove();
+            });
+            callModal.classList.remove('active');
+        }
+
+        // Audio constraints using saved mic
+        function getAudioConstraints() {
+            const savedMic = localStorage.getItem('chatMic');
+            const base = {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 48000
+            };
+            if (savedMic && savedMic !== 'default') base.deviceId = { exact: savedMic };
+            return base;
         }
 
         // ========== АВТОРИЗАЦИЯ ==========
@@ -1212,22 +1599,30 @@
                 if (data.success) {
                     currentUser = data.user.username;
                     userData = data.user;
-                    loginModal.classList.remove('active');
                     applyTheme(userData.theme);
+                    // Restore accent color from localStorage (overrides server theme)
+                    const savedAccent = localStorage.getItem('chatAccent');
+                    if (savedAccent) document.documentElement.style.setProperty('--accent-color', savedAccent);
                     updateProfileUI();
                     socket.emit('identify', currentUser);
                     loadUserData();
                     enableChat();
                     initPeer();
                     switchRoom('general');
+                    hideLoadingScreen();
                 } else {
                     loginModal.classList.add('active');
                     localStorage.removeItem('chatUser');
+                    hideLoadingScreen();
                 }
             })
-            .catch(() => loginModal.classList.add('active'));
+            .catch(() => {
+                loginModal.classList.add('active');
+                hideLoadingScreen();
+            });
         } else {
             loginModal.classList.add('active');
+            hideLoadingScreen();
         }
 
         function enableChat() {
@@ -1478,10 +1873,13 @@
                 content += `<img src="${msg.url}" alt="Фото" onclick="showMedia('${msg.url}', 'image')" loading="lazy">`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else if (msg.type === 'video') {
-                content += `<video src="${msg.url}" controls preload="metadata" onclick="showMedia('${msg.url}', 'video')"></video>`;
+                content += `<video src="${msg.url}" controls preload="auto" playsinline
+                    style="max-width:100%;max-height:280px;border-radius:10px;margin-top:6px;display:block;"
+                    onclick="showMedia('${msg.url}', 'video')"></video>`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else if (msg.type === 'audio') {
-                content += `<audio controls src="${msg.url}" preload="metadata"></audio>`;
+                const audioId = 'aud_' + Date.now() + Math.random().toString(36).slice(2);
+                content += `<audio id="${audioId}" controls preload="auto" style="width:100%;margin-top:6px;" src="${msg.url}"></audio>`;
                 if (msg.text) content += `<div class="text">${msg.text}</div>`;
             } else if (msg.type === 'file') {
                 content += `<div class="file-attachment"><i class="fas fa-file"></i> <a href="${msg.url}" target="_blank">${msg.fileName || 'Файл'}</a></div>`;
@@ -1492,6 +1890,18 @@
 
             content += `<div class="time">${msg.time}</div>`;
             msgDiv.innerHTML = content;
+
+            // Apply speaker output device to audio elements
+            if (msg.type === 'audio') {
+                const audioEl = msgDiv.querySelector('audio');
+                if (audioEl) {
+                    const savedSpeaker = localStorage.getItem('chatSpeaker');
+                    if (savedSpeaker && savedSpeaker !== 'default' && audioEl.setSinkId) {
+                        audioEl.setSinkId(savedSpeaker).catch(() => {});
+                    }
+                }
+            }
+
             messagesDiv.appendChild(msgDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -1691,27 +2101,41 @@
             if (isRecording) return;
             isRecording = true;
             try {
-                mediaStream = await navigator.mediaDevices.getUserMedia({
-                    audio: { channelCount: 1, sampleRate: 48000, echoCancellation: true, noiseSuppression: true }
-                });
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-                const options = { mimeType, audioBitsPerSecond: 320000 };
+                const constraints = {
+                    audio: {
+                        ...getAudioConstraints(),
+                        sampleRate: 48000,
+                        sampleSize: 16,
+                        channelCount: 1
+                    }
+                };
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+                // Best quality codec
+                const mimeTypes = [
+                    'audio/webm;codecs=opus',
+                    'audio/ogg;codecs=opus',
+                    'audio/webm',
+                    'audio/ogg'
+                ];
+                const mimeType = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || 'audio/webm';
+                const options = { mimeType, audioBitsPerSecond: 128000 };
                 mediaRecorder = new MediaRecorder(mediaStream, options);
                 audioChunks = [];
                 mediaRecorder.ondataavailable = (e) => e.data.size && audioChunks.push(e.data);
                 mediaRecorder.onstop = async () => {
                     if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
                     if (audioChunks.length) {
-                        const blob = new Blob(audioChunks, { type: 'audio/webm' });
-                        await sendVoiceMessage(blob);
+                        const blob = new Blob(audioChunks, { type: mimeType });
+                        await sendVoiceMessage(blob, mimeType);
                     }
                     recordingIndicator.style.display = 'none';
                     clearInterval(recordingTimer);
                     seconds = 0;
                     isRecording = false;
                 };
-                mediaRecorder.onerror = stopRecording;
-                mediaRecorder.start(1000);
+                mediaRecorder.onerror = forceStopRecording;
+                mediaRecorder.start(250); // smaller chunks = faster start
                 recordingIndicator.style.display = 'flex';
                 seconds = 0;
                 recordingTime.textContent = '0';
@@ -1739,9 +2163,10 @@
             isRecording = false;
         }
 
-        async function sendVoiceMessage(blob) {
+        async function sendVoiceMessage(blob, mimeType) {
+            const ext = mimeType && mimeType.includes('ogg') ? 'ogg' : 'webm';
             const formData = new FormData();
-            formData.append('file', blob, 'voice.webm');
+            formData.append('file', blob, `voice.${ext}`);
             try {
                 const response = await fetch('/upload', { method: 'POST', body: formData });
                 const result = await response.json();
@@ -1763,25 +2188,40 @@
             settingsNickname.value = userData.nickname || '';
             accountUsernameSpan.textContent = currentUser;
             updateSettingsAvatar();
+            // Restore theme card selection
+            const savedTheme = localStorage.getItem('chatTheme') || 'light';
+            document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('selected'));
+            const card = document.getElementById(savedTheme === 'dark' ? 'themeCardDark' : 'themeCardLight');
+            if (card) card.classList.add('selected');
+            // Restore accent color selection
+            const savedAccent = localStorage.getItem('chatAccent') || '#0088cc';
+            document.querySelectorAll('.color-option').forEach(o => {
+                o.classList.remove('selected');
+                if (o.style.background === savedAccent || o.style.backgroundColor === savedAccent) o.classList.add('selected');
+            });
+            // Restore volume
+            const savedVol = localStorage.getItem('chatVolume') || '100';
+            document.getElementById('volumeRange').value = savedVol;
+            document.getElementById('volumeLabel').textContent = savedVol + '%';
+            // Load devices
+            loadAudioDevices();
         }
+
         function closeSettings() { settingsModal.classList.remove('active'); }
+
         function switchSettingsTab(tab) {
-            document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.settings-pane').forEach(p => p.style.display = 'none');
-            if (tab === 'profile') {
-                document.querySelectorAll('.settings-tab')[0].classList.add('active');
-                document.getElementById('settingsProfile').style.display = 'block';
-            } else if (tab === 'theme') {
-                document.querySelectorAll('.settings-tab')[1].classList.add('active');
-                document.getElementById('settingsTheme').style.display = 'block';
-            } else {
-                document.querySelectorAll('.settings-tab')[2].classList.add('active');
-                document.getElementById('settingsAccount').style.display = 'block';
-            }
+            const tabs = document.querySelectorAll('.settings-tab');
+            const panes = ['settingsProfile','settingsSound','settingsTheme','settingsAccount'];
+            const tabMap = { profile: 0, sound: 1, theme: 2, account: 3 };
+            tabs.forEach(t => t.classList.remove('active'));
+            panes.forEach(p => document.getElementById(p).style.display = 'none');
+            const idx = tabMap[tab] ?? 0;
+            tabs[idx].classList.add('active');
+            document.getElementById(panes[idx]).style.display = 'block';
         }
-        function triggerAvatarUpload() {
-            document.getElementById('avatarUpload').click();
-        }
+
+        function triggerAvatarUpload() { document.getElementById('avatarUpload').click(); }
+
         document.getElementById('avatarUpload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -1796,16 +2236,19 @@
                 socket.emit('avatar-updated', { username: currentUser, avatar: result.url });
             }
         });
+
         function updateSettingsAvatar() {
+            const sa = document.getElementById('settingsAvatar');
             if (userData.avatar) {
-                settingsAvatar.style.backgroundImage = `url(${userData.avatar})`;
-                settingsAvatar.style.backgroundSize = 'cover';
-                settingsAvatar.textContent = '';
+                sa.style.backgroundImage = `url(${userData.avatar})`;
+                sa.style.backgroundSize = 'cover';
+                sa.textContent = '';
             } else {
-                settingsAvatar.style.background = 'linear-gradient(135deg, var(--accent-color), #764ba2)';
-                settingsAvatar.textContent = currentUser.charAt(0).toUpperCase();
+                sa.style.background = 'linear-gradient(135deg, var(--accent-color), #764ba2)';
+                sa.textContent = (currentUser || '?').charAt(0).toUpperCase();
             }
         }
+
         async function saveProfile() {
             const nickname = settingsNickname.value.trim();
             if (!nickname) return;
@@ -1822,20 +2265,135 @@
             }
         }
 
+        // ========== ЗВУК ==========
+        async function loadAudioDevices() {
+            try {
+                // Request permission first so labels are available
+                await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const mics = devices.filter(d => d.kind === 'audioinput');
+                const speakers = devices.filter(d => d.kind === 'audiooutput');
+
+                const micSel = document.getElementById('micSelect');
+                const spkSel = document.getElementById('speakerSelect');
+                const savedMic = localStorage.getItem('chatMic') || 'default';
+                const savedSpeaker = localStorage.getItem('chatSpeaker') || 'default';
+
+                micSel.innerHTML = '<option value="default">По умолчанию</option>';
+                mics.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d.deviceId;
+                    opt.textContent = d.label || `Микрофон ${micSel.options.length}`;
+                    if (d.deviceId === savedMic) opt.selected = true;
+                    micSel.appendChild(opt);
+                });
+
+                // Check if setSinkId is supported
+                const supportsSpeaker = typeof HTMLMediaElement.prototype.setSinkId === 'function';
+                if (supportsSpeaker && speakers.length > 0) {
+                    spkSel.innerHTML = '<option value="default">По умолчанию</option>';
+                    speakers.forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value = d.deviceId;
+                        opt.textContent = d.label || `Динамик ${spkSel.options.length}`;
+                        if (d.deviceId === savedSpeaker) opt.selected = true;
+                        spkSel.appendChild(opt);
+                    });
+                    document.getElementById('speakerHint').style.display = 'none';
+                } else {
+                    spkSel.innerHTML = '<option value="default">По умолчанию</option>';
+                    spkSel.disabled = true;
+                    document.getElementById('speakerHint').style.display = 'flex';
+                }
+            } catch (err) {
+                console.error('Device enumeration error:', err);
+            }
+        }
+
+        function saveSoundSettings() {
+            const mic = document.getElementById('micSelect').value;
+            const speaker = document.getElementById('speakerSelect').value;
+            localStorage.setItem('chatMic', mic);
+            localStorage.setItem('chatSpeaker', speaker);
+        }
+
+        function updateVolume(val) {
+            document.getElementById('volumeLabel').textContent = val + '%';
+            localStorage.setItem('chatVolume', val);
+            // Apply to all audio elements on page
+            document.querySelectorAll('audio, video').forEach(el => {
+                el.volume = val / 100;
+            });
+        }
+
+        // Apply saved volume to new media elements
+        function applyVolume(el) {
+            const vol = parseInt(localStorage.getItem('chatVolume') || '100');
+            el.volume = vol / 100;
+        }
+
+        async function testMic() {
+            const result = document.getElementById('micTestResult');
+            result.style.display = 'block';
+            result.textContent = '🎙️ Проверяю микрофон...';
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: getAudioConstraints() });
+                const ctx = new AudioContext();
+                const analyser = ctx.createAnalyser();
+                const src = ctx.createMediaStreamSource(stream);
+                src.connect(analyser);
+                analyser.fftSize = 256;
+                const data = new Uint8Array(analyser.frequencyBinCount);
+                let maxLevel = 0;
+                const start = Date.now();
+                result.textContent = '🎙️ Говорите... (2 сек)';
+                const interval = setInterval(() => {
+                    analyser.getByteFrequencyData(data);
+                    const level = data.reduce((a, b) => a + b, 0) / data.length;
+                    if (level > maxLevel) maxLevel = level;
+                }, 100);
+                setTimeout(() => {
+                    clearInterval(interval);
+                    stream.getTracks().forEach(t => t.stop());
+                    ctx.close();
+                    if (maxLevel > 5) {
+                        result.textContent = `✅ Микрофон работает! Уровень: ${Math.round(maxLevel)}`;
+                        result.style.color = '#10b981';
+                    } else {
+                        result.textContent = '⚠️ Звук не обнаружен. Проверьте микрофон.';
+                        result.style.color = '#f59e0b';
+                    }
+                }, 2000);
+            } catch (e) {
+                result.textContent = '❌ Нет доступа к микрофону: ' + e.message;
+                result.style.color = '#ef4444';
+            }
+        }
+
         // ========== ТЕМЫ ==========
+        let _pendingTheme = localStorage.getItem('chatTheme') || 'light';
+
+        function selectThemeBg(theme) {
+            _pendingTheme = theme;
+            document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById(theme === 'dark' ? 'themeCardDark' : 'themeCardLight').classList.add('selected');
+        }
+
         function selectAccentColor(color, el) {
             document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
             el.classList.add('selected');
             document.documentElement.style.setProperty('--accent-color', color);
         }
+
         async function saveTheme() {
-            const bg = document.getElementById('themeBg').value;
+            const bg = _pendingTheme;
             const accent = document.querySelector('.color-option.selected')?.style.background || '#0088cc';
             if (bg === 'dark') document.body.classList.add('dark-theme');
             else document.body.classList.remove('dark-theme');
             document.documentElement.style.setProperty('--accent-color', accent);
             userData.theme = bg;
             localStorage.setItem('chatTheme', bg);
+            localStorage.setItem('chatAccent', accent);
             await fetch('/api/update-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1843,6 +2401,7 @@
             });
             closeSettings();
         }
+
         function applyTheme(theme) {
             if (theme === 'dark') document.body.classList.add('dark-theme');
             else document.body.classList.remove('dark-theme');
@@ -1858,6 +2417,10 @@
             });
             localStorage.removeItem('chatUser');
             localStorage.removeItem('chatTheme');
+            localStorage.removeItem('chatAccent');
+            localStorage.removeItem('chatMic');
+            localStorage.removeItem('chatSpeaker');
+            localStorage.removeItem('chatVolume');
             location.reload();
         }
 
@@ -1867,7 +2430,9 @@
             const list = document.getElementById('groupMembersList');
             list.innerHTML = '';
             friends.forEach(f => {
-                list.innerHTML += `<div><input type="checkbox" value="${f}"> ${f}</div>`;
+                list.innerHTML += `<label style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;cursor:pointer;">
+                    <input type="checkbox" value="${f}" style="width:16px;height:16px;accent-color:var(--accent-color);"> ${f}
+                </label>`;
             });
         }
         function closeGroupModal() { document.getElementById('groupModal').classList.remove('active'); }
@@ -1882,7 +2447,6 @@
             });
             const data = await response.json();
             if (data.success) {
-                alert('Группа создана');
                 closeGroupModal();
                 loadUserData();
             }
@@ -1906,20 +2470,31 @@
         function showMedia(url, type) {
             const modal = document.createElement('div');
             modal.className = 'modal active';
-            modal.style.background = 'rgba(0,0,0,0.9)';
-            modal.onclick = () => modal.remove();
+            modal.style.cssText = 'background:rgba(0,0,0,0.95);backdrop-filter:blur(10px);z-index:5000;';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
             if (type === 'image') {
-                modal.innerHTML = `<img src="${url}" style="max-width:90%; max-height:90%;">`;
+                modal.innerHTML = `
+                    <div style="position:relative;max-width:92vw;max-height:92vh;">
+                        <img src="${url}" style="max-width:100%;max-height:90vh;border-radius:12px;display:block;">
+                        <button onclick="this.closest('.modal').remove()" style="position:absolute;top:-14px;right:-14px;width:32px;height:32px;border-radius:50%;background:#ef4444;color:white;border:none;cursor:pointer;font-size:16px;">✕</button>
+                    </div>`;
             } else {
-                modal.innerHTML = `<video src="${url}" controls style="max-width:90%; max-height:90%;"></video>`;
+                modal.innerHTML = `
+                    <div style="position:relative;max-width:92vw;">
+                        <video src="${url}" controls autoplay playsinline style="max-width:100%;max-height:90vh;border-radius:12px;display:block;"></video>
+                        <button onclick="this.closest('.modal').remove()" style="position:absolute;top:-14px;right:-14px;width:32px;height:32px;border-radius:50%;background:#ef4444;color:white;border:none;cursor:pointer;font-size:16px;">✕</button>
+                    </div>`;
+                // Apply volume
+                setTimeout(() => {
+                    const v = modal.querySelector('video');
+                    if (v) applyVolume(v);
+                }, 50);
             }
             document.body.appendChild(modal);
         }
 
         // Пинг
-        setInterval(() => {
-            if (currentUser) socket.emit('ping');
-        }, 3000);
+        setInterval(() => { if (currentUser) socket.emit('ping'); }, 3000);
     </script>
 </body>
 </html>
