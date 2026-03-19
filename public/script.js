@@ -1013,10 +1013,48 @@ function showCtxMsg(e, msg) {
   e.preventDefault();
   const own = msg.user === currentUser;
   ctxMenu.innerHTML = `
-    <div class="ctx-item" onclick="copyMsg('${msg.id}')"><i class="ti ti-copy"></i> Копировать</div>
-    ${own ? `<div class="ctx-item danger" onclick="deleteMsg('${msg.id}')"><i class="ti ti-trash"></i> Удалить</div>` : ''}`;
+    <div class="ctx-item" onclick="copyMsgText('${msg.id}')"><i class="ti ti-copy"></i> Копировать текст</div>
+    ${own ? `
+    <div class="ctx-sep"></div>
+    <div class="ctx-item danger" onclick="deleteMsg('${msg.id}')"><i class="ti ti-trash"></i> Удалить сообщение</div>
+    ` : ''}`;
   showCtx(e);
 }
+
+async function deleteMsg(id) {
+  closeCtx();
+  const ok = await dialog({
+    icon: 'ti-trash', iconType: 'error',
+    title: 'Удалить сообщение?',
+    msg: 'Сообщение будет удалено у всех участников чата.',
+    ok: 'Удалить', cancel: 'Отмена', danger: true
+  });
+  if (!ok) return;
+
+  try {
+    const r = await fetch('/api/delete-message', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: id, username: currentUser })
+    });
+    const d = await r.json();
+    if (!d.success) toast(d.error || 'Ошибка удаления', 'error');
+    // UI update handled by socket event 'message-deleted'
+  } catch {
+    toast('Ошибка соединения', 'error');
+  }
+}
+
+// Real-time deletion from server
+socket.on('message-deleted', ({ messageId }) => {
+  const row = document.querySelector(`[data-id="${messageId}"]`);
+  if (row) {
+    // Animate out
+    row.style.transition = 'opacity .2s, transform .2s';
+    row.style.opacity = '0';
+    row.style.transform = 'scale(.95)';
+    setTimeout(() => row.remove(), 200);
+  }
+});
 
 function showCtxFriend(e, friend) {
   e.preventDefault();
@@ -1039,7 +1077,7 @@ function closeCtx() { ctxMenu.classList.remove('open'); }
 document.addEventListener('click', closeCtx);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx(); $('emojiPicker').classList.remove('open'); } });
 
-function copyMsg(id) {
+function copyMsgText(id) {
   const row = document.querySelector(`[data-id="${id}"]`);
   const text = row?.querySelector('.msg-text')?.textContent || '';
   navigator.clipboard.writeText(text).then(() => toast('Скопировано', 'success', 1500));
