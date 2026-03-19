@@ -988,10 +988,264 @@
             0%, 80%, 100% { background: rgba(255,255,255,0.25); transform: scale(0.9); }
             40% { background: #0088cc; transform: scale(1.2); }
         }
+        /* ===== ЭКРАН ВХОДА ===== */
+        .login-card {
+            background: var(--sidebar-bg);
+            border-radius: 24px;
+            padding: 40px 36px;
+            width: 90%;
+            max-width: 380px;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+            animation: modalIn 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        .login-logo {
+            width: 72px; height: 72px;
+            border-radius: 22px;
+            background: linear-gradient(135deg, var(--accent-color), #764ba2);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 32px; color: white;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 24px rgba(0,136,204,0.35);
+        }
+        .login-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 8px;
+        }
+        .login-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 28px;
+            line-height: 1.5;
+        }
+        .login-input-wrap {
+            position: relative;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+        .login-input-icon {
+            position: absolute;
+            left: 16px; top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+        .login-input {
+            width: 100%;
+            padding: 14px 16px 14px 44px;
+            border: 2px solid var(--border-color);
+            border-radius: 14px;
+            background: var(--input-bg);
+            color: var(--text-color);
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            box-sizing: border-box;
+        }
+        .login-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 4px rgba(0,136,204,0.12);
+        }
+        .login-error {
+            font-size: 13px;
+            color: #ef4444;
+            min-height: 18px;
+            margin-bottom: 8px;
+            width: 100%;
+            text-align: center;
+        }
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--accent-color), #0066aa);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: opacity 0.2s, transform 0.15s;
+            box-shadow: 0 4px 16px rgba(0,136,204,0.35);
+        }
+        .login-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+        .login-btn:active { transform: translateY(0); }
+        .login-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        /* ===== КАСТОМНЫЕ ДИАЛОГИ ===== */
+        #customDialogOverlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(6px);
+            z-index: 9000;
+            align-items: center;
+            justify-content: center;
+        }
+        #customDialogOverlay.active { display: flex; }
+        .custom-dialog {
+            background: var(--sidebar-bg);
+            border-radius: 22px;
+            padding: 28px 28px 22px;
+            width: 90%;
+            max-width: 360px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+            animation: modalIn 0.2s ease;
+            color: var(--text-color);
+        }
+        .custom-dialog-icon {
+            width: 52px; height: 52px;
+            border-radius: 16px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px;
+            margin: 0 auto 16px;
+        }
+        .custom-dialog-icon.info { background: rgba(0,136,204,0.12); color: var(--accent-color); }
+        .custom-dialog-icon.success { background: rgba(16,185,129,0.12); color: #10b981; }
+        .custom-dialog-icon.error { background: rgba(239,68,68,0.12); color: #ef4444; }
+        .custom-dialog-icon.warning { background: rgba(245,158,11,0.12); color: #f59e0b; }
+        .custom-dialog h3 {
+            font-size: 17px; font-weight: 700;
+            text-align: center; margin-bottom: 8px;
+        }
+        .custom-dialog p {
+            font-size: 14px; color: var(--text-secondary);
+            text-align: center; line-height: 1.5; margin-bottom: 20px;
+        }
+        .custom-dialog-input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            background: var(--input-bg);
+            color: var(--text-color);
+            font-size: 14px;
+            outline: none;
+            margin-bottom: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .custom-dialog-input:focus { border-color: var(--accent-color); }
+        .custom-dialog-btns {
+            display: flex; gap: 10px;
+        }
+        .custom-dialog-btns button {
+            flex: 1; padding: 12px;
+            border: none; border-radius: 12px;
+            font-size: 14px; font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .custom-dialog-btns button:hover { opacity: 0.9; transform: translateY(-1px); }
+        .custom-dialog-btns .btn-primary { background: var(--accent-color); color: white; }
+        .custom-dialog-btns .btn-secondary { background: var(--friend-item-bg); color: var(--text-color); }
+        .custom-dialog-btns .btn-danger { background: #ef4444; color: white; }
+
+        /* ===== ТОСТЫ ===== */
+        #toastContainer {
+            position: fixed;
+            top: 20px; right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .toast {
+            background: var(--sidebar-bg);
+            color: var(--text-color);
+            border-radius: 14px;
+            padding: 12px 18px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            pointer-events: all;
+            animation: toastIn 0.3s ease;
+            border-left: 4px solid var(--accent-color);
+            max-width: 320px;
+        }
+        .toast.success { border-color: #10b981; }
+        .toast.error { border-color: #ef4444; }
+        .toast.warning { border-color: #f59e0b; }
+        .toast i { font-size: 16px; }
+        .toast.success i { color: #10b981; }
+        .toast.error i { color: #ef4444; }
+        .toast.warning i { color: #f59e0b; }
+        .toast.info i { color: var(--accent-color); }
+        @keyframes toastIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes toastOut { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(40px); } }
+
+        /* ===== БЕЙДЖИ НА ВКЛАДКАХ ===== */
+        .tab-badge {
+            display: inline-flex;
+            align-items: center; justify-content: center;
+            background: #ef4444;
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .tab-badge.hidden { display: none; }
+
+        /* ===== НОТИФИКАЦИЯ О ЗАЯВКЕ В ДРУЗЬЯ (попап) ===== */
+        .friend-request-popup {
+            position: fixed;
+            bottom: 24px; left: 50%;
+            transform: translateX(-50%);
+            background: var(--sidebar-bg);
+            border-radius: 18px;
+            padding: 14px 20px;
+            box-shadow: 0 12px 36px rgba(0,0,0,0.22);
+            display: flex; align-items: center; gap: 14px;
+            z-index: 8000;
+            animation: toastIn 0.3s ease;
+            border: 1px solid var(--border-color);
+            min-width: 280px;
+        }
+        .friend-request-popup .frp-avatar {
+            width: 42px; height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-color), #764ba2);
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: bold; font-size: 17px;
+            flex-shrink: 0;
+        }
+        .friend-request-popup .frp-text { flex: 1; }
+        .friend-request-popup .frp-name { font-weight: 700; font-size: 14px; }
+        .friend-request-popup .frp-sub { font-size: 12px; color: var(--text-secondary); }
+        .friend-request-popup .frp-btns { display: flex; gap: 8px; }
+        .friend-request-popup .frp-btns button {
+            padding: 7px 14px;
+            border: none; border-radius: 10px;
+            font-size: 12px; font-weight: 600;
+            cursor: pointer;
+        }
+        .frp-accept { background: #10b981; color: white; }
+        .frp-reject { background: var(--friend-item-bg); color: var(--text-secondary); }
     </style>
-</head>
 <body>
-    <!-- Экран загрузки -->
+    <!-- Кастомный диалог -->
+    <div id="customDialogOverlay">
+        <div class="custom-dialog" id="customDialogBox"></div>
+    </div>
+    <!-- Тосты -->
+    <div id="toastContainer"></div>
+
+
     <div id="loadingScreen" class="loading active">
         <div class="loading-logo"><i class="fas fa-comment-dots"></i></div>
         <div class="loading-text">Подключение...</div>
@@ -1000,12 +1254,21 @@
 
     <!-- Модальное окно входа -->
     <div id="loginModal" class="modal">
-        <div class="modal-content" style="max-width: 350px;">
-            <h2>Вход / Регистрация</h2>
-            <p>Введите уникальное имя для входа</p>
-            <input type="text" id="loginUsername" placeholder="Имя" autocomplete="off">
-            <button onclick="login()" style="width:100%; padding:10px; background:var(--accent-color); color:white; border:none; border-radius:5px; margin-top:10px;">Продолжить</button>
-            <div id="loginError" style="color:#dc3545; margin-top:10px;"></div>
+        <div class="login-card">
+            <div class="login-logo">
+                <i class="fas fa-comment-dots"></i>
+            </div>
+            <h2 class="login-title">Добро пожаловать</h2>
+            <p class="login-subtitle">Введите имя для входа или регистрации</p>
+            <div class="login-input-wrap">
+                <i class="fas fa-user login-input-icon"></i>
+                <input type="text" id="loginUsername" class="login-input" placeholder="Ваше имя..." autocomplete="off" onkeydown="if(event.key==='Enter')login()">
+            </div>
+            <div id="loginError" class="login-error"></div>
+            <button onclick="login()" class="login-btn" id="loginBtn">
+                <span>Продолжить</span>
+                <i class="fas fa-arrow-right"></i>
+            </button>
         </div>
     </div>
 
@@ -1170,7 +1433,7 @@
             <div class="tabs">
                 <div class="tab active" onclick="switchTab('friends')"><i class="fas fa-user-friends"></i> Друзья</div>
                 <div class="tab" onclick="switchTab('groups')"><i class="fas fa-users"></i> Группы</div>
-                <div class="tab" onclick="switchTab('requests')"><i class="fas fa-bell"></i> Заявки</div>
+                <div class="tab" onclick="switchTab('requests')"><i class="fas fa-bell"></i> Заявки<span class="tab-badge hidden" id="requestsBadge"></span></div>
             </div>
             <div class="tab-content">
                 <!-- Друзья (с отступом) -->
@@ -1236,7 +1499,121 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script>
-        // ========== ПРИМЕНЕНИЕ ТЕМЫ ДО ЗАГРУЗКИ ==========
+        // ========== КАСТОМНЫЕ ДИАЛОГИ И ТОСТЫ ==========
+        const dialogOverlay = document.getElementById('customDialogOverlay');
+        const dialogBox = document.getElementById('customDialogBox');
+
+        function showToast(msg, type = 'info', duration = 3500) {
+            const icons = { info: 'fa-info-circle', success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-triangle' };
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i><span>${msg}</span>`;
+            document.getElementById('toastContainer').appendChild(t);
+            setTimeout(() => {
+                t.style.animation = 'toastOut 0.3s ease forwards';
+                setTimeout(() => t.remove(), 300);
+            }, duration);
+        }
+
+        function showDialog({ icon = 'fa-info-circle', iconType = 'info', title, message, input = false, inputPlaceholder = '', confirmText = 'OK', cancelText = null, onConfirm, onCancel, confirmClass = 'btn-primary', dangerConfirm = false }) {
+            return new Promise(resolve => {
+                const cancelBtn = cancelText ? `<button class="btn-secondary" id="dlgCancel">${cancelText}</button>` : '';
+                const inputHtml = input ? `<input type="text" class="custom-dialog-input" id="dlgInput" placeholder="${inputPlaceholder}" autocomplete="off">` : '';
+                dialogBox.innerHTML = `
+                    <div class="custom-dialog-icon ${iconType}"><i class="fas ${icon}"></i></div>
+                    <h3>${title}</h3>
+                    ${message ? `<p>${message}</p>` : ''}
+                    ${inputHtml}
+                    <div class="custom-dialog-btns">
+                        ${cancelBtn}
+                        <button class="${dangerConfirm ? 'btn-danger' : confirmClass}" id="dlgConfirm">${confirmText}</button>
+                    </div>`;
+                dialogOverlay.classList.add('active');
+                if (input) {
+                    setTimeout(() => document.getElementById('dlgInput')?.focus(), 50);
+                    document.getElementById('dlgInput')?.addEventListener('keydown', e => {
+                        if (e.key === 'Enter') document.getElementById('dlgConfirm').click();
+                    });
+                }
+                const close = (val) => {
+                    dialogOverlay.classList.remove('active');
+                    resolve(val);
+                };
+                document.getElementById('dlgConfirm').onclick = () => {
+                    const val = input ? document.getElementById('dlgInput')?.value?.trim() : true;
+                    close(val);
+                    if (onConfirm) onConfirm(val);
+                };
+                if (cancelText) {
+                    document.getElementById('dlgCancel').onclick = () => { close(null); if (onCancel) onCancel(); };
+                }
+                dialogOverlay.onclick = (e) => { if (e.target === dialogOverlay) { close(null); if (onCancel) onCancel(); } };
+            });
+        }
+
+        function showFriendRequestPopup(requester) {
+            // Remove existing popup
+            document.querySelectorAll('.friend-request-popup').forEach(p => p.remove());
+            const pop = document.createElement('div');
+            pop.className = 'friend-request-popup';
+            pop.innerHTML = `
+                <div class="frp-avatar">${requester.charAt(0).toUpperCase()}</div>
+                <div class="frp-text">
+                    <div class="frp-name">${requester}</div>
+                    <div class="frp-sub">хочет добавить вас в друзья</div>
+                </div>
+                <div class="frp-btns">
+                    <button class="frp-accept" onclick="acceptRequestFromPopup('${requester}', this)">✓</button>
+                    <button class="frp-reject" onclick="rejectRequestFromPopup('${requester}', this)">✗</button>
+                </div>`;
+            document.body.appendChild(pop);
+            setTimeout(() => {
+                if (pop.parentNode) {
+                    pop.style.animation = 'toastOut 0.3s ease forwards';
+                    setTimeout(() => pop.remove(), 300);
+                }
+            }, 8000);
+        }
+
+        async function acceptRequestFromPopup(requester, btn) {
+            btn.closest('.friend-request-popup').remove();
+            await acceptRequest(requester);
+        }
+
+        async function rejectRequestFromPopup(requester, btn) {
+            btn.closest('.friend-request-popup').remove();
+            await rejectRequest(requester);
+        }
+
+        function updateRequestsBadge() {
+            const badge = document.getElementById('requestsBadge');
+            if (!badge) return;
+            if (friendRequests.length > 0) {
+                badge.textContent = friendRequests.length > 9 ? '9+' : friendRequests.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        // Real-time: server sends friend-request event
+        socket.on('friend-request', ({ from }) => {
+            if (!friendRequests.includes(from)) {
+                friendRequests.push(from);
+                renderRequests();
+                updateRequestsBadge();
+                showFriendRequestPopup(from);
+            }
+        });
+
+        // Real-time: friends list updated
+        socket.on('friends-updated', ({ friends: newFriends }) => {
+            friends = newFriends || [];
+            renderFriends();
+            showToast('Список друзей обновлён', 'success');
+        });
+
+
         (function() {
             const savedTheme = localStorage.getItem('chatTheme') || 'light';
             if (savedTheme === 'dark') document.body.classList.add('dark-theme');
@@ -1394,16 +1771,16 @@
                 })
                 .catch(err => {
                     console.error('Media error:', err);
-                    alert('Не удалось получить доступ к микрофону/камере');
+                    showToast('Нет доступа к микрофону/камере', 'error');
                     rejectIncomingCall();
                 });
         }
 
         function startCall(isVideo) {
             const target = getCallTarget();
-            if (!target) return alert('Можно звонить только в личный чат');
+            if (!target) { showToast('Звонок доступен только в личном чате', 'warning'); return; }
             if (!peer || peer.disconnected) {
-                alert('Соединение не установлено. Попробуйте снова.');
+                showToast('Нет соединения. Попробуйте снова.', 'error');
                 return;
             }
             const constraints = { audio: getAudioConstraints(), video: isVideo };
@@ -1432,7 +1809,7 @@
                 })
                 .catch(err => {
                     console.error('Media error:', err);
-                    alert('Не удалось получить доступ к микрофону' + (isVideo ? '/камере' : ''));
+                    showToast('Нет доступа к ' + (isVideo ? 'микрофону/камере' : 'микрофону'), 'error');
                 });
         }
 
@@ -1556,8 +1933,14 @@
             const username = loginUsername.value.trim();
             if (!username) {
                 loginError.textContent = 'Введите имя';
+                loginUsername.style.borderColor = '#ef4444';
                 return;
             }
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+            loginError.textContent = '';
+            loginUsername.style.borderColor = '';
             try {
                 const response = await fetch('/api/login', {
                     method: 'POST',
@@ -1571,6 +1954,8 @@
                     localStorage.setItem('chatUser', currentUser);
                     localStorage.setItem('chatTheme', userData.theme);
                     applyTheme(userData.theme);
+                    const savedAccent = localStorage.getItem('chatAccent');
+                    if (savedAccent) document.documentElement.style.setProperty('--accent-color', savedAccent);
                     updateProfileUI();
                     socket.emit('identify', currentUser);
                     loadUserData();
@@ -1580,10 +1965,15 @@
                     loginModal.classList.remove('active');
                 } else {
                     loginError.textContent = data.error || 'Ошибка входа';
+                    loginUsername.style.borderColor = '#ef4444';
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>Продолжить</span><i class="fas fa-arrow-right"></i>';
                 }
             } catch (err) {
                 console.error('Ошибка входа:', err);
                 loginError.textContent = 'Ошибка соединения';
+                btn.disabled = false;
+                btn.innerHTML = '<span>Продолжить</span><i class="fas fa-arrow-right"></i>';
             }
         }
 
@@ -1657,6 +2047,7 @@
             renderFriends();
             renderGroups();
             renderRequests();
+            updateRequestsBadge();
         }
 
         // ========== ОБНОВЛЕНИЕ АВАТАРОВ ==========
@@ -1711,20 +2102,38 @@
             } else {
                 document.querySelector('.tab[onclick*="requests"]').classList.add('active');
                 document.getElementById('requestsTab').style.display = 'block';
+                // Clear badge when user opens the tab
+                const badge = document.getElementById('requestsBadge');
+                if (badge) badge.classList.add('hidden');
             }
         }
+
+        // Poll for updates every 30s as fallback
+        setInterval(() => {
+            if (currentUser) loadUserData();
+        }, 30000);
 
         // ========== ДРУЗЬЯ И ЗАЯВКИ ==========
         function renderFriends() {
             friendsList.innerHTML = '';
+            if (friends.length === 0) {
+                friendsList.innerHTML = `
+                    <li style="text-align:center;padding:30px 10px;color:var(--text-secondary);">
+                        <i class="fas fa-user-friends" style="font-size:32px;opacity:0.3;display:block;margin-bottom:8px;"></i>
+                        Пока нет друзей
+                    </li>`;
+                return;
+            }
             friends.forEach(friend => {
                 const li = document.createElement('li');
                 li.className = 'friend-item';
+                const isActive = currentRoom === 'private:' + [currentUser, friend].sort().join(':');
+                if (isActive) li.classList.add('active');
                 li.setAttribute('onclick', `switchPrivateRoom('${friend}')`);
-                li.innerHTML = `
-                    <div class="friend-avatar">${friend.charAt(0).toUpperCase()}</div>
-                    <span class="friend-name">${friend}</span>
-                `;
+                const avatarHtml = userAvatars[friend]
+                    ? `<div class="friend-avatar" style="background-image:url(${userAvatars[friend]});background-size:cover;background-position:center;"></div>`
+                    : `<div class="friend-avatar">${friend.charAt(0).toUpperCase()}</div>`;
+                li.innerHTML = `${avatarHtml}<span class="friend-name">${friend}</span>`;
                 friendsList.appendChild(li);
             });
         }
@@ -1746,34 +2155,50 @@
         function renderRequests() {
             requestsList.innerHTML = '';
             if (friendRequests.length === 0) {
-                requestsList.innerHTML = '<li style="text-align:center; color:var(--text-secondary);">Нет заявок</li>';
+                requestsList.innerHTML = `
+                    <li style="text-align:center;padding:30px 10px;color:var(--text-secondary);">
+                        <i class="fas fa-bell-slash" style="font-size:32px;opacity:0.3;display:block;margin-bottom:8px;"></i>
+                        Нет входящих заявок
+                    </li>`;
+                updateRequestsBadge();
                 return;
             }
             friendRequests.forEach(requester => {
                 const li = document.createElement('li');
                 li.className = 'request-item';
                 li.innerHTML = `
-                    <div class="friend-avatar">${requester.charAt(0).toUpperCase()}</div>
+                    <div class="friend-avatar" style="background:linear-gradient(135deg,var(--accent-color),#764ba2);">${requester.charAt(0).toUpperCase()}</div>
                     <span class="friend-name">${requester}</span>
                     <div class="request-actions">
-                        <button class="accept-btn" onclick="acceptRequest('${requester}')">✓</button>
-                        <button class="reject-btn" onclick="rejectRequest('${requester}')">✗</button>
+                        <button class="accept-btn" onclick="acceptRequest('${requester}')"><i class="fas fa-check"></i></button>
+                        <button class="reject-btn" onclick="rejectRequest('${requester}')"><i class="fas fa-times"></i></button>
                     </div>
                 `;
                 requestsList.appendChild(li);
             });
+            updateRequestsBadge();
         }
 
         async function openAddFriend() {
-            const friendName = prompt('Введите имя друга:');
-            if (!friendName || friendName.trim() === '') return;
+            const name = await showDialog({
+                icon: 'fa-user-plus', iconType: 'info',
+                title: 'Добавить друга',
+                message: 'Введите имя пользователя',
+                input: true, inputPlaceholder: 'Имя пользователя...',
+                confirmText: 'Отправить', cancelText: 'Отмена'
+            });
+            if (!name) return;
             const response = await fetch('/api/send-friend-request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ from: currentUser, to: friendName.trim() })
+                body: JSON.stringify({ from: currentUser, to: name })
             });
             const data = await response.json();
-            alert(data.message || (data.success ? 'Заявка отправлена' : 'Ошибка'));
+            if (data.success) {
+                showToast('Заявка отправлена!', 'success');
+            } else {
+                showToast(data.message || data.error || 'Ошибка отправки', 'error');
+            }
         }
 
         async function acceptRequest(requester) {
@@ -1788,6 +2213,10 @@
                 friends = data.friends;
                 renderFriends();
                 renderRequests();
+                updateRequestsBadge();
+                showToast(`${requester} теперь ваш друг!`, 'success');
+            } else {
+                showToast('Ошибка принятия заявки', 'error');
             }
         }
 
@@ -1801,6 +2230,7 @@
             if (data.success) {
                 friendRequests = friendRequests.filter(r => r !== requester);
                 renderRequests();
+                updateRequestsBadge();
             }
         }
 
@@ -1851,6 +2281,8 @@
             const participants = [currentUser, friend].sort();
             const room = 'private:' + participants[0] + ':' + participants[1];
             switchRoom(room);
+            // Update active highlight in sidebar
+            setTimeout(() => renderFriends(), 0);
         }
 
         // ========== ЧАТ ==========
@@ -1990,7 +2422,7 @@
                 const files = Array.from(e.target.files);
                 files.forEach(file => {
                     if (file.size > 50 * 1024 * 1024) {
-                        alert(`Файл ${file.name} слишком большой (макс. 50 МБ)`);
+                        showToast(`Файл ${file.name} слишком большой (макс. 50 МБ)`, 'warning');
                         return;
                     }
                     let type = 'file';
@@ -2064,11 +2496,11 @@
                             room: currentRoom
                         });
                     } else {
-                        alert(`Ошибка загрузки файла ${f.name}`);
+                        showToast(`Ошибка загрузки файла ${f.name}`, 'error');
                     }
                 } catch (error) {
                     console.error('Ошибка загрузки файла:', error);
-                    alert(`Ошибка загрузки файла ${f.name}`);
+                    showToast(`Ошибка загрузки файла ${f.name}`, 'error');
                 }
             }
             selectedFiles = [];
@@ -2145,7 +2577,7 @@
                 }, 1000);
             } catch (error) {
                 console.error(error);
-                alert('Микрофон недоступен');
+                showToast('Микрофон недоступен', 'error');
                 isRecording = false;
             }
         }
@@ -2175,10 +2607,10 @@
                         mediaData: { type: 'audio', url: result.url, fileName: result.name, text: `🎤 Голосовое (${seconds}с)` },
                         room: currentRoom
                     });
-                } else alert('Ошибка загрузки');
+                } else showToast('Ошибка загрузки', 'error');
             } catch (error) {
                 console.error(error);
-                alert('Ошибка загрузки голосового');
+                showToast('Ошибка загрузки голосового', 'error');
             }
         }
 
@@ -2409,18 +2841,20 @@
 
         // ========== УДАЛЕНИЕ АККАУНТА ==========
         async function deleteAccount() {
-            if (!confirm('Вы уверены? Все данные будут удалены.')) return;
+            const confirmed = await showDialog({
+                icon: 'fa-trash-alt', iconType: 'error',
+                title: 'Удалить аккаунт?',
+                message: 'Все данные будут удалены без возможности восстановления.',
+                confirmText: 'Удалить', cancelText: 'Отмена',
+                dangerConfirm: true
+            });
+            if (!confirmed) return;
             await fetch('/api/delete-account', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: currentUser })
             });
-            localStorage.removeItem('chatUser');
-            localStorage.removeItem('chatTheme');
-            localStorage.removeItem('chatAccent');
-            localStorage.removeItem('chatMic');
-            localStorage.removeItem('chatSpeaker');
-            localStorage.removeItem('chatVolume');
+            localStorage.clear();
             location.reload();
         }
 
@@ -2438,7 +2872,10 @@
         function closeGroupModal() { document.getElementById('groupModal').classList.remove('active'); }
         async function createGroup() {
             const name = document.getElementById('groupName').value.trim();
-            if (!name) return alert('Введите название');
+            if (!name) {
+                showToast('Введите название группы', 'warning');
+                return;
+            }
             const members = Array.from(document.querySelectorAll('#groupMembersList input:checked')).map(i => i.value);
             const response = await fetch('/api/create-group', {
                 method: 'POST',
@@ -2447,8 +2884,11 @@
             });
             const data = await response.json();
             if (data.success) {
+                showToast(`Группа «${name}» создана!`, 'success');
                 closeGroupModal();
                 loadUserData();
+            } else {
+                showToast('Ошибка создания группы', 'error');
             }
         }
 
