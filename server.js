@@ -267,6 +267,8 @@ app.post('/api/send-friend-request', async (req, res) => {
   const targetSocketId = userSockets.get(to);
   if (targetSocketId) {
     io.to(targetSocketId).emit('friend-request', { from });
+    // Also save to user's pending requests for when they reconnect
+    // (already saved above via targetUser.friendRequests.push(from))
   }
   res.json({ success: true });
 });
@@ -295,7 +297,9 @@ app.post('/api/accept-friend-request', async (req, res) => {
   await saveUsers();
 
   const userSocket = userSockets.get(username);
-  if (userSocket) io.to(userSocket).emit('friends-updated', { friends: user.friends });
+  if (userSocket) {
+    io.to(userSocket).emit('friends-updated', { friends: user.friends });
+  }
   const requesterSocket = userSockets.get(requester);
   if (requesterSocket) io.to(requesterSocket).emit('friends-updated', { friends: requesterUser.friends });
 
@@ -452,17 +456,20 @@ io.on('connection', (socket) => {
     broadcastOnlineCount();
     socket.join('general');
     socket.emit('history', messageHistory.filter(m => m.room === 'general').slice(-100));
-    // Send all known peer IDs to this user so they can call anyone
-    const allPeers = {};
-    peerIdRegistry.forEach((pid, uname) => { allPeers[uname] = pid; });
-    socket.emit('peer-id-registry', allPeers);
-    // Ask everyone else to re-broadcast their peer ID (catches stale entries)
-    socket.broadcast.emit('request-peer-id', {});
+    // Push pending friend requests to user on connect
+    const userData = users.get(username);
+    if (userData?.friendRequests?.length) {
+      socket.emit('friend-requests-sync', { requests: userData.friendRequests });
+    }
   });
 
   socket.on('join-room', (room) => {
     if (!currentUser) return;
-    socket.leaveAll();
+    // Leave previous chat rooms but KEEP socket.id room (for direct notifications)
+    const rooms = [...socket.rooms];
+    rooms.forEach(r => {
+      if (r !== socket.id) socket.leave(r);
+    });
     socket.join(room);
     const roomHistory = messageHistory.filter(m => m.room === room).slice(-100);
     socket.emit('history', roomHistory);
