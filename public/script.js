@@ -360,9 +360,11 @@ function updateProfileUI() {
 }
 
 function setAvatar(el, name, url) {
+  if (!el) return;
   if (url) {
     el.style.backgroundImage = `url(${url})`;
     el.style.backgroundSize  = 'cover';
+    el.style.backgroundPosition = 'center';
     el.textContent = '';
   } else {
     el.style.backgroundImage = '';
@@ -391,6 +393,7 @@ function renderFriends(filter = '') {
     li.className = 'chat-item' + (currentRoom === room ? ' active' : '');
     const avaEl = document.createElement('div');
     avaEl.className = 'ci-ava';
+    avaEl.dataset.user = f;
     setAvatar(avaEl, f, userAvatars[f]);
     li.innerHTML = `
       <div class="ci-body">
@@ -401,6 +404,21 @@ function renderFriends(filter = '') {
     li.onclick = () => { gotoPrivate(f); closeSidebarMobile(); };
     li.addEventListener('contextmenu', e => showCtxFriend(e, f));
     ul.appendChild(li);
+  });
+  // Request avatars for friends we don't have yet
+  list.forEach(f => {
+    if (!userAvatars[f]) {
+      fetch('/api/get-user-data', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: f })
+      }).then(r => r.json()).then(d => {
+        if (d.avatar) {
+          userAvatars[f] = d.avatar;
+          // Re-render that specific item
+          document.querySelectorAll('.ci-ava[data-user="' + f + '"]').forEach(el => setAvatar(el, f, d.avatar));
+        }
+      }).catch(() => {});
+    }
   });
 }
 
@@ -578,7 +596,18 @@ function addMessage(msg) {
     inner += `<video class="msg-video" controls preload="auto" playsinline src="${msg.url}"></video>`;
     if (msg.text) inner += `<div class="msg-text">${esc(msg.text)}</div>`;
   } else if (msg.type === 'video_circle') {
-    inner += `<video class="msg-circle" playsinline preload="metadata" src="${msg.url}" onclick="this.paused?this.play():this.pause()" onmouseenter="this.controls=false"></video>`;
+    const vid_id = 'vc_' + (msg.id || Math.random().toString(36).slice(2,9));
+    inner += `<div class="msg-circle-wrap" id="${vid_id}_wrap">
+      <video class="msg-circle" id="${vid_id}" playsinline preload="metadata"
+        src="${msg.url}"
+        onclick="vcTogglePlay('${vid_id}')"
+        ondblclick="viewMedia('${msg.url}','video')"
+        onloadedmetadata="vcShowDuration('${vid_id}')"></video>
+      <div class="vc-overlay" id="${vid_id}_ov">
+        <i class="ti ti-player-play vc-play-ico"></i>
+      </div>
+      <span class="vc-dur" id="${vid_id}_dur"></span>
+    </div>`;
   } else if (msg.type === 'audio') {
     const pid = 'vp_' + (msg.id || Math.random().toString(36).slice(2));
     inner += `<div class="voice-player" id="${pid}">
@@ -1241,7 +1270,11 @@ socket.on('friends-updated', ({ friends: nf }) => {
   if (!currentUser) return;
   friends = nf || [];
   renderFriends();
-  toast('Список друзей обновлён', 'success', 2000);
+});
+
+// New group created — update groups list
+socket.on('group-created', () => {
+  loadUserData(); // reload to get updated groups
 });
 
 socket.on('avatar-updated', ({ username, avatar }) => {
@@ -1516,13 +1549,44 @@ function callTarget() {
   return currentRoom.split(':').slice(1).find(p => p !== currentUser) || null;
 }
 
+let _ringCtx = null, _ringInterval = null;
+function ringBeep() {
+  try {
+    _ringCtx = new AudioContext();
+    const beep = () => {
+      if (!_ringCtx) return;
+      const o = _ringCtx.createOscillator();
+      const g = _ringCtx.createGain();
+      o.connect(g); g.connect(_ringCtx.destination);
+      o.frequency.value = 480;
+      g.gain.setValueAtTime(0.2, _ringCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, _ringCtx.currentTime + 0.4);
+      o.start(_ringCtx.currentTime);
+      o.stop(_ringCtx.currentTime + 0.4);
+    };
+    beep();
+    _ringInterval = setInterval(beep, 1600);
+  } catch {}
+}
+function stopRing() {
+  clearInterval(_ringInterval); _ringInterval = null;
+  try { _ringCtx?.close(); } catch {}
+  _ringCtx = null;
+}
+
 // ── OUTGOING ────────────────────────────────────────────
 function startCall(isVid) {
   const target = callTarget();
   if (!target) { toast('Открой личный чат для звонка', 'warning'); return; }
   if (_inCall)  { toast('Звонок уже идёт', 'warning'); return; }
 
-  navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid })
+  const vidConstraints = isVid ? {
+    width:       { ideal: 1280, max: 1920 },
+    height:      { ideal: 720,  max: 1080 },
+    frameRate:   { ideal: 30,   max: 60   },
+    facingMode:  'user',
+  } : false;
+  navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: vidConstraints })
     .then(stream => {
       localStream  = stream;
       _callTarget  = target;
@@ -1590,7 +1654,8 @@ socket.on('call-busy', ({ from }) => {
 // ── ANSWER ──────────────────────────────────────────────
 function answerCall() {
   stopRing();
-  navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: _callIsVid })
+  const vidC = _callIsVid ? { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30}, facingMode:'user' } : false;
+  navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: vidC })
     .then(stream => {
       localStream = stream;
       _createPeer();
@@ -1681,6 +1746,7 @@ function _createPeer() {
   rtcPeer = new RTCPeerConnection({
     iceServers: ICE_SERVERS,
     iceCandidatePoolSize: 10,
+    sdpSemantics: 'unified-plan',
   });
 
   // Add local tracks
@@ -1756,7 +1822,8 @@ function _showCallWindow(remoteStream) {
         </div>
       </div>`;
     document.body.appendChild(win);
-    setAvatar(win.querySelector('#cwAva'), _callTarget, userAvatars[_callTarget]);
+    const cwAva = win.querySelector('#cwAva');
+    if (cwAva) setAvatar(cwAva, _callTarget, userAvatars[_callTarget] || null);
     // Audio
     const audio = Object.assign(document.createElement('audio'), { autoplay: true });
     audio.srcObject = remoteStream;
@@ -1859,12 +1926,18 @@ async function switchToScreenShare() {
       if (sender) {
         await sender.replaceTrack(vid);
       } else {
-        // Audio call: add video, renegotiate
+        // Audio call: add video track — onnegotiationneeded will handle renegotiation
         rtcPeer.addTrack(vid, screenStream);
+        // Also need to renegotiate manually since onnegotiationneeded may not fire reliably
         if (_isCaller) {
-          const offer = await rtcPeer.createOffer();
-          await rtcPeer.setLocalDescription(offer);
-          socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
+          setTimeout(async () => {
+            if (!rtcPeer || rtcPeer.signalingState !== 'stable') return;
+            try {
+              const offer = await rtcPeer.createOffer();
+              await rtcPeer.setLocalDescription(offer);
+              socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
+            } catch(e) { console.warn('[SS] renego:', e); }
+          }, 100);
         }
       }
       const localPreview = document.querySelector('#lv');
@@ -1939,6 +2012,38 @@ function _cleanup() {
   _callTarget = null;
 }
 
+
+// ══════════════════════════════════════════════
+// VIDEO CIRCLE  ← КРАСОТА
+// ══════════════════════════════════════════════
+function vcTogglePlay(id) {
+  const v   = document.getElementById(id);
+  const ov  = document.getElementById(id + '_ov');
+  const ico = ov?.querySelector('.vc-play-ico');
+  if (!v) return;
+  if (v.paused) {
+    v.play();
+    if (ico) ico.className = 'ti ti-player-pause vc-play-ico';
+    ov?.classList.add('playing');
+  } else {
+    v.pause();
+    if (ico) ico.className = 'ti ti-player-play vc-play-ico';
+    ov?.classList.remove('playing');
+  }
+  v.onended = () => {
+    if (ico) ico.className = 'ti ti-player-play vc-play-ico';
+    ov?.classList.remove('playing');
+    v.currentTime = 0;
+  };
+}
+function vcShowDuration(id) {
+  const v   = document.getElementById(id);
+  const dur = document.getElementById(id + '_dur');
+  if (!v || !dur || !isFinite(v.duration)) return;
+  const m = Math.floor(v.duration / 60);
+  const s = Math.floor(v.duration % 60);
+  dur.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
 
 // ══════════════════════════════════════════════
 // VOICE PLAYER  ← КРАСОТА + УДОБСТВО
