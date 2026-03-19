@@ -649,7 +649,7 @@ function addMessage(msg) {
   // ← УДОБСТВО: right-click context menu
   bub.addEventListener('contextmenu', e => showCtxMsg(e, msg));
 
-  row.appendChild(ava);
+  if (!own) row.appendChild(ava);   // no avatar for own messages — no empty gap
   row.appendChild(bub);
   messagesDiv.appendChild(row);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -1687,25 +1687,29 @@ socket.on('call-answer-ready', async ({ from }) => {
   } catch (e) { console.error('[SDP] offer:', e); _cleanup(); }
 });
 
-// 2. Callee receives offer → creates answer
+// 2. Receive offer — initial call OR renegotiation (screen share)
 socket.on('call-offer', async ({ from, sdp }) => {
-  if (!rtcPeer && !_inCall) return;
-  // Mid-call renegotiation (screen share)
   if (!rtcPeer) return;
+  console.log('[SDP] offer, signalingState:', rtcPeer.signalingState);
   try {
+    if (rtcPeer.signalingState === 'have-local-offer') {
+      await rtcPeer.setLocalDescription({ type: 'rollback' });
+    }
     await rtcPeer.setRemoteDescription(new RTCSessionDescription(sdp));
     const answer = await rtcPeer.createAnswer();
     await rtcPeer.setLocalDescription(answer);
     socket.emit('call-answer', { to: from, from: currentUser, sdp: answer });
-  } catch (e) { console.error('[SDP] answer:', e); }
+  } catch (e) { console.error('[SDP] answer error:', e); }
 });
 
-// 3. Caller receives answer
+// 3. Receive answer
 socket.on('call-answer', async ({ sdp }) => {
   if (!rtcPeer) return;
   try {
-    await rtcPeer.setRemoteDescription(new RTCSessionDescription(sdp));
-  } catch (e) { console.error('[SDP] set-answer:', e); }
+    if (rtcPeer.signalingState === 'have-local-offer') {
+      await rtcPeer.setRemoteDescription(new RTCSessionDescription(sdp));
+    }
+  } catch (e) { console.error('[SDP] set-answer error:', e); }
 });
 
 // ICE
@@ -1964,23 +1968,20 @@ async function switchToScreenShare() {
         audio: true
       });
       const vid = screenStream.getVideoTracks()[0];
-      const sender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) {
-        await sender.replaceTrack(vid);
-      } else {
-        // Audio call: add video track — onnegotiationneeded will handle renegotiation
-        rtcPeer.addTrack(vid, screenStream);
-        // Also need to renegotiate manually since onnegotiationneeded may not fire reliably
-        if (_isCaller) {
-          setTimeout(async () => {
-            if (!rtcPeer || rtcPeer.signalingState !== 'stable') return;
-            try {
-              const offer = await rtcPeer.createOffer();
-              await rtcPeer.setLocalDescription(offer);
-              socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
-            } catch(e) { console.warn('[SS] renego:', e); }
-          }, 100);
-        }
+      // Always addTrack (not replaceTrack) so receiver gets ontrack event
+      // Remove old video sender first if exists
+      const oldSender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
+      if (oldSender) {
+        rtcPeer.removeTrack(oldSender);
+      }
+      rtcPeer.addTrack(vid, screenStream);
+      // Renegotiate — both caller and callee need new offer/answer
+      if (rtcPeer.signalingState === 'stable') {
+        try {
+          const offer = await rtcPeer.createOffer();
+          await rtcPeer.setLocalDescription(offer);
+          socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
+        } catch(e) { console.warn('[SS] offer error:', e); }
       }
       // Show screen preview locally
       const localPreview = document.querySelector('#lv');
