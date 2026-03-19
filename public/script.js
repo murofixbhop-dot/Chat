@@ -600,6 +600,7 @@ function addMessage(msg) {
     inner += `<div class="msg-circle-wrap" id="${vid_id}_wrap">
       <video class="msg-circle" id="${vid_id}" playsinline preload="metadata"
         src="${msg.url}"
+        onmousedown="event.preventDefault()"
         onclick="vcTogglePlay('${vid_id}')"
         ondblclick="viewMedia('${msg.url}','video')"
         onloadedmetadata="vcShowDuration('${vid_id}')"></video>
@@ -1757,25 +1758,38 @@ function _createPeer() {
     if (candidate) socket.emit('call-ice', { to: _callTarget, from: currentUser, candidate });
   };
 
-  // Build remote stream — update video element on every new track (handles screen share)
+  // Keep ONE MediaStream and add/replace tracks in it
   let remoteStream = new MediaStream();
   rtcPeer.ontrack = ({ track, streams }) => {
-    console.log('[RTC] ontrack:', track.kind, track.id);
-    if (streams?.[0]) {
-      remoteStream = streams[0];
-    } else {
-      remoteStream.addTrack(track);
+    console.log('[RTC] ontrack:', track.kind, track.readyState);
+
+    // Replace existing track of same kind, or add new
+    const existing = remoteStream.getTracks().find(t => t.kind === track.kind);
+    if (existing) {
+      remoteStream.removeTrack(existing);
     }
-    if (!_connected) {
+    remoteStream.addTrack(track);
+
+    // Update live video element if already shown
+    const rv = document.querySelector('#rv');
+    if (rv) {
+      rv.srcObject = null;
+      rv.srcObject = remoteStream; // force refresh
+      rv.play().catch(() => {});
+    }
+
+    // Update live audio element
+    const ra = document.querySelector('#remoteAudio');
+    if (ra && track.kind === 'audio') {
+      ra.srcObject = remoteStream;
+    }
+
+    if (!_connected && track.kind === 'audio') {
       _connected = true;
       _showCallWindow(remoteStream);
-    } else {
-      // Update existing video element (e.g. screen share video track added)
-      const rv = document.querySelector('#rv');
-      if (rv && track.kind === 'video') {
-        rv.srcObject = remoteStream;
-        console.log('[RTC] Updated rv with new video track');
-      }
+    } else if (!_connected && track.kind === 'video' && _callIsVid) {
+      _connected = true;
+      _showCallWindow(remoteStream);
     }
   };
 
@@ -1856,6 +1870,22 @@ function _showCallWindow(remoteStream) {
 }
 
 // Make call window draggable ← УДОБСТВО
+// ── EXPAND / MINIMIZE call window ──────────────────────
+function toggleCallExpand() {
+  const win = document.getElementById('activeCallWin');
+  if (!win) return;
+  const isExpanded = win.classList.contains('cw-expanded');
+  if (isExpanded) {
+    win.classList.remove('cw-expanded');
+    const btn = win.querySelector('.cw-expand i');
+    if (btn) btn.className = 'ti ti-maximize';
+  } else {
+    win.classList.add('cw-expanded');
+    const btn = win.querySelector('.cw-expand i');
+    if (btn) btn.className = 'ti ti-minimize';
+  }
+}
+
 function makeDraggable(el) {
   let ox=0, oy=0;
   // Position from CSS (top-right) — let CSS handle initial position
@@ -2042,19 +2072,25 @@ function vcTogglePlay(id) {
   const v   = document.getElementById(id);
   const ov  = document.getElementById(id + '_ov');
   const ico = ov?.querySelector('.vc-play-ico');
+  const wrap = document.getElementById(id + '_wrap');
   if (!v) return;
+
   if (v.paused) {
-    v.play();
+    v.play().catch(() => {});
     if (ico) ico.className = 'ti ti-player-pause vc-play-ico';
     ov?.classList.add('playing');
+    // Expand on play like Telegram
+    wrap?.classList.add('vc-expanded');
   } else {
     v.pause();
     if (ico) ico.className = 'ti ti-player-play vc-play-ico';
     ov?.classList.remove('playing');
+    wrap?.classList.remove('vc-expanded');
   }
   v.onended = () => {
     if (ico) ico.className = 'ti ti-player-play vc-play-ico';
     ov?.classList.remove('playing');
+    wrap?.classList.remove('vc-expanded');
     v.currentTime = 0;
   };
 }
@@ -2075,7 +2111,7 @@ const _vpAudios = {}; // pid -> Audio element
 function _vpGetOrCreate(pid, url) {
   if (!_vpAudios[pid]) {
     const a = new Audio(url);
-    a.preload = 'metadata';
+    a.preload = 'auto'; // preload fully for instant playback
     a.volume  = (parseInt(localStorage.getItem('aura_vol') || '100')) / 100;
     const spk = localStorage.getItem('aura_spk');
     if (spk && spk !== 'default' && a.setSinkId) a.setSinkId(spk).catch(() => {});
