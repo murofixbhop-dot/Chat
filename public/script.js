@@ -1256,9 +1256,13 @@ function openSettings() {
   // Restore theme state
   $('thDark')?.classList.toggle('active', _pendingTheme === 'dark');
   $('thLight')?.classList.toggle('active', _pendingTheme === 'light');
-  // Accent
-  const acc = localStorage.getItem('aura_accent') || '#6366f1';
-  document.querySelectorAll('.clr').forEach(b => b.classList.toggle('active', b.dataset.accent === acc));
+  // Accent — restore active state and checkmark
+  const acc = _pendingAccent || localStorage.getItem('aura_accent') || '#6366f1';
+  document.querySelectorAll('.clr').forEach(b => {
+    const active = b.dataset.accent === acc;
+    b.classList.toggle('active', active);
+    b.innerHTML = active ? '<i class="ti ti-check"></i>' : '';
+  });
   // Volume
   const vol = localStorage.getItem('aura_vol') || '100';
   $('volRange').value = vol;
@@ -1367,8 +1371,12 @@ async function testMic() {
 
 // Theme
 function setAccent(hex, btn) {
-  document.querySelectorAll('.clr').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.clr').forEach(b => {
+    b.classList.remove('active');
+    b.innerHTML = '';
+  });
   btn.classList.add('active');
+  btn.innerHTML = '<i class="ti ti-check"></i>';
   _pendingAccent = hex;
   applyAccent(hex);
 }
@@ -1472,19 +1480,25 @@ function initPeer() {
 }
 
 // When someone new connects, they ask for our peer ID
+// Server asks us to re-broadcast our peerId
 socket.on('request-peer-id', () => {
   if (myPeerId && currentUser) {
     socket.emit('peer-id', { username: currentUser, peerId: myPeerId });
   }
 });
 
-// Receive peer IDs from other users
+// Bulk registry from server when we first connect
+socket.on('peer-id-registry', (registry) => {
+  Object.assign(peerIds, registry);
+  console.log('[PeerIDs] Registry loaded:', Object.keys(registry));
+});
+
+// Individual peer ID update
 socket.on('peer-id', ({ username, peerId }) => {
-  console.log('[Socket] Got peerId for', username, ':', peerId);
+  console.log('[PeerID] Got', username, '→', peerId);
   peerIds[username] = peerId;
 });
 
-// Get the peerId for a given username
 function getPeerId(username) {
   return peerIds[username] || null;
 }
@@ -1539,33 +1553,46 @@ function declineCall() {
 function startCall(isVid) {
   const target = callTarget();
   if (!target) { toast('Звонок доступен только в личном чате', 'warning'); return; }
-  if (!peer || !myPeerId) { toast('Соединение не готово, попробуйте снова', 'error'); return; }
+  if (!peer || !myPeerId) { toast('Соединение не готово', 'error'); return; }
 
-  const targetPeerId = getPeerId(target);
-  if (!targetPeerId) {
-    toast(`${target} недоступен для звонка (не в сети)`, 'warning');
-    return;
+  const pid = getPeerId(target);
+  if (pid) {
+    _doCall(target, pid, isVid);
+  } else {
+    // Ask server for their latest peerId, wait up to 3s
+    socket.emit('get-peer-id', { target });
+    toast('Подключение к ' + target + '…', 'info', 2000);
+    let attempts = 0;
+    const check = setInterval(() => {
+      attempts++;
+      const fresh = getPeerId(target);
+      if (fresh) {
+        clearInterval(check);
+        _doCall(target, fresh, isVid);
+      } else if (attempts >= 6) {
+        clearInterval(check);
+        toast(target + ' сейчас недоступен', 'warning');
+      }
+    }, 500);
   }
+}
 
-  console.log('[Call] Calling', target, 'via peerId:', targetPeerId);
-
+function _doCall(target, targetPeerId, isVid) {
+  console.log('[Call] Calling', target, '@ peerId:', targetPeerId, 'video:', isVid);
   navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid })
     .then(stream => {
       localStream = stream;
       const call = peer.call(targetPeerId, stream, {
         metadata: { video: isVid, screen: false, callerName: currentUser }
       });
-
       currentCall = call;
 
-      call.on('stream', remote => {
-        showCallWindow(target, remote, isVid);
-      });
-      call.on('close', () => endCall());
-      call.on('error', err => {
-        console.error('[Call] Error:', err);
+      call.on('stream', remote => showCallWindow(target, remote, isVid));
+      call.on('close',  () => endCall());
+      call.on('error',  err => {
+        console.error('[Call] peer error:', err.type, err);
         endCall();
-        toast('Ошибка звонка: ' + (err.type || err.message || ''), 'error');
+        toast('Ошибка звонка: ' + (err.type || ''), 'error');
       });
 
       setAvatar(callAva, target, userAvatars[target]);
@@ -1581,7 +1608,7 @@ function startCall(isVid) {
       callModal.classList.add('open');
     })
     .catch(err => {
-      console.error('[Call] getUserMedia error:', err);
+      console.error('[Call] getUserMedia:', err.name, err.message);
       toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error');
     });
 }
