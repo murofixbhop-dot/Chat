@@ -578,7 +578,7 @@ function addMessage(msg) {
     inner += `<video class="msg-video" controls preload="auto" playsinline src="${msg.url}"></video>`;
     if (msg.text) inner += `<div class="msg-text">${esc(msg.text)}</div>`;
   } else if (msg.type === 'video_circle') {
-    inner += `<video class="msg-circle" controls playsinline preload="metadata" src="${msg.url}" onclick="viewMedia('${msg.url}','video')"></video>`;
+    inner += `<video class="msg-circle" playsinline preload="metadata" src="${msg.url}" onclick="this.paused?this.play():this.pause()" onmouseenter="this.controls=false"></video>`;
   } else if (msg.type === 'audio') {
     const pid = 'vp_' + (msg.id || Math.random().toString(36).slice(2));
     inner += `<div class="voice-player" id="${pid}">
@@ -604,6 +604,17 @@ function addMessage(msg) {
 
   inner += `<div class="msg-meta"><span class="msg-time">${msg.time}</span></div>`;
   bub.innerHTML = inner;
+
+  // Convert any legacy <audio> elements to custom voice player
+  bub.querySelectorAll('audio').forEach(a => {
+    const pid = 'vpl_' + Math.random().toString(36).slice(2,9);
+    const url = a.src || a.getAttribute('src') || '';
+    if (!url) return;
+    const vp = document.createElement('div');
+    vp.className = 'voice-player'; vp.id = pid;
+    vp.innerHTML = `<button class="vp-play" onclick="vpToggle('${pid}','${url}')"><i class="ti ti-player-play"></i></button><div class="vp-body"><div class="vp-waveform" onclick="vpSeek(event,'${pid}','${url}')">${Array.from({length:30},(_,i)=>'<div class="vp-bar" style="height:'+(8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8))+'px"></div>').join('')}</div><div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">—</span></div></div>`;
+    a.replaceWith(vp);
+  });
 
   // ← УДОБСТВО: right-click context menu
   bub.addEventListener('contextmenu', e => showCtxMsg(e, msg));
@@ -1497,6 +1508,12 @@ function initCallDOM() {
   callNm    = $('callName');
   callSt    = $('callStatus');
   callAct   = $('callActions');
+}
+
+// ── HELPERS ─────────────────────────────────────────────
+function callTarget() {
+  if (!currentRoom || !currentRoom.startsWith('private:')) return null;
+  return currentRoom.split(':').slice(1).find(p => p !== currentUser) || null;
 }
 
 // ── OUTGOING ────────────────────────────────────────────
