@@ -1422,48 +1422,65 @@ const callNm    = $('callName');
 const callSt    = $('callStatus');
 const callAct   = $('callActions');
 
-// myPeerId stores our actual PeerJS ID (username + random suffix)
+// myPeerId = username + random suffix, пересоздаётся при каждом reconnect
 let myPeerId = null;
-// peerIds maps username -> peerId (received from others via socket)
+// peerIds: username -> peerId  (получаем от сервера)
 const peerIds = {};
+
+function makePeerId() {
+  return currentUser + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function peerConfig() {
+  const h = window.location.hostname;
+  const p = window.location.port ? parseInt(window.location.port)
+          : (window.location.protocol === 'https:' ? 443 : 80);
+  const ssl = window.location.protocol === 'https:';
+  return {
+    ownHost: h, ownPort: p, ssl,
+    ice: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+    ]
+  };
+}
 
 function initPeer() {
   if (!currentUser) return;
   if (peer) { try { peer.destroy(); } catch {} peer = null; }
+  myPeerId = makePeerId();
+  const cfg = peerConfig();
 
-  // Generate a unique peer ID to avoid conflicts on reconnect
-  myPeerId = currentUser + '_' + Math.random().toString(36).slice(2, 8);
-
+  // Connect to our own PeerJS server (installed via npm)
   peer = new Peer(myPeerId, {
-    host: '0.peerjs.com', port: 443, path: '/', secure: true,
-    debug: 0,
-    config: {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-      ]
-    }
+    host: cfg.ownHost,
+    port: cfg.ownPort,
+    path: '/peerjs',
+    secure: cfg.ssl,
+    debug: 1,
+    config: { iceServers: cfg.ice }
   });
 
   peer.on('open', id => {
-    console.log('[Peer] Open, id:', id);
+    console.log('[Peer] Own server connected, id:', id);
     myPeerId = id;
-    // Broadcast our peerId to the server so others can call us
     socket.emit('peer-id', { username: currentUser, peerId: id });
   });
 
   peer.on('call', call => {
-    console.log('[Peer] Incoming call from peer:', call.peer, 'meta:', call.metadata);
+    console.log('[Peer] Incoming call peer:', call.peer, 'meta:', call.metadata);
     handleIncomingWithScreen(call);
   });
 
   peer.on('error', err => {
-    console.error('[Peer] Error:', err.type, err.message || err);
+    console.error('[Peer] Error type:', err.type, err.message || '');
     if (err.type === 'unavailable-id') {
-      // Retry with different suffix
-      setTimeout(initPeer, 500);
-    } else if (!['peer-unavailable', 'browser-incompatible'].includes(err.type)) {
+      setTimeout(initPeer, 600);
+    } else if (err.type === 'server-error' || err.type === 'network' || err.type === 'socket-error') {
+      console.warn('[Peer] Own server unreachable, trying cloud...');
+      setTimeout(initPeerCloud, 1000);
+    } else if (!['peer-unavailable','browser-incompatible'].includes(err.type)) {
       setTimeout(initPeer, 4000);
     }
   });
@@ -1473,10 +1490,33 @@ function initPeer() {
     try { peer.reconnect(); } catch { setTimeout(initPeer, 2000); }
   });
 
-  peer.on('close', () => {
-    console.log('[Peer] Closed');
-    peer = null;
+  peer.on('close', () => { peer = null; });
+}
+
+// Запасной вариант — публичный PeerJS облако
+function initPeerCloud() {
+  if (!currentUser) return;
+  if (peer) { try { peer.destroy(); } catch {} peer = null; }
+  myPeerId = makePeerId();
+  peer = new Peer(myPeerId, {
+    host: '0.peerjs.com', port: 443, path: '/', secure: true,
+    debug: 0,
+    config: { iceServers: peerConfig().ice }
   });
+  peer.on('open', id => {
+    console.log('[Peer] Cloud connected, id:', id);
+    myPeerId = id;
+    socket.emit('peer-id', { username: currentUser, peerId: id });
+  });
+  peer.on('call', call => handleIncomingWithScreen(call));
+  peer.on('error', err => {
+    console.error('[Peer] Cloud error:', err.type);
+    if (err.type === 'unavailable-id') setTimeout(initPeerCloud, 600);
+    else if (!['peer-unavailable','browser-incompatible'].includes(err.type))
+      setTimeout(initPeerCloud, 5000);
+  });
+  peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
+  peer.on('close', () => { peer = null; });
 }
 
 // When someone new connects, they ask for our peer ID
