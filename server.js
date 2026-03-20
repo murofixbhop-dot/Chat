@@ -442,6 +442,15 @@ const onlineUsers = new Map();    // socketId -> { username, lastSeen }
 const userSockets = new Map();    // username -> socketId
 const peerIdRegistry = new Map(); // username -> peerId
 const missedCalls    = new Map(); // username -> [{ from, isVid, time }]
+const activeCalls    = new Map(); // callee_username -> { from, isVid, startTime }
+
+// Clean stale active calls every 30s
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of activeCalls.entries()) {
+    if (now - v.startTime > 60000) activeCalls.delete(k);
+  }
+}, 30000);
 
 function broadcastOnlineCount() {
   const now = Date.now();
@@ -467,6 +476,13 @@ io.on('connection', (socket) => {
     if (userData?.friendRequests?.length) {
       socket.emit('friend-requests-sync', { requests: userData.friendRequests });
     }
+    // Resume active call — if someone is still ringing this user
+    const active = activeCalls.get(username);
+    if (active && Date.now() - active.startTime < 60000) { // call rings for max 60s
+      socket.emit('call-invite', { from: active.from, isVid: active.isVid, resumed: true });
+      console.log(`[Call] Resumed ring for ${username} from ${active.from}`);
+    }
+
     // Deliver missed calls as one batch
     const missed = missedCalls.get(username);
     if (missed?.length) {
@@ -583,13 +599,33 @@ io.on('connection', (socket) => {
       }
     }
   }
-  socket.on('call-invite',       data => relayTo('call-invite',       data));
+  socket.on('call-invite', data => {
+    if (!data.resumed) {
+      // Store as active ring so reconnecting user gets notified
+      activeCalls.set(data.to, { from: data.from, isVid: data.isVid, startTime: Date.now() });
+    }
+    relayTo('call-invite', data);
+  });
   socket.on('call-answer-ready', data => relayTo('call-answer-ready', data));
   socket.on('call-offer',        data => relayTo('call-offer',        data));
   socket.on('call-answer',       data => relayTo('call-answer',       data));
   socket.on('call-ice',          data => relayTo('call-ice',          data));
-  socket.on('call-end',          data => relayTo('call-end',          data));
-  socket.on('call-decline',      data => relayTo('call-decline',      data));
+  socket.on('call-end', data => {
+    // Clear active call
+    activeCalls.delete(data.to);
+    activeCalls.delete(data.from);
+    relayTo('call-end', data);
+  });
+  socket.on('call-decline', data => {
+    activeCalls.delete(data.to);
+    activeCalls.delete(data.from);
+    relayTo('call-decline', data);
+  });
+  socket.on('call-answer-ready', data => {
+    // Callee answered — clear active call
+    activeCalls.delete(data.from);
+    relayTo('call-answer-ready', data);
+  });
   socket.on('call-busy',         data => relayTo('call-busy',         data));
 
   socket.on('disconnect', () => {
