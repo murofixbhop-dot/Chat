@@ -1976,6 +1976,63 @@ function toggleMuteWin(btn) {
 }
 
 // ── SCREEN SHARE ─────────────────────────────────────────
+async function _applyScreenShare(capturedStream) {
+  if (!rtcPeer) { capturedStream.getTracks().forEach(t => t.stop()); return; }
+  screenStream = capturedStream;
+  const vid = screenStream.getVideoTracks()[0];
+
+  // Remove old video sender if any
+  const oldSender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
+  if (oldSender) rtcPeer.removeTrack(oldSender);
+
+  // Add new screen track
+  rtcPeer.addTrack(vid, screenStream);
+
+  // Renegotiate immediately
+  try {
+    if (rtcPeer.signalingState !== 'stable') {
+      await new Promise(res => {
+        const check = setInterval(() => {
+          if (rtcPeer?.signalingState === 'stable') { clearInterval(check); res(); }
+        }, 100);
+        setTimeout(() => { clearInterval(check); res(); }, 3000);
+      });
+    }
+    const offer = await rtcPeer.createOffer();
+    await rtcPeer.setLocalDescription(offer);
+    socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
+    console.log('[SS] Renegotiation offer sent');
+  } catch(e) { console.error('[SS] renegotiation error:', e); }
+
+  // Show caller's own screen preview
+  const win = document.getElementById('activeCallWin');
+  const lv = win?.querySelector('#lv');
+  if (lv) {
+    lv.srcObject = screenStream;
+    lv.style.cssText += ';width:180px;height:100px;object-fit:contain;';
+  } else if (win) {
+    let rv = win.querySelector('#rv');
+    if (!rv) {
+      rv = document.createElement('video');
+      rv.id = 'rv'; rv.autoplay = true; rv.playsinline = true; rv.muted = true;
+      rv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1;border-radius:inherit;';
+      win.insertBefore(rv, win.firstChild);
+    }
+    rv.srcObject = screenStream;
+    rv.play().catch(() => {});
+  }
+
+  _screenSharing = true;
+  document.querySelectorAll('.ss-toggle').forEach(b => {
+    b.style.background = 'var(--accent)';
+    b.querySelector('i').className = 'ti ti-screen-share-off';
+  });
+  toast('Демонстрация экрана активна', 'success', 2500);
+
+  vid.onended = () => switchToScreenShare(); // user clicks "stop sharing" in browser
+}
+
+
 async function switchToScreenShare() {
   if (!rtcPeer || !_connected) return;
 
@@ -1995,63 +2052,22 @@ async function switchToScreenShare() {
     return;
   }
 
-  showScreenQualityPicker(async (opts) => {
-    if (!opts) return;
-    const r = { '1080p':{w:1920,h:1080},'720p':{w:1280,h:720},'480p':{w:854,h:480} };
-    const d = r[opts.res] || r['720p'];
-    try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width:{ideal:d.w}, height:{ideal:d.h}, frameRate:{ideal:parseInt(opts.fps)} },
-        audio: true
-      });
-      const vid = screenStream.getVideoTracks()[0];
-      // Always addTrack (not replaceTrack) so receiver gets ontrack event
-      // Remove old video sender first if exists
-      const oldSender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
-      if (oldSender) {
-        rtcPeer.removeTrack(oldSender);
-      }
-      rtcPeer.addTrack(vid, screenStream);
-      // Renegotiate — both caller and callee need new offer/answer
-      if (rtcPeer.signalingState === 'stable') {
-        try {
-          const offer = await rtcPeer.createOffer();
-          await rtcPeer.setLocalDescription(offer);
-          socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
-        } catch(e) { console.warn('[SS] offer error:', e); }
-      }
-      // Show screen preview for CALLER
-      const win = document.getElementById('activeCallWin');
-      const lv = win?.querySelector('#lv');
-      if (lv) {
-        // Video call: show screen in PiP overlay
-        lv.srcObject = screenStream;
-        lv.style.width = '180px'; lv.style.height = '120px';
-        lv.style.objectFit = 'contain'; lv.style.borderRadius = '8px';
-      } else if (win) {
-        // Audio call: show screen as main video
-        let rv = win.querySelector('#rv');
-        if (!rv) {
-          rv = document.createElement('video');
-          rv.id = 'rv'; rv.autoplay = true; rv.playsinline = true; rv.muted = true;
-          rv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:inherit;background:#000;z-index:1;';
-          win.insertBefore(rv, win.firstChild);
-        }
-        rv.srcObject = screenStream;
-        rv.play().catch(() => {});
-      }
-      _screenSharing = true;
-      document.querySelectorAll('.ss-toggle').forEach(b => {
-        b.style.background = 'var(--accent)';
-        b.querySelector('i').className = 'ti ti-screen-share-off';
-      });
-      toast(`Демонстрация: ${opts.res} / ${opts.fps} FPS`, 'success', 2000);
-      vid.onended = () => switchToScreenShare();
-    } catch (e) {
-      if (e.name !== 'NotAllowedError' && e.name !== 'AbortError')
-        toast('Не удалось захватить экран: ' + e.message, 'error');
-    }
-  });
+  // MUST call getDisplayMedia directly in user gesture — not inside dialog callback
+  let _capturedStream = null;
+  try {
+    _capturedStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} },
+      audio: true
+    });
+  } catch(e) {
+    if (e.name !== 'NotAllowedError' && e.name !== 'AbortError')
+      toast('Не удалось захватить экран: ' + e.message, 'error');
+    return;
+  }
+  if (!_capturedStream) return;
+
+  // Now stream is captured — add to peer connection
+  await _applyScreenShare(_capturedStream);
 }
 
 function showScreenQualityPicker(cb) {
