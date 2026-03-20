@@ -669,7 +669,7 @@ option { background: var(--surface2); color: var(--text); }
   position: relative;
 }
 /* During circle expand, allow overflow */
-.msgs.circle-expanded { overflow: visible; }
+.msgs.circle-expanded { overflow: visible !important; }
 [data-theme="light"] .msgs {
   background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,.04) 1px, transparent 0);
 }
@@ -750,15 +750,10 @@ option { background: var(--surface2); color: var(--text); }
   -webkit-tap-highlight-color: transparent;
 }
 .msg-circle-wrap:hover { box-shadow: 0 6px 24px rgba(0,0,0,.3); }
-/* Expand on play — Telegram style */
+/* Expand on play — uses position:absolute via JS, this is fallback */
 .msg-circle-wrap.vc-expanded {
-  transform: scale(2.4);
-  transform-origin: left bottom;
   box-shadow: 0 16px 48px rgba(0,0,0,.6);
-  z-index: 9999;
-  position: relative;
 }
-.msg-row.own .msg-circle-wrap.vc-expanded { transform-origin: right bottom; }
 .msg-circle {
   width: 130px; height: 130px;
   border-radius: 12px;
