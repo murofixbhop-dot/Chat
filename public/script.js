@@ -1923,53 +1923,56 @@ function _showCallWindow(remoteStream) {
   document.querySelectorAll('.call-win, .call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
   const win = document.createElement('div');
   win.className = 'call-win-float';
-  win.id = 'activeCallWin';  // ← critical: needed for screen share
+  win.id = 'activeCallWin';
+
+  const btns = `
+    <button class="cw-btn cw-mute" onclick="toggleMuteWin(this)" title="Микрофон"><i class="ti ti-microphone"></i></button>
+    <button class="cw-btn cw-screen ss-toggle" id="cwScreenBtn" title="Экран"><i class="ti ti-screen-share"></i></button>
+    <button class="cw-btn cw-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>`;
 
   if (_callIsVid) {
     win.innerHTML = `
       <div class="cw-bg"></div>
-      <video id="rv" autoplay playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;"></video>
-      <video id="lv" autoplay playsinline muted style="position:absolute;bottom:72px;right:14px;width:130px;border-radius:12px;border:2px solid rgba(255,255,255,.25);object-fit:cover;"></video>
-      <div class="cw-controls">
+      <video id="rv" autoplay playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;z-index:1;"></video>
+      <video id="lv" autoplay playsinline muted style="position:absolute;bottom:58px;right:10px;width:90px;height:68px;border-radius:9px;border:2px solid rgba(255,255,255,.2);object-fit:cover;z-index:3;"></video>
+      <div class="cw-controls" style="z-index:4;">
         <span class="cw-timer" id="cwTimer">0:00</span>
-        <div class="cw-btns">
-          <button class="cw-btn cw-mute" onclick="toggleMuteWin(this)" title="Микрофон"><i class="ti ti-microphone"></i></button>
-          <button class="cw-btn cw-screen ss-toggle" onclick="switchToScreenShare()" title="Экран"><i class="ti ti-screen-share"></i></button>
-          <button class="cw-btn cw-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>
-        </div>
+        <div class="cw-btns">${btns}</div>
       </div>`;
     document.body.appendChild(win);
     win.querySelector('#rv').srcObject = remoteStream;
     if (localStream) win.querySelector('#lv').srcObject = localStream;
-    makeDraggable(win);
   } else {
     win.innerHTML = `
       <div class="cw-bg"></div>
-      <div class="cw-audio-content">
+      <div class="cw-audio-content" id="cwAudioContent">
         <div class="cw-ava" id="cwAva"></div>
-        <div class="cw-name">${_callTarget}</div>
-        <div class="cw-timer" id="cwTimer">0:00</div>
-        <div class="cw-btns">
-          <button class="cw-btn cw-mute" onclick="toggleMuteWin(this)" title="Микрофон"><i class="ti ti-microphone"></i></button>
-          <button class="cw-btn cw-screen ss-toggle" onclick="switchToScreenShare()" title="Экран"><i class="ti ti-screen-share"></i></button>
-          <button class="cw-btn cw-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>
-        </div>
+        <div class="cw-name" id="cwName">${_callTarget}</div>
+      </div>
+      <div class="cw-controls" style="z-index:4;">
+        <span class="cw-timer" id="cwTimer">0:00</span>
+        <div class="cw-btns">${btns}</div>
       </div>`;
     document.body.appendChild(win);
     const cwAva = win.querySelector('#cwAva');
     if (cwAva) setAvatar(cwAva, _callTarget, userAvatars[_callTarget] || null);
-    // Audio
-    const audio = Object.assign(document.createElement('audio'), { autoplay: true });
+    const audio = Object.assign(document.createElement('audio'), { id: 'remoteAudio', autoplay: true });
     audio.srcObject = remoteStream;
     audio.volume = (parseInt(localStorage.getItem('aura_vol') || '100')) / 100;
     audio.play().catch(() => document.addEventListener('click', () => audio.play(), { once: true }));
     win.appendChild(audio);
-    makeDraggable(win);
   }
+
+  // Long-press screen button → quality picker
+  _setupScreenBtnLongPress(win);
+
+  // Long-press window → expand/collapse
+  _setupWinLongPress(win);
+
+  makeDraggable(win);
 
   if (callModal) callModal.classList.remove('open');
 
-  // Timer
   let secs = 0;
   win._timer = setInterval(() => {
     secs++;
@@ -1977,6 +1980,59 @@ function _showCallWindow(remoteStream) {
     const t = win.querySelector('#cwTimer');
     if (t) t.textContent = `${m}:${s.toString().padStart(2,'0')}`;
   }, 1000);
+}
+
+function _setupScreenBtnLongPress(win) {
+  const btn = win.querySelector('#cwScreenBtn');
+  if (!btn) return;
+  let _lpt = null;
+  // Short click → start/stop screen share
+  btn.addEventListener('click', () => switchToScreenShare());
+  // Long press (500ms) → quality picker (only when sharing)
+  btn.addEventListener('pointerdown', () => {
+    _lpt = setTimeout(() => {
+      _lpt = null;
+      if (_screenSharing) {
+        // Show quality picker while sharing
+        showScreenQualityPicker(async (opts) => {
+          if (!opts) return;
+          // Restart with new quality
+          if (screenStream) {
+            screenStream.getTracks().forEach(t => t.stop());
+            screenStream = null;
+          }
+          _screenSharing = false;
+          setTimeout(() => switchToScreenShare(), 100);
+        });
+      }
+    }, 500);
+  });
+  btn.addEventListener('pointerup',    () => { clearTimeout(_lpt); _lpt = null; });
+  btn.addEventListener('pointerleave', () => { clearTimeout(_lpt); _lpt = null; });
+}
+
+function _setupWinLongPress(win) {
+  let _lpt = null, _moved = false, _startX = 0, _startY = 0;
+  win.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button, video')) return;
+    _moved = false; _startX = e.clientX; _startY = e.clientY;
+    win.classList.add('pressing');
+    _lpt = setTimeout(() => {
+      if (!_moved) {
+        win.classList.remove('pressing');
+        toggleCallExpand();
+      }
+    }, 500);
+  });
+  win.addEventListener('pointermove', (e) => {
+    if (Math.abs(e.clientX - _startX) > 8 || Math.abs(e.clientY - _startY) > 8) {
+      _moved = true;
+      win.classList.remove('pressing');
+      clearTimeout(_lpt); _lpt = null;
+    }
+  });
+  win.addEventListener('pointerup',    () => { win.classList.remove('pressing'); clearTimeout(_lpt); _lpt = null; });
+  win.addEventListener('pointerleave', () => { win.classList.remove('pressing'); clearTimeout(_lpt); _lpt = null; });
 }
 
 // Make call window draggable ← УДОБСТВО
@@ -1987,12 +2043,18 @@ function toggleCallExpand() {
   const isExpanded = win.classList.contains('cw-expanded');
   if (isExpanded) {
     win.classList.remove('cw-expanded');
-    const btn = win.querySelector('.cw-expand i');
-    if (btn) btn.className = 'ti ti-maximize';
+    // Restore position
+    if (win._savedPos) {
+      win.style.left = win._savedPos.left;
+      win.style.top  = win._savedPos.top;
+      win.style.right = win._savedPos.right;
+      win.style.bottom = win._savedPos.bottom;
+    }
   } else {
+    // Save current position
+    const r = win.getBoundingClientRect();
+    win._savedPos = { left: win.style.left, top: win.style.top, right: win.style.right, bottom: win.style.bottom };
     win.classList.add('cw-expanded');
-    const btn = win.querySelector('.cw-expand i');
-    if (btn) btn.className = 'ti ti-minimize';
   }
 }
 
@@ -2109,6 +2171,9 @@ async function _applyScreenShare(capturedStream) {
     b.style.background = 'var(--accent)';
     b.querySelector('i').className = 'ti ti-screen-share-off';
   });
+  // Hide avatar/name during screen share
+  const ac = document.getElementById('cwAudioContent');
+  if (ac) { ac.style.opacity = '0'; ac.style.pointerEvents = 'none'; }
   toast('Демонстрация экрана активна', 'success', 2500);
 
   vid.onended = () => switchToScreenShare(); // user clicks "stop sharing" in browser
@@ -2135,6 +2200,14 @@ async function switchToScreenShare() {
       b.style.background = ''; b.title = 'Экран';
       b.querySelector('i').className = 'ti ti-screen-share';
     });
+    // Restore avatar/name
+    const ac = document.getElementById('cwAudioContent');
+    if (ac) { ac.style.opacity = ''; ac.style.pointerEvents = ''; }
+    // Remove screen video
+    const rv = document.getElementById('activeCallWin')?.querySelector('#rv');
+    if (rv && !_callIsVid) { rv.remove(); }
+    const win = document.getElementById('activeCallWin');
+    if (win) win.style.height = '';
     toast('Демонстрация остановлена', 'info', 2000);
     return;
   }
