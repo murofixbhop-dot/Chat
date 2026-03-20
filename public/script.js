@@ -2074,32 +2074,35 @@ function vcTogglePlay(id) {
   const ov   = document.getElementById(id + '_ov');
   const ico  = ov?.querySelector('.vc-play-ico');
   const wrap = document.getElementById(id + '_wrap');
+  const msgs = document.getElementById('messages');
   if (!v) return;
 
+  const _vcStop = () => {
+    if (ico) ico.className = 'ti ti-player-play vc-play-ico';
+    ov?.classList.remove('playing');
+    wrap?.classList.remove('vc-expanded');
+    msgs?.classList.remove('circle-expanded');
+    v.currentTime = 0;
+  };
+
   if (v.paused) {
+    // Save scroll position before expanding — prevent scroll jump
+    const scrollY = msgs ? msgs.scrollTop : 0;
     v.play().catch(() => {});
     if (ico) ico.className = 'ti ti-player-pause vc-play-ico';
     ov?.classList.add('playing');
     wrap?.classList.add('vc-expanded');
-    // Allow overflow during expand animation
-    const msgs = document.getElementById('messages');
-    if (msgs) msgs.style.overflow = 'visible';
+    msgs?.classList.add('circle-expanded');
+    // Restore scroll after class change to prevent jump
+    if (msgs) requestAnimationFrame(() => { msgs.scrollTop = scrollY; });
+    v.onended = _vcStop;
   } else {
     v.pause();
     if (ico) ico.className = 'ti ti-player-play vc-play-ico';
     ov?.classList.remove('playing');
     wrap?.classList.remove('vc-expanded');
-    const msgs = document.getElementById('messages');
-    if (msgs) msgs.style.overflow = '';
+    msgs?.classList.remove('circle-expanded');
   }
-  v.onended = () => {
-    if (ico) ico.className = 'ti ti-player-play vc-play-ico';
-    ov?.classList.remove('playing');
-    wrap?.classList.remove('vc-expanded');
-    v.currentTime = 0;
-    const msgs = document.getElementById('messages');
-    if (msgs) msgs.style.overflow = '';
-  };
 }
 function vcShowDuration(id) {
   const v   = document.getElementById(id);
