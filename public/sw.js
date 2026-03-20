@@ -1,38 +1,62 @@
-// Aura Messenger — Service Worker v3
-const CACHE = 'aura-v3';
-const STATIC = ['/', '/index.html', '/style.css', '/script.js', '/manifest.json'];
+// Aura Messenger — Service Worker v5
+// Network-first for JS/CSS (always fresh), cache-first for static assets
+const CACHE = 'aura-v5';
+const NETWORK_FIRST = ['/script.js', '/style.css', '/index.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c =>
-      Promise.allSettled(STATIC.map(u => c.add(new Request(u, { credentials: 'same-origin' }))))
-    )
+    caches.open(CACHE)
+      .then(c => c.add(new Request('/manifest.json', { credentials: 'same-origin' })))
+      .catch(() => {})
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith('/socket.io') ||
-      url.pathname.startsWith('/api/') ||
-      url.pathname.startsWith('/upload') ||
-      e.request.method !== 'GET') return;
+  if (
+    url.pathname.startsWith('/socket.io') ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/upload') ||
+    e.request.method !== 'GET'
+  ) return;
+
+  const path = url.pathname;
+
+  // Network-first for all app files — always fresh, fall back to cache
+  if (NETWORK_FIRST.some(p => path === p) || path === '/') {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          if (res && res.status === 200) {
+            const toCache = res.clone(); // clone BEFORE returning original
+            caches.open(CACHE).then(c => c.put(e.request, toCache));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Cache-first for everything else (icons etc)
   e.respondWith(
     caches.match(e.request).then(cached => {
-      const net = fetch(e.request).then(r => {
-        if (r && r.status === 200)
-          caches.open(CACHE).then(c => c.put(e.request, r.clone()));
-        return r;
-      }).catch(() => cached);
+      const net = fetch(e.request).then(res => {
+        if (res && res.status === 200) {
+          const toCache = res.clone(); // clone BEFORE returning
+          caches.open(CACHE).then(c => c.put(e.request, toCache));
+        }
+        return res;
+      }).catch(() => null);
       return cached || net;
     })
   );
