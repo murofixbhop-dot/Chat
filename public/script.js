@@ -1923,6 +1923,7 @@ function _showCallWindow(remoteStream) {
   document.querySelectorAll('.call-win, .call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
   const win = document.createElement('div');
   win.className = 'call-win-float';
+  win.id = 'activeCallWin';  // ← critical: needed for screen share
 
   if (_callIsVid) {
     win.innerHTML = `
