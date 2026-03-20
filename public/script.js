@@ -280,6 +280,7 @@ function togglePassVisibility() {
 function startSession(user) {
   currentUser = user.username;
   userData    = user;
+  if (user.avatar) userAvatars[user.username] = user.avatar;
   loginScreen.classList.remove('open');
   loginScreen.style.display = 'none';
   app.classList.remove('hidden');
@@ -363,6 +364,13 @@ async function loadUserData() {
   renderGroups();
   renderRequests();
   updateReqBadge();
+
+  // Refresh avatars for all friends (in case they changed while we were offline)
+  friends.forEach(f => {
+    if (!userAvatars[f]) {
+      fetchUserAvatar(f);
+    }
+  });
 }
 
 function updateProfileUI() {
@@ -420,14 +428,13 @@ function renderFriends(filter = '') {
   // Request avatars for friends we don't have yet
   list.forEach(f => {
     if (!userAvatars[f]) {
-      fetch('/api/get-user-data', {
+      fetch('/api/get-avatar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: f })
       }).then(r => r.json()).then(d => {
         if (d.avatar) {
           userAvatars[f] = d.avatar;
-          // Re-render that specific item
-          document.querySelectorAll('.ci-ava[data-user="' + f + '"]').forEach(el => setAvatar(el, f, d.avatar));
+          document.querySelectorAll(`.ci-ava[data-user="${f}"]`).forEach(el => setAvatar(el, f, d.avatar));
         }
       }).catch(() => {});
     }
@@ -590,10 +597,16 @@ function addMessage(msg) {
   row.className = `msg-row${own ? ' own' : ''}`;
   row.dataset.id = msg.id;
 
-  // Avatar
+  // Avatar — mark with data-user so avatar-updated can refresh it
   const ava = document.createElement('div');
   ava.className = 'avatar sm msg-ava';
+  ava.dataset.user = msg.user;
   setAvatar(ava, msg.user, userAvatars[msg.user]);
+
+  // Fetch avatar if we don't have it cached
+  if (!own && !userAvatars[msg.user]) {
+    fetchUserAvatar(msg.user);
+  }
 
   // Bubble
   const bub = document.createElement('div');
@@ -1292,12 +1305,47 @@ socket.on('group-created', () => {
 
 socket.on('avatar-updated', ({ username, avatar }) => {
   userAvatars[username] = avatar;
-  // update any visible avatar
-  document.querySelectorAll('.ci-ava, .msg-ava').forEach(el => {
-    if (el.dataset.user === username) setAvatar(el, username, avatar);
+  // Update ALL visible avatars for this user in messages
+  document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => {
+    setAvatar(el, username, avatar);
   });
+  // Update sidebar friend list avatars
+  document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => {
+    setAvatar(el, username, avatar);
+  });
+  // Update room header avatar
   if (currentRoom.includes(username)) setAvatar(roomAvatar, username, avatar);
+  // Update settings avatar
+  const settingsAva = document.getElementById('settingsAvatar');
+  if (settingsAva && username === currentUser) setAvatar(settingsAva, username, avatar);
 });
+
+// Fetch avatar for a user we don't have cached
+async function fetchUserAvatar(username) {
+  if (userAvatars[username]) return;
+  try {
+    const r = await fetch('/api/get-avatar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.avatar) return;
+    userAvatars[username] = d.avatar;
+    // Update all rendered avatars for this user
+    document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => {
+      setAvatar(el, username, d.avatar);
+    });
+    document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => {
+      setAvatar(el, username, d.avatar);
+    });
+    // Update chat header if this is the current room partner
+    const other = currentRoom?.startsWith('private:')
+      ? currentRoom.split(':').slice(1).find(p => p !== currentUser)
+      : null;
+    if (other === username) setAvatar(roomAvatar, username, d.avatar);
+  } catch {}
+}
 
 function showFriendRequestPopup(from) {
   document.querySelectorAll('.frq-popup').forEach(p => p.remove());
@@ -1537,8 +1585,6 @@ const ICE_SERVERS = [
   { urls: 'stun:stun4.l.google.com:19302' },
   { urls: 'stun:openrelay.metered.ca:3478' },
   { urls: 'turn:openrelay.metered.ca:3478', credential: 'openrelayproject', username: 'openrelayproject' },
-  { urls: 'stun:numb.viagenie.ca:3478' },
-  { urls: 'turn:numb.viagenie.ca:3478', credential: 'muazkh', username: 'webrtc@live.com' },
 ];
 
 // State
@@ -1881,6 +1927,7 @@ function _createPeer() {
       }, 5000);
     }
   };
+}
 
 // ── TURN FALLBACK — recreate peer with TURN-first config ──
 async function _recreatePeerWithTurnFallback() {
@@ -1893,13 +1940,12 @@ async function _recreatePeerWithTurnFallback() {
   rtcPeer?.close();
   rtcPeer = null;
 
-  // TURN-first config
+  // TURN-first config — prioritize TURN relay for restrictive NATs
   const TURN_FIRST = [
     { urls: 'turn:openrelay.metered.ca:3478', credential: 'openrelayproject', username: 'openrelayproject' },
-    { urls: 'turn:numb.viagenie.ca:3478', credential: 'muazkh', username: 'webrtc@live.com' },
     { urls: 'stun:openrelay.metered.ca:3478' },
-    { urls: 'stun:numb.viagenie.ca:3478' },
-    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
   ];
 
   rtcPeer = new RTCPeerConnection({
@@ -1939,7 +1985,6 @@ async function _recreatePeerWithTurnFallback() {
     toast('Не удалось переподключиться', 'error', 4000);
     _cleanup();
   }
-}
 }
 
 // ── SCREEN RECEIVED (other person sharing screen during audio call) ──
@@ -2395,90 +2440,122 @@ function addCallRecord(icon, label, extra, time) {
 
 
 // ══════════════════════════════════════════════
-// VIDEO CIRCLE  ← КРАСОТА
+// VIDEO CIRCLE — fullscreen viewer  ← КРАСОТА
 // ══════════════════════════════════════════════
 function vcTogglePlay(id) {
   const v    = document.getElementById(id);
-  const ov   = document.getElementById(id + '_ov');
-  const ico  = ov?.querySelector('.vc-play-ico');
-  const wrap = document.getElementById(id + '_wrap');
-  const msgs = document.getElementById('messages');
   if (!v) return;
 
-  const _vcStop = () => {
-    if (ico) ico.className = 'ti ti-player-play vc-play-ico';
-    ov?.classList.remove('playing');
-    wrap?.classList.remove('vc-expanded');
-    msgs?.classList.remove('circle-expanded');
-    v.currentTime = 0;
-    // Restore original positioning
-    if (wrap) {
-      wrap.style.position = '';
-      wrap.style.left = '';
-      wrap.style.top = '';
-      wrap.style.zIndex = '';
-      wrap.style.transform = '';
-      // Restore msg-row original margin
-      const row = wrap.closest('.msg-row');
-      if (row) row.style.marginBottom = '';
-    }
-    document.querySelector('.vc-backdrop')?.remove();
-  };
-
-  if (v.paused) {
-    // Save scroll position before expanding — prevent scroll jump
-    const scrollY = msgs ? msgs.scrollTop : 0;
-
-    // Expand: switch to position:absolute so overflow:visible works
-    if (wrap && !wrap.classList.contains('vc-expanded')) {
-      const rect = wrap.getBoundingClientRect();
-      const msgsRect = msgs?.getBoundingClientRect() || { left: 0, top: 0 };
-      // Calculate position relative to messages container
-      wrap.style.position = 'absolute';
-      wrap.style.left = (rect.left - msgsRect.left + msgs.scrollLeft) + 'px';
-      wrap.style.top = (rect.top - msgsRect.top + msgs.scrollTop) + 'px';
-      wrap.style.zIndex = '200';
-      wrap.style.transform = 'scale(2.4)';
-      wrap.style.transformOrigin = 'center center';
-      wrap.classList.add('vc-expanded');
-      msgs?.classList.add('circle-expanded');
-
-      // Backdrop behind expanded circle to separate from chat
-      let backdrop = document.querySelector('.vc-backdrop');
-      if (!backdrop) {
-        backdrop = document.createElement('div');
-        backdrop.className = 'vc-backdrop';
-        backdrop.style.cssText = 'position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);cursor:pointer;';
-        backdrop.onclick = _vcStop;
-        document.body.appendChild(backdrop);
-      }
-    }
-
-    v.play().catch(() => {});
-    if (ico) ico.className = 'ti ti-player-pause vc-play-ico';
-    if (ov) ov.classList.add('playing');
-    v.onended = _vcStop;
-
-    // Restore scroll after class change to prevent jump
-    if (msgs) requestAnimationFrame(() => { msgs.scrollTop = scrollY; });
-  } else {
-    v.pause();
-    if (ico) ico.className = 'ti ti-player-play vc-play-ico';
-    if (ov) ov.classList.remove('playing');
-    wrap?.classList.remove('vc-expanded');
-    msgs?.classList.remove('circle-expanded');
-    // Restore original positioning
-    if (wrap) {
-      wrap.style.position = '';
-      wrap.style.left = '';
-      wrap.style.top = '';
-      wrap.style.zIndex = '';
-      wrap.style.transform = '';
-      const row = wrap.closest('.msg-row');
-      if (row) row.style.marginBottom = '';
-    }
-    document.querySelector('.vc-backdrop')?.remove();
+  // Find the existing fullscreen viewer for this video
+  const existingViewer = document.querySelector(`.vc-fullscreen[data-vid="${id}"]`);
+  if (existingViewer) {
+    // Already open — just close it
+    closeVcFullscreen(id);
+    return;
   }
+
+  const src = v.src || v.getAttribute('src');
+  if (!src) return;
+
+  // Create fullscreen overlay — like Telegram/TikTok
+  const overlay = document.createElement('div');
+  overlay.className = 'vc-fullscreen';
+  overlay.dataset.vid = id;
+  overlay.innerHTML = `
+    <div class="vc-fs-inner">
+      <video class="vc-fs-video" src="${src}" autoplay playsinline></video>
+      <div class="vc-fs-controls">
+        <button class="vc-fs-close" onclick="closeVcFullscreen('${id}')">
+          <i class="ti ti-x"></i>
+        </button>
+        <div class="vc-fs-timer" id="vc_fs_timer_${id}">0:00</div>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('open'));
+
+  const fsV = overlay.querySelector('.vc-fs-video');
+  const fsTimer = overlay.querySelector('.vc-fs-timer');
+
+  // Sync playback state with original
+  if (v.paused) {
+    fsV.pause();
+  } else {
+    fsV.play().catch(() => {});
+  }
+
+  // Sync timer
+  let fsInterval = null;
+  const updateTimer = () => {
+    if (!fsV || !fsTimer) return;
+    const m = Math.floor(fsV.currentTime / 60);
+    const s = Math.floor(fsV.currentTime % 60);
+    fsTimer.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    if (isFinite(fsV.duration)) {
+      const dm = Math.floor(fsV.duration / 60);
+      const ds = Math.floor(fsV.duration % 60);
+      fsTimer.textContent += ` / ${dm}:${ds.toString().padStart(2,'0')}`;
+    }
+  };
+  fsV.addEventListener('timeupdate', updateTimer);
+  fsInterval = setInterval(updateTimer, 500);
+
+  // Sync play/pause with original on interaction
+  fsV.addEventListener('click', () => {
+    if (fsV.paused) {
+      fsV.play().catch(() => {});
+      v.play().catch(() => {});
+    } else {
+      fsV.pause();
+      v.pause();
+    }
+    updateTimer();
+  });
+
+  // Close on backdrop click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target.classList.contains('vc-fs-inner')) {
+      closeVcFullscreen(id);
+    }
+  });
+
+  // Close on Escape
+  const escHandler = (e) => {
+    if (e.key === 'Escape') { closeVcFullscreen(id); document.removeEventListener('keydown', escHandler); }
+  };
+  document.addEventListener('keydown', escHandler);
+
+  // Sync ended
+  v.onended = () => closeVcFullscreen(id);
+  fsV.onended = () => closeVcFullscreen(id);
+
+  // Pause original inline video to save resources
+  v.pause();
+}
+
+function closeVcFullscreen(id) {
+  const overlay = document.querySelector(`.vc-fullscreen[data-vid="${id}"]`);
+  if (!overlay) return;
+
+  overlay.classList.remove('open');
+  const fsV = overlay.querySelector('.vc-fs-video');
+
+  // Sync playback position back to original
+  const v = document.getElementById(id);
+  if (v && fsV) {
+    v.currentTime = fsV.currentTime;
+    if (!fsV.paused) v.play().catch(() => {});
+  }
+
+  setTimeout(() => overlay.remove(), 300);
+
+  // Update play button state on original
+  const wrap = document.getElementById(id + '_wrap');
+  const ov = wrap ? wrap.querySelector('.vc-overlay') : null;
+  const ico = ov?.querySelector('.vc-play-ico');
+  if (ico) ico.className = 'ti ti-player-play vc-play-ico';
+  if (ov) ov.classList.remove('playing');
 }
 function vcShowDuration(id) {
   const v   = document.getElementById(id);
@@ -2691,11 +2768,3 @@ setInterval(() => { if (currentUser) socket.emit('ping'); }, 5000);
 // ══════════════════════════════════════════════
 // ONLINE BADGE  ← УДОБСТВО
 // ══════════════════════════════════════════════
-socket.on('avatar-updated', ({ username, avatar }) => {
-  userAvatars[username] = avatar;
-  // Header avatar update if in their room
-  if (currentRoom.startsWith('private:') && currentRoom.includes(username)) {
-    setAvatar(roomAvatar, username, avatar);
-  }
-  renderFriends();
-});
