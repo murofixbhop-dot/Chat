@@ -1733,6 +1733,41 @@ socket.on('call-ice', async ({ candidate }) => {
 // End
 socket.on('call-end', () => _cleanup());
 
+// Caller started screen share (replaceTrack path — no ontrack fired)
+socket.on('screen-share-started', ({ from }) => {
+  console.log('[SS] screen-share-started from', from);
+  // The video track was already replaced in peer connection
+  // Just update the video element to show the new stream
+  const rv = document.querySelector('#rv');
+  if (rv && rv.srcObject) {
+    // Force re-read by reassigning
+    const s = rv.srcObject;
+    rv.srcObject = null;
+    rv.srcObject = s;
+    rv.play().catch(() => {});
+    console.log('[SS] Refreshed #rv srcObject');
+  } else if (!rv) {
+    // Audio call — need to show video
+    // The video track arrived via replaceTrack, receiver already has it in remoteStream
+    // But we need to grab it fresh from the peer connection
+    const receivers = rtcPeer?.getReceivers() || [];
+    const vidReceiver = receivers.find(r => r.track?.kind === 'video');
+    if (vidReceiver?.track) {
+      const newStream = new MediaStream([vidReceiver.track]);
+      _showScreenReceived(newStream);
+      console.log('[SS] Created stream from receiver track');
+    }
+  }
+});
+
+// Caller stopped screen share
+socket.on('screen-share-stopped', ({ from }) => {
+  document.querySelector('#rv')?.remove();
+  document.querySelector('#screenReceiveOverlay')?.remove();
+  const win = document.getElementById('activeCallWin');
+  if (win) win.style.height = '';
+});
+
 // Offline target
 socket.on('call-target-offline', ({ target }) => {
   toast(`${target} не в сети — получат уведомление о пропущенном звонке`, 'info', 4000);
@@ -2013,29 +2048,42 @@ async function _applyScreenShare(capturedStream) {
   if (!rtcPeer) { capturedStream.getTracks().forEach(t => t.stop()); return; }
   screenStream = capturedStream;
   const vid = screenStream.getVideoTracks()[0];
+  if (!vid) { console.error('[SS] No video track in screen stream'); return; }
 
-  // Remove old video sender if any
-  const oldSender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
-  if (oldSender) rtcPeer.removeTrack(oldSender);
+  console.log('[SS] Video track:', vid.id, vid.readyState, vid.label);
 
-  // Add new screen track
-  rtcPeer.addTrack(vid, screenStream);
+  const existingSender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
 
-  // Renegotiate immediately
-  try {
+  if (existingSender) {
+    // VIDEO CALL: use replaceTrack — seamless, no renegotiation needed, ontrack fires on receiver
+    try {
+      await existingSender.replaceTrack(vid);
+      console.log('[SS] replaceTrack done — receiver gets new video');
+      // Signal to receiver via custom socket event so they know to show screen UI
+      socket.emit('screen-share-started', { to: _callTarget, from: currentUser });
+    } catch(e) { console.error('[SS] replaceTrack error:', e); return; }
+  } else {
+    // AUDIO CALL: add new video track then renegotiate
+    rtcPeer.addTrack(vid, screenStream);
+    console.log('[SS] addTrack done, senders:', rtcPeer.getSenders().length);
+
+    // Wait for stable state
     if (rtcPeer.signalingState !== 'stable') {
       await new Promise(res => {
-        const check = setInterval(() => {
-          if (rtcPeer?.signalingState === 'stable') { clearInterval(check); res(); }
-        }, 100);
-        setTimeout(() => { clearInterval(check); res(); }, 3000);
+        const iv = setInterval(() => {
+          if (!rtcPeer || rtcPeer.signalingState === 'stable') { clearInterval(iv); res(); }
+        }, 80);
+        setTimeout(() => { clearInterval(iv); res(); }, 4000);
       });
     }
-    const offer = await rtcPeer.createOffer();
-    await rtcPeer.setLocalDescription(offer);
-    socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
-    console.log('[SS] Renegotiation offer sent');
-  } catch(e) { console.error('[SS] renegotiation error:', e); }
+    try {
+      const offer = await rtcPeer.createOffer({ offerToReceiveVideo: true });
+      await rtcPeer.setLocalDescription(offer);
+      console.log('[SS] Offer SDP (first 200):', offer.sdp.slice(0, 200));
+      socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
+      console.log('[SS] Renegotiation offer sent for audio→screen');
+    } catch(e) { console.error('[SS] renegotiation error:', e); return; }
+  }
 
   // Show caller's own screen preview
   const win = document.getElementById('activeCallWin');
@@ -2081,6 +2129,7 @@ async function switchToScreenShare() {
   if (_screenSharing) {
     screenStream?.getTracks().forEach(t => t.stop());
     screenStream = null; _screenSharing = false;
+    socket.emit('screen-share-stopped', { to: _callTarget, from: currentUser });
     document.querySelectorAll('.ss-toggle').forEach(b => {
       b.style.background = ''; b.title = 'Экран';
       b.querySelector('i').className = 'ti ti-screen-share';
