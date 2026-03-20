@@ -226,6 +226,7 @@ function showLogin() {
 async function doLogin() {
   const username = $('loginInput').value.trim();
   const password = $('loginPassInput')?.value?.trim() || '';
+  const email = _isRegisterMode ? ($('loginEmailInput')?.value?.trim() || '') : '';
   const errEl    = $('loginErr');
   errEl.textContent = '';
 
@@ -239,6 +240,11 @@ async function doLogin() {
     $('loginPassInput').focus();
     return;
   }
+  if (_isRegisterMode && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errEl.textContent = 'Введите корректный email';
+    $('loginEmailInput').focus();
+    return;
+  }
 
   const btn = $('loginBtn');
   btn.disabled = true;
@@ -247,14 +253,25 @@ async function doLogin() {
   try {
     const r = await fetch('/api/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, email })
     });
     const d = await r.json();
     if (d.success) {
       localStorage.setItem('aura_user', d.user.username);
-      localStorage.setItem('aura_pass', password); // for auto-restore
-      // Show welcome message for new registrations
+      localStorage.setItem('aura_pass', password);
       if (d.isNew) toast(`Добро пожаловать, ${d.user.username}!`, 'success');
+      // Reset register mode
+      _isRegisterMode = false;
+      const emailWrap = $('loginEmailWrap');
+      if (emailWrap) emailWrap.style.display = 'none';
+      const subText = $('loginSubText');
+      if (subText) subText.textContent = 'Введите имя и пароль';
+      const registerLink = $('registerLink');
+      if (registerLink) registerLink.textContent = 'Регистрация';
+      const forgotLink = $('forgotLink');
+      if (forgotLink) forgotLink.style.display = '';
+      const loginBtnEl = $('loginBtn');
+      if (loginBtnEl) loginBtnEl.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
       startSession(d.user);
     } else {
       errEl.textContent = d.error || 'Ошибка входа';
@@ -265,7 +282,7 @@ async function doLogin() {
     errEl.textContent = 'Нет соединения с сервером';
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
+    if (!_isRegisterMode) btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
   }
 }
 
@@ -275,6 +292,98 @@ function togglePassVisibility() {
   if (!input) return;
   input.type = input.type === 'password' ? 'text' : 'password';
   icon.className = input.type === 'password' ? 'ti ti-eye' : 'ti ti-eye-off';
+}
+
+let _isRegisterMode = false;
+
+function toggleRegisterMode() {
+  _isRegisterMode = !_isRegisterMode;
+  const emailWrap = $('loginEmailWrap');
+  const subText = $('loginSubText');
+  const btn = $('loginBtn');
+  const registerLink = $('registerLink');
+  const forgotLink = $('forgotLink');
+
+  if (_isRegisterMode) {
+    emailWrap.style.display = 'flex';
+    subText.textContent = 'Создайте аккаунт';
+    btn.innerHTML = 'Зарегистрироваться <i class="ti ti-user-plus"></i>';
+    registerLink.textContent = 'Войти';
+    forgotLink.style.display = 'none';
+    $('loginEmailInput')?.focus();
+  } else {
+    emailWrap.style.display = 'none';
+    subText.textContent = 'Введите имя и пароль';
+    btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
+    registerLink.textContent = 'Регистрация';
+    forgotLink.style.display = '';
+  }
+}
+
+async function openForgotPass() {
+  const username = await dialog({
+    icon: 'ti-key', iconType: 'info',
+    title: 'Восстановление пароля',
+    msg: 'Введите имя пользователя',
+    input: true, placeholder: 'Имя пользователя',
+    ok: 'Отправить код', cancel: 'Отмена'
+  });
+  if (!username) return;
+
+  const btn = $('loginBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>';
+
+  try {
+    const r = await fetch('/api/request-password-reset', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
+    const d = await r.json();
+    if (d.success) {
+      toast(d.message, 'success');
+      // Show code entry dialog
+      setTimeout(async () => {
+        const code = await dialog({
+          icon: 'ti-lock', iconType: 'info',
+          title: 'Введите код',
+          msg: 'Код отправлен на ваш email. Введите его вместе с новым паролем.',
+          input: true, placeholder: '6-значный код',
+          ok: 'Сбросить пароль', cancel: 'Отмена'
+        });
+        if (!code) return;
+
+        const newPass = await dialog({
+          icon: 'ti-lock-open', iconType: 'info',
+          title: 'Новый пароль',
+          msg: 'Введите новый пароль (мин. 4 символа)',
+          input: true, placeholder: 'Новый пароль…',
+          ok: 'Сохранить', cancel: 'Отмена'
+        });
+        if (!newPass) return;
+
+        const r2 = await fetch('/api/reset-password', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, code, newPassword: newPass })
+        });
+        const d2 = await r2.json();
+        if (d2.success) {
+          toast('Пароль изменён! Теперь войдите с новым паролем.', 'success');
+          _isRegisterMode = false;
+          toggleRegisterMode();
+        } else {
+          toast(d2.error || 'Ошибка сброса', 'error');
+        }
+      }, 500);
+    } else {
+      toast(d.error || 'Ошибка', 'error');
+    }
+  } catch {
+    toast('Нет соединения', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
+  }
 }
 
 function startSession(user) {
@@ -443,11 +552,12 @@ function renderFriends(filter = '') {
 
 function renderGroups() {
   const ul = groupsList;
-  // Keep general item
-  const general = $('generalItem');
   ul.innerHTML = '';
-  if (general) ul.appendChild(general);
-  if (general) general.onclick = () => { gotoRoom('general'); closeSidebarMobile(); };
+  if (!groups.length) {
+    ul.innerHTML = `<li class="msgs-empty" style="padding:24px;font-size:13px;">
+      <i class="ti ti-users"></i><p>Нет групп</p></li>`;
+    return;
+  }
   groups.forEach(g => {
     const li = document.createElement('li');
     li.className = 'chat-item' + (currentRoom === `group:${g.id}` ? ' active' : '');
@@ -553,7 +663,7 @@ function gotoRoom(room) {
     roomAvatar.innerHTML = '<i class="ti ti-hash" style="font-size:15px"></i>';
     onlinePill && (onlinePill.style.display = 'flex');
     hdrRight.innerHTML = '';
-    hdrRight.appendChild(onlinePill);
+    if (onlinePill) { hdrRight.innerHTML = ''; hdrRight.appendChild(onlinePill); }
   } else if (room.startsWith('private:')) {
     const parts = room.split(':');
     const other = parts.slice(1).find(p => p !== currentUser) || parts[1];
@@ -569,7 +679,7 @@ function gotoRoom(room) {
     roomAvatar.innerHTML = '<i class="ti ti-users" style="font-size:14px"></i>';
     roomAvatar.style.borderRadius = '12px';
     if (onlinePill) onlinePill.style.display = 'none';
-    hdrRight.innerHTML = '';
+    hdrRight.innerHTML = callBtnsHtml;
   }
 
   socket.emit('join-room', room);
@@ -1232,16 +1342,84 @@ function viewMedia(url, type) {
 // FRIENDS / REQUESTS  ← УДОБСТВО
 // ══════════════════════════════════════════════
 async function openAddFriend() {
-  const name = await dialog({ icon:'ti-user-plus', iconType:'info', title:'Добавить друга', msg:'Введите имя пользователя', input:true, placeholder:'Имя…', ok:'Отправить', cancel:'Отмена' });
-  if (!name) return;
-  const r = await fetch('/api/send-friend-request', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: currentUser, to: name })
+  const ov = $('dialogOverlay');
+  const box = $('dialogBox');
+  if (!ov || !box) return;
+
+  let searchTimeout = null;
+  let searchResults = [];
+
+  box.innerHTML = `
+    <div class="dlg-ico info"><i class="ti ti-user-plus"></i></div>
+    <h3>Добавить друга</h3>
+    <div class="field-wrap" style="margin-bottom:12px">
+      <i class="ti ti-search field-ico"></i>
+      <input id="addFriendSearch" class="field" type="text" placeholder="Поиск по имени или nik…" autocomplete="off" style="padding-left:38px"/>
+    </div>
+    <div id="addFriendResults" style="max-height:220px;overflow-y:auto;margin-bottom:12px"></div>
+    <div class="dlg-btns">
+      <button class="btn-secondary" id="addFriendCancel">Отмена</button>
+    </div>`;
+
+  ov.classList.add('open');
+
+  const searchInput = document.getElementById('addFriendSearch');
+  const resultsEl = document.getElementById('addFriendResults');
+
+  const doSearch = async (q) => {
+    if (!q || q.length < 1) {
+      resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Введите имя для поиска</div>';
+      return;
+    }
+    try {
+      const r = await fetch('/api/search-users', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q })
+      });
+      const d = await r.json();
+      searchResults = d.users || [];
+      if (!searchResults.length) {
+        resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Ничего не найдено</div>';
+        return;
+      }
+      resultsEl.innerHTML = searchResults.map(u => `
+        <div class="af-result-item" onclick="sendFriendReqTo('${u.username}')">
+          <div class="ci-ava" style="width:34px;height:34px;font-size:13px">${(u.nickname||u.username).charAt(0).toUpperCase()}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(u.nickname||u.username)}</div>
+            <div style="font-size:11px;color:var(--text2)">@${u.username}</div>
+          </div>
+          <button class="btn-secondary" style="padding:5px 10px;font-size:11px"><i class="ti ti-user-plus"></i></button>
+        </div>`).join('');
+    } catch {
+      resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Ошибка поиска</div>';
+    }
+  };
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => doSearch(searchInput.value.trim()), 300);
   });
-  const d = await r.json();
-  if (d.success) toast('Заявка отправлена!', 'success');
-  else toast(d.message || d.error || 'Ошибка', 'error');
+
+  searchInput.focus();
+
+  document.getElementById('addFriendCancel').onclick = () => ov.classList.remove('open');
+  ov.onclick = (e) => { if (e.target === ov) ov.classList.remove('open'); };
 }
+
+window.sendFriendReqTo = async function(username) {
+  const ov = $('dialogOverlay');
+  ov.classList.remove('open');
+  try {
+    const r = await fetch('/api/send-friend-request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: currentUser, to: username })
+    });
+    const d = await r.json();
+    if (d.success) toast(`Заявка отправлена ${username}!`, 'success');
+    else toast(d.message || d.error || 'Ошибка', 'error');
+  } catch { toast('Ошибка', 'error'); }
+};
 
 async function acceptReq(req) {
   const r = await fetch('/api/accept-friend-request', {
@@ -1427,6 +1605,27 @@ function openSettings() {
   $('volRange').value = vol;
   $('volLabel').textContent = vol + '%';
   loadAudioDevices();
+  // Recovery email
+  $('stRecoveryEmail').value = userData.recoveryEmail || '';
+}
+
+async function saveRecoveryEmail() {
+  const email = $('stRecoveryEmail').value.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    toast('Введите корректный email', 'warning');
+    return;
+  }
+  try {
+    const r = await fetch('/api/update-recovery-email', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, email })
+    });
+    const d = await r.json();
+    if (d.success) {
+      userData.recoveryEmail = email || null;
+      toast('Email сохранён', 'success');
+    }
+  } catch { toast('Ошибка сохранения', 'error'); }
 }
 
 function closeSettings() { $('settingsModal').classList.remove('open'); }
@@ -1597,6 +1796,9 @@ let _connected   = false;  // true once ICE connected
 let _muted       = false;
 let _screenSharing = false;
 let screenStream = null;
+let _groupCall   = false;   // true if in a group call
+let _groupMembers = [];      // members in group call
+let groupPeers   = new Map(); // member -> RTCPeerConnection
 
 // DOM
 let callModal, callAva, callNm, callSt, callAct;
@@ -1610,8 +1812,16 @@ function initCallDOM() {
 
 // ── HELPERS ─────────────────────────────────────────────
 function callTarget() {
-  if (!currentRoom || !currentRoom.startsWith('private:')) return null;
-  return currentRoom.split(':').slice(1).find(p => p !== currentUser) || null;
+  if (!currentRoom) return null;
+  if (currentRoom.startsWith('private:')) {
+    return currentRoom.split(':').slice(1).find(p => p !== currentUser) || null;
+  }
+  if (currentRoom.startsWith('group:')) {
+    const g = groups.find(g => g.id === currentRoom.replace('group:', ''));
+    if (!g) return null;
+    return { type: 'group', groupId: g.id, name: g.name, members: g.members.filter(m => m !== currentUser) };
+  }
+  return null;
 }
 
 let _ringCtx = null, _ringInterval = null;
@@ -1640,9 +1850,9 @@ function stopRing() {
 }
 
 // ── OUTGOING ────────────────────────────────────────────
-function startCall(isVid) {
+async function startCall(isVid) {
   const target = callTarget();
-  if (!target) { toast('Открой личный чат для звонка', 'warning'); return; }
+  if (!target) { toast('Открой чат для звонка', 'warning'); return; }
   if (_inCall)  { toast('Звонок уже идёт', 'warning'); return; }
 
   const vidConstraints = isVid ? {
@@ -1651,20 +1861,137 @@ function startCall(isVid) {
     frameRate:   { ideal: 30,   max: 60   },
     facingMode:  'user',
   } : false;
-  navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: vidConstraints })
-    .then(stream => {
-      localStream  = stream;
-      _callTarget  = target;
-      _callIsVid   = isVid;
-      _isCaller    = true;
-      _inCall      = true;
-      _connected   = false;
 
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: vidConstraints });
+    localStream  = stream;
+    _callIsVid   = isVid;
+    _isCaller    = true;
+    _inCall      = true;
+    _connected   = false;
+
+    if (typeof target === 'object' && target.type === 'group') {
+      // GROUP CALL
+      _groupCall = true;
+      _groupMembers = target.members;
+      _callTarget = target.name;
+      if (target.members.length === 0) { toast('В группе нет участников', 'warning'); _cleanup(); return; }
+      // Create peer connections for each member
+      _showGroupCallUI(target.name, target.members);
+      // Initiate call with each member sequentially
+      for (const member of target.members) {
+        await _initiateGroupPeer(member);
+      }
+    } else {
+      // PRIVATE CALL
+      _callTarget  = target;
+      _groupCall = false;
+      _groupMembers = [];
       socket.emit('call-invite', { to: target, from: currentUser, isVid });
       _showOutgoingUI(target, isVid);
-    })
-    .catch(err => toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error'));
+    }
+  } catch(err) {
+    toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error');
+  }
 }
+
+async function _initiateGroupPeer(member) {
+  const pc = new RTCPeerConnection({
+    iceServers: ICE_SERVERS,
+    iceCandidatePoolSize: 10,
+    sdpSemantics: 'unified-plan',
+  });
+  groupPeers.set(member, pc);
+
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) socket.emit('call-ice', { to: member, from: currentUser, candidate });
+  };
+
+  const remoteStream = new MediaStream();
+  pc.ontrack = ({ track, streams }) => {
+    const existing = remoteStream.getTracks().find(t => t.kind === track.kind);
+    if (existing) remoteStream.removeTrack(existing);
+    remoteStream.addTrack(track);
+    _addGroupParticipantStream(member, remoteStream);
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      groupPeers.delete(member);
+      _updateGroupCallStatus();
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    if (pc.iceConnectionState === 'failed') {
+      pc.restartIce?.();
+    }
+  };
+
+  socket.emit('call-invite', { to: member, from: currentUser, isVid: _callIsVid });
+}
+
+function _addGroupParticipantStream(member, remoteStream) {
+  const win = document.getElementById('groupCallWin');
+  if (!win) return;
+  let participantEl = win.querySelector(`[data-participant="${member}"]`);
+  if (!participantEl) {
+    participantEl = document.createElement('div');
+    participantEl.className = 'group-participant';
+    participantEl.dataset.participant = member;
+    participantEl.innerHTML = `
+      <div class="gp-avatar" id="gp_ava_${member}"></div>
+      <div class="gp-name">${member}</div>
+      <video class="gp-video" id="gp_vid_${member}" autoplay playsinline></video>`;
+    win.querySelector('.gp-grid').appendChild(participantEl);
+    setAvatar(document.getElementById('gp_ava_' + member), member, userAvatars[member]);
+  }
+  const vid = document.getElementById('gp_vid_' + member);
+  if (vid) {
+    vid.srcObject = remoteStream;
+    vid.play().catch(() => {});
+  }
+  _updateGroupCallStatus();
+}
+
+function _updateGroupCallStatus() {
+  const connectedCount = Array.from(groupPeers.values()).filter(pc => pc.connectionState === 'connected').length;
+  const totalCount = _groupMembers.length;
+  const statusEl = document.getElementById('gcStatus');
+  if (statusEl) {
+    if (connectedCount === 0) statusEl.textContent = 'Соединение...';
+    else statusEl.textContent = `${connectedCount + 1} участник${connectedCount !== totalCount ? ` из ${totalCount + 1}` : ''}`;
+  }
+}
+
+function _showGroupCallUI(groupName, members) {
+  document.querySelectorAll('.group-call-win').forEach(w => w.remove());
+  const win = document.createElement('div');
+  win.className = 'group-call-win';
+  win.id = 'groupCallWin';
+  win.innerHTML = `
+    <div class="gcw-header">
+      <div class="gcw-title"><i class="ti ti-users"></i> ${esc(groupName)}</div>
+      <div class="gcw-status" id="gcStatus">Соединение...</div>
+    </div>
+    <div class="gcw-grid gp-grid"></div>
+    <div class="gcw-local-preview" id="gcwLocalPreview">
+      <video id="gcwLocalVid" autoplay playsinline muted></video>
+    </div>
+    <div class="gcw-controls">
+      <button class="gcw-btn gcw-mute" id="gcwMuteBtn" onclick="toggleGroupMute()"><i class="ti ti-microphone"></i></button>
+      <button class="gcw-btn gcw-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>
+    </div>`;
+  document.body.appendChild(win);
+  const localVid = win.querySelector('#gcwLocalVid');
+  if (localVid && localStream) localVid.srcObject = localStream;
+  const totalSlots = Math.max(members.length + 1, 2);
+  win.style.setProperty('--gp-cols', totalSlots <= 2 ? 2 : 3);
+}
+
+function _showOutgoingUI(target, isVid) {
 
 function _showOutgoingUI(target, isVid) {
   setAvatar(callAva, target, userAvatars[target]);
@@ -1688,6 +2015,14 @@ socket.on('call-invite', ({ from, isVid }) => {
       'Нажмите чтобы ответить', 'call-' + from
     );
   }
+
+  // If this is a group call participant inviting us
+  if (groupPeers.has(from) && _groupCall) {
+    // This is a group call - answer and add to group
+    _handleGroupAnswer(from, isVid);
+    return;
+  }
+
   if (_inCall) {
     socket.emit('call-busy', { to: from, from: currentUser });
     return;
@@ -1711,6 +2046,26 @@ socket.on('call-invite', ({ from, isVid }) => {
   callModal.classList.add('open');
   ringBeep();
 });
+
+async function _handleGroupAnswer(from, isVid) {
+  const pc = groupPeers.get(from);
+  if (!pc) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: isVid ? { facingMode:'user' } : false });
+    localStream = stream;
+    _createGroupPeerAnswer(from, pc);
+  } catch {
+    socket.emit('call-decline', { to: from, from: currentUser });
+  }
+}
+
+async function _createGroupPeerAnswer(member, pc) {
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('call-offer', { to: member, from: currentUser, sdp: offer });
+  } catch(e) { console.error('[Group Answer]', e); }
+}
 
 socket.on('call-busy', ({ from }) => {
   toast(from + ' занят', 'info', 2500); endCall();
@@ -1753,6 +2108,20 @@ socket.on('call-answer-ready', async ({ from }) => {
 
 // 2. Receive offer — initial call OR renegotiation (screen share)
 socket.on('call-offer', async ({ from, sdp }) => {
+  // Route to group peer if this is a group call
+  if (groupPeers.has(from)) {
+    const pc = groupPeers.get(from);
+    try {
+      if (pc.signalingState === 'have-local-offer') {
+        await pc.setLocalDescription({ type: 'rollback' });
+      }
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('call-answer', { to: from, from: currentUser, sdp: answer });
+    } catch (e) { console.error('[Group SDP] answer error:', e); }
+    return;
+  }
   if (!rtcPeer) return;
   console.log('[SDP] offer, signalingState:', rtcPeer.signalingState);
   try {
@@ -1767,7 +2136,17 @@ socket.on('call-offer', async ({ from, sdp }) => {
 });
 
 // 3. Receive answer
-socket.on('call-answer', async ({ sdp }) => {
+socket.on('call-answer', async ({ from, sdp }) => {
+  // Route to group peer if this is a group call
+  if (groupPeers.has(from)) {
+    const pc = groupPeers.get(from);
+    try {
+      if (pc.signalingState === 'have-local-offer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      }
+    } catch (e) { console.error('[Group SDP] set-answer error:', e); }
+    return;
+  }
   if (!rtcPeer) return;
   try {
     if (rtcPeer.signalingState === 'have-local-offer') {
@@ -1777,7 +2156,13 @@ socket.on('call-answer', async ({ sdp }) => {
 });
 
 // ICE
-socket.on('call-ice', async ({ candidate }) => {
+socket.on('call-ice', async ({ from, candidate }) => {
+  // Route to group peer if this is a group call
+  if (groupPeers.has(from)) {
+    const pc = groupPeers.get(from);
+    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+    return;
+  }
   if (!rtcPeer) return;
   try { await rtcPeer.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
 });
@@ -2224,6 +2609,16 @@ function toggleMuteWin(btn) {
   btn.style.background = _muted ? 'var(--danger)' : '';
 }
 
+function toggleGroupMute() {
+  _muted = !_muted;
+  localStream?.getAudioTracks().forEach(t => t.enabled = !_muted);
+  const btn = document.getElementById('gcwMuteBtn');
+  if (btn) {
+    btn.querySelector('i').className = _muted ? 'ti ti-microphone-off' : 'ti ti-microphone';
+    btn.classList.toggle('muted', _muted);
+  }
+}
+
 // ── SCREEN SHARE ─────────────────────────────────────────
 async function _applyScreenShare(capturedStream) {
   if (!rtcPeer) { capturedStream.getTracks().forEach(t => t.stop()); return; }
@@ -2399,7 +2794,7 @@ function endCall() {
 function _cleanup() {
   stopRing();
   // Add call record to chat if call was connected
-  if (_callTarget && currentRoom && _callConnectedTime) {
+  if (_callTarget && currentRoom && _callConnectedTime && !_groupCall) {
     const dur = Math.floor((Date.now() - _callConnectedTime) / 1000);
     const durStr = dur > 0
       ? (dur < 60 ? `${dur}с` : `${Math.floor(dur/60)}м ${dur%60}с`)
@@ -2414,9 +2809,15 @@ function _cleanup() {
 
   _inCall = false; _connected = false; _screenSharing = false; _muted = false;
   rtcPeer?.close(); rtcPeer = null;
+  // Close all group peer connections
+  groupPeers.forEach(pc => pc.close());
+  groupPeers.clear();
   localStream?.getTracks().forEach(t => t.stop()); localStream = null;
   screenStream?.getTracks().forEach(t => t.stop()); screenStream = null;
+  _groupCall = false;
+  _groupMembers = [];
   document.querySelectorAll('.call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
+  document.querySelectorAll('.group-call-win').forEach(w => w.remove());
   if (callModal) callModal.classList.remove('open');
   if (callAct) callAct.innerHTML = '';
   if (callNm)  callNm.textContent = '';
