@@ -2070,9 +2070,9 @@ function _cleanup() {
 // VIDEO CIRCLE  ← КРАСОТА
 // ══════════════════════════════════════════════
 function vcTogglePlay(id) {
-  const v   = document.getElementById(id);
-  const ov  = document.getElementById(id + '_ov');
-  const ico = ov?.querySelector('.vc-play-ico');
+  const v    = document.getElementById(id);
+  const ov   = document.getElementById(id + '_ov');
+  const ico  = ov?.querySelector('.vc-play-ico');
   const wrap = document.getElementById(id + '_wrap');
   if (!v) return;
 
@@ -2080,19 +2080,25 @@ function vcTogglePlay(id) {
     v.play().catch(() => {});
     if (ico) ico.className = 'ti ti-player-pause vc-play-ico';
     ov?.classList.add('playing');
-    // Expand on play like Telegram
     wrap?.classList.add('vc-expanded');
+    // Allow overflow during expand animation
+    const msgs = document.getElementById('messages');
+    if (msgs) msgs.style.overflow = 'visible';
   } else {
     v.pause();
     if (ico) ico.className = 'ti ti-player-play vc-play-ico';
     ov?.classList.remove('playing');
     wrap?.classList.remove('vc-expanded');
+    const msgs = document.getElementById('messages');
+    if (msgs) msgs.style.overflow = '';
   }
   v.onended = () => {
     if (ico) ico.className = 'ti ti-player-play vc-play-ico';
     ov?.classList.remove('playing');
     wrap?.classList.remove('vc-expanded');
     v.currentTime = 0;
+    const msgs = document.getElementById('messages');
+    if (msgs) msgs.style.overflow = '';
   };
 }
 function vcShowDuration(id) {
