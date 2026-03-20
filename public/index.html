@@ -34,7 +34,7 @@
     <svg width="44" height="44" viewBox="0 0 40 40" fill="none">
       <rect width="40" height="40" rx="13" fill="url(#g0)"/>
       <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white"/>
-      <defs><linearGradient id="g0" x1="0" y1="0" x2="40" y2="40"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+      <defs><linearGradient id="g0" x1="0" y1="0" x2="40" y2="40"><stop stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent2)"/></linearGradient></defs>
     </svg>
   </div>
   <p class="splash-label" id="loadingText">Подключение…</p>
@@ -115,10 +115,21 @@
         <i class="ti ti-eye" id="passEyeIcon"></i>
       </button>
     </div>
+    <!-- Email field for registration -->
+    <div id="loginEmailWrap" class="field-wrap" style="margin-top:10px; display:none">
+      <i class="ti ti-mail field-ico"></i>
+      <input id="loginEmailInput" class="field" type="email" placeholder="Email для восстановления пароля" autocomplete="email"
+             onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
     <div id="loginErr" class="login-err" aria-live="polite"></div>
     <button id="loginBtn" class="btn-primary w-full" onclick="doLogin()">
       Войти <i class="ti ti-arrow-right"></i>
     </button>
+    <div class="login-links">
+      <a class="login-link" id="forgotLink" onclick="openForgotPass()">Забыли пароль?</a>
+      <span class="login-link-sep">·</span>
+      <a class="login-link" id="registerLink" onclick="toggleRegisterMode()">Регистрация</a>
+    </div>
     <div class="palette-row">
       <span class="pal-label">Тема:</span>
       <button class="pal active" data-pal="violet" style="--pc:#6366f1" onclick="applyPalette('violet')" title="Violet"></button>
@@ -194,6 +205,12 @@
           <strong id="acLoginName" style="font-size:1.05rem"></strong>
         </div>
       </div>
+      <label class="lbl mt"><i class="ti ti-mail"></i> Email для восстановления</label>
+      <div style="display:flex;gap:8px">
+        <input type="email" id="stRecoveryEmail" class="field" placeholder="email@example.com" style="flex:1"/>
+        <button class="btn-secondary" onclick="saveRecoveryEmail()" style="padding:12px 16px"><i class="ti ti-check"></i></button>
+      </div>
+      <p class="sub-text" style="margin-top:4px">Используется для восстановления пароля</p>
       <button class="btn-danger w-full mt" onclick="deleteAccount()"><i class="ti ti-trash"></i> Удалить аккаунт</button>
     </div>
   </div>
@@ -227,7 +244,7 @@
         <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
           <rect width="40" height="40" rx="11" fill="url(#g2)"/>
           <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white"/>
-          <defs><linearGradient id="g2" x1="0" y1="0" x2="40" y2="40"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+          <defs><linearGradient id="g2" x1="0" y1="0" x2="40" y2="40"><stop stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent2)"/></linearGradient></defs>
         </svg>
         <span class="brand-name">Aura</span>
       </div>
@@ -268,17 +285,7 @@
     <!-- Groups pane -->
     <div class="sb-pane hidden" id="pGroups">
       <button class="new-btn" onclick="openGroupModal()"><i class="ti ti-plus"></i> Создать группу</button>
-      <ul id="groupsList" class="chat-list-ul">
-        <li class="chat-item" id="generalItem" onclick="gotoRoom('general')">
-          <div class="ci-ava" style="background:linear-gradient(135deg,var(--accent),var(--accent2,#8b5cf6))">
-            <i class="ti ti-hash"></i>
-          </div>
-          <div class="ci-body">
-            <span class="ci-name">Общий чат</span>
-            <span class="ci-sub">Публичный</span>
-          </div>
-        </li>
-      </ul>
+      <ul id="groupsList" class="chat-list-ul"></ul>
     </div>
 
     <!-- Requests pane -->
