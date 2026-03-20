@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const server = http.createServer(app);
@@ -70,7 +71,34 @@ function calculateSHA1(buffer) {
 
 // ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ==========
 const USERS_FILE = 'users.json';
-let users = new Map(); // username -> { nickname, avatar, theme, friends, friendRequests, groups }
+let users = new Map(); // username -> { nickname, avatar, theme, friends, friendRequests, groups, recoveryEmail }
+let recoveryCodes = new Map(); // username -> { code, expiry, email }
+
+// Email transporter — для продакшена настройте SMTP
+const emailTransporter = nodemailer.createTransport({
+  jsonTransport: true // logs to console instead of sending (dev mode)
+});
+// For production, replace with:
+// {
+//   host: 'smtp.example.com',
+//   port: 587,
+//   secure: false,
+//   auth: { user: '...', pass: '...' }
+// }
+
+function sendRecoveryEmail(to, code) {
+  const msg = `Код восстановления пароля Aura: ${code}\nВведите этот код в приложении для сброса пароля.`;
+  return emailTransporter.sendMail({
+    from: '"Aura Messenger" <noreply@aura.app>',
+    to,
+    subject: 'Восстановление пароля Aura',
+    text: msg
+  }).then(info => {
+    console.log('📧 Email отправлен:', info.message);
+  }).catch(err => {
+    console.log('📧 (Dev mode) Код восстановления для', to, ':', code);
+  });
+}
 
 async function loadUsers() {
   try {
@@ -163,7 +191,7 @@ function hashPassword(password) {
 
 // Вход/регистрация с паролем
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, email } = req.body;
   if (!username || username.trim() === '') {
     return res.status(400).json({ error: 'Имя не может быть пустым' });
   }
@@ -206,7 +234,8 @@ app.post('/api/login', async (req, res) => {
       theme: 'dark',
       friends: [],
       friendRequests: [],
-      groups: []
+      groups: [],
+      recoveryEmail: email || null
     };
     users.set(cleanName, newUser);
     await saveUsers();
@@ -246,6 +275,89 @@ app.post('/api/delete-account', async (req, res) => {
   users.delete(username);
   await saveUsers();
   res.json({ success: true });
+});
+
+// Запросить сброс пароля
+app.post('/api/request-password-reset', async (req, res) => {
+  const { username } = req.body;
+  if (!username || !users.has(username)) {
+    // Don't reveal if user exists
+    return res.json({ success: true, message: 'Если аккаунт существует, код отправлен на email' });
+  }
+  const userData = users.get(username);
+  if (!userData.recoveryEmail) {
+    return res.json({ success: false, error: 'Для этого аккаунта не указан email. Обратитесь к администратору.' });
+  }
+
+  // Generate 6-digit code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiry = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+  recoveryCodes.set(username, { code, expiry, email: userData.recoveryEmail });
+
+  // Send email
+  await sendRecoveryEmail(userData.recoveryEmail, code);
+
+  res.json({ success: true, message: 'Код отправлен на email' });
+});
+
+// Подтвердить сброс пароля
+app.post('/api/reset-password', async (req, res) => {
+  const { username, code, newPassword } = req.body;
+  if (!username || !code || !newPassword) {
+    return res.status(400).json({ error: 'Не все данные указаны' });
+  }
+  if (!users.has(username)) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (newPassword.trim().length < 4) {
+    return res.status(400).json({ error: 'Пароль должен быть не менее 4 символов' });
+  }
+
+  const recovery = recoveryCodes.get(username);
+  if (!recovery || recovery.code !== code || Date.now() > recovery.expiry) {
+    return res.status(400).json({ error: 'Неверный или просроченный код' });
+  }
+
+  // Reset password
+  const userData = users.get(username);
+  userData.passwordHash = hashPassword(newPassword.trim());
+  users.set(username, userData);
+  recoveryCodes.delete(username);
+  await saveUsers();
+
+  res.json({ success: true, message: 'Пароль изменён' });
+});
+
+// Обновить email для восстановления
+app.post('/api/update-recovery-email', async (req, res) => {
+  const { username, email } = req.body;
+  if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+  const userData = users.get(username);
+  userData.recoveryEmail = email || null;
+  users.set(username, userData);
+  await saveUsers();
+  res.json({ success: true });
+});
+
+// Поиск пользователей по nickname
+app.post('/api/search-users', async (req, res) => {
+  const { query } = req.body;
+  if (!query || query.trim().length < 2) {
+    return res.json({ users: [] });
+  }
+  const q = query.toLowerCase().trim();
+  const results = [];
+  for (const [username, userData] of users.entries()) {
+    if (username === q) continue; // skip exact match (it's the user themselves)
+    const nickname = (userData.nickname || '').toLowerCase();
+    const uname = username.toLowerCase();
+    if (nickname.includes(q) || uname.includes(q)) {
+      results.push({ username, nickname: userData.nickname || username, avatar: userData.avatar || null });
+    }
+    if (results.length >= 10) break;
+  }
+  res.json({ users: results });
 });
 
 // Отправить заявку в друзья
