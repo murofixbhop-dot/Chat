@@ -36,8 +36,20 @@ socket.on('connect', () => {
   if (splashText) splashText.textContent = 'Подключено ✓';
   if (currentUser) {
     socket.emit('identify', currentUser);
-    // Rejoin current room after reconnect
     if (currentRoom) socket.emit('join-room', currentRoom);
+    loadUserData();
+  }
+});
+
+// Reconnect and refresh when tab becomes visible (phone screen on)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && currentUser) {
+    if (!socket.connected) {
+      socket.connect();
+    } else {
+      socket.emit('identify', currentUser);
+      if (currentRoom) socket.emit('join-room', currentRoom);
+    }
     loadUserData();
   }
 });
@@ -1788,9 +1800,13 @@ function _createPeer() {
       ra.srcObject = remoteStream;
     }
 
-    // New video track arrived on an AUDIO call = screen share from other side
-    if (_connected && track.kind === 'video' && !_callIsVid && !rv) {
-      _showScreenReceived(remoteStream);
+    // New video track arrived = screen share from other side
+    if (_connected && track.kind === 'video') {
+      if (!rv) {
+        // Audio call — create video element to show screen share
+        _showScreenReceived(remoteStream);
+      }
+      // Video call — rv already updated above with new srcObject, no extra action needed
     }
 
     if (!_connected && track.kind === 'audio') {
@@ -1820,34 +1836,51 @@ function _createPeer() {
 
 // ── SCREEN RECEIVED (other person sharing screen during audio call) ──
 function _showScreenReceived(remoteStream) {
-  // Remove existing screen overlay if any
   document.querySelector('#screenReceiveOverlay')?.remove();
-  const win = document.getElementById('activeCallWin');
-  if (!win) return;
+  document.querySelector('#rv')?.remove();
 
-  // Add full-size video behind the audio controls
+  // Find or create call window
+  let win = document.getElementById('activeCallWin');
+  if (!win) {
+    console.warn('[SS] No activeCallWin for screen receive');
+    return;
+  }
+
   const scrVid = document.createElement('video');
   scrVid.id = 'rv';
   scrVid.autoplay = true;
   scrVid.playsinline = true;
-  scrVid.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:inherit;background:#000;z-index:1;';
+  scrVid.muted = false;
+  scrVid.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#111;z-index:1;border-radius:inherit;';
   scrVid.srcObject = remoteStream;
 
-  // Add expand button overlay
-  const overlay = document.createElement('div');
-  overlay.id = 'screenReceiveOverlay';
-  overlay.style.cssText = 'position:absolute;top:8px;left:8px;z-index:5;background:rgba(0,0,0,.55);border-radius:8px;padding:4px 8px;font-size:11px;color:#fff;display:flex;align-items:center;gap:5px;';
-  overlay.innerHTML = '<i class="ti ti-screen-share" style="font-size:13px"></i> Демонстрация экрана';
+  const badge = document.createElement('div');
+  badge.id = 'screenReceiveOverlay';
+  badge.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border-radius:20px;padding:4px 12px;font-size:11px;color:#fff;display:flex;align-items:center;gap:5px;white-space:nowrap;pointer-events:none;';
+  badge.innerHTML = '<i class="ti ti-screen-share" style="font-size:13px;color:var(--accent)"></i> Демонстрация экрана';
 
   win.insertBefore(scrVid, win.firstChild);
-  win.appendChild(overlay);
-  scrVid.play().catch(() => {});
+  win.appendChild(badge);
 
-  // Auto-remove overlay when screen track ends
-  remoteStream.getVideoTracks()[0]?.addEventListener('ended', () => {
-    scrVid.remove();
-    overlay.remove();
+  // Expand call window height for screen share
+  win.style.height = '260px';
+
+  scrVid.play().catch(e => {
+    console.warn('[SS] play failed:', e);
+    // Try on user interaction
+    document.addEventListener('click', () => scrVid.play().catch(() => {}), { once: true });
   });
+
+  const vt = remoteStream.getVideoTracks()[0];
+  if (vt) {
+    vt.onended = () => {
+      scrVid.remove();
+      badge.remove();
+      win.style.height = '';
+      console.log('[SS] Screen share ended');
+    };
+  }
+  console.log('[SS] Screen share video inserted, track:', vt?.readyState);
 }
 
 // ── CALL WINDOW ──────────────────────────────────────────
@@ -2036,9 +2069,13 @@ async function _applyScreenShare(capturedStream) {
 async function switchToScreenShare() {
   if (!rtcPeer || !_connected) return;
 
-  // Check if screen share is supported
+  // Check if screen share is supported (not on iOS/Android)
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    toast('Демонстрация экрана не поддерживается на этом устройстве', 'warning', 4000);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const msg = isIOS
+      ? 'iOS не поддерживает демонстрацию экрана в браузере'
+      : 'Ваш браузер не поддерживает демонстрацию экрана';
+    toast(msg, 'warning', 5000);
     return;
   }
   if (_screenSharing) {
