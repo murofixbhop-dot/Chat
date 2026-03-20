@@ -1533,6 +1533,12 @@ const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:openrelay.metered.ca:3478' },
+  { urls: 'turn:openrelay.metered.ca:3478', credential: 'openrelayproject', username: 'openrelayproject' },
+  { urls: 'stun:numb.viagenie.ca:3478' },
+  { urls: 'turn:numb.viagenie.ca:3478', credential: 'muazkh', username: 'webrtc@live.com' },
 ];
 
 // State
@@ -1864,9 +1870,76 @@ function _createPeer() {
     const st = rtcPeer?.iceConnectionState;
     console.log('[ICE]', st);
     if (st === 'failed') {
+      console.warn('[ICE] Connection failed, attempting TURN fallback...');
       rtcPeer.restartIce?.();
+      // If still failing after restart, try recreating peer with TURN-only config
+      setTimeout(() => {
+        if (rtcPeer?.iceConnectionState === 'failed' && _inCall && _callTarget) {
+          console.warn('[ICE] Restart failed, recreating peer connection with TURN priority...');
+          _recreatePeerWithTurnFallback();
+        }
+      }, 5000);
     }
   };
+
+// ── TURN FALLBACK — recreate peer with TURN-first config ──
+async function _recreatePeerWithTurnFallback() {
+  if (!_inCall || !_callTarget || !localStream) return;
+  const target = _callTarget;
+  const isVid = _callIsVid;
+  const wasConnected = _connected;
+
+  // Close old peer
+  rtcPeer?.close();
+  rtcPeer = null;
+
+  // TURN-first config
+  const TURN_FIRST = [
+    { urls: 'turn:openrelay.metered.ca:3478', credential: 'openrelayproject', username: 'openrelayproject' },
+    { urls: 'turn:numb.viagenie.ca:3478', credential: 'muazkh', username: 'webrtc@live.com' },
+    { urls: 'stun:openrelay.metered.ca:3478' },
+    { urls: 'stun:numb.viagenie.ca:3478' },
+    { urls: 'stun:stun.l.google.com:19302' },
+  ];
+
+  rtcPeer = new RTCPeerConnection({
+    iceServers: TURN_FIRST,
+    iceCandidatePoolSize: 10,
+    sdpSemantics: 'unified-plan',
+  });
+
+  localStream.getTracks().forEach(t => rtcPeer.addTrack(t, localStream));
+
+  rtcPeer.onicecandidate = ({ candidate }) => {
+    if (candidate) socket.emit('call-ice', { to: target, from: currentUser, candidate });
+  };
+
+  let remoteStream = new MediaStream();
+  rtcPeer.ontrack = ({ track, streams }) => {
+    const existing = remoteStream.getTracks().find(t => t.kind === track.kind);
+    if (existing) remoteStream.removeTrack(existing);
+    remoteStream.addTrack(track);
+    const rv = document.querySelector('#rv');
+    if (rv) { rv.srcObject = remoteStream; rv.play().catch(() => {}); }
+    const ra = document.querySelector('#remoteAudio');
+    if (ra && track.kind === 'audio') { ra.srcObject = remoteStream; }
+  };
+
+  rtcPeer.onconnectionstatechange = () => {
+    if (rtcPeer?.connectionState === 'failed' || rtcPeer?.connectionState === 'closed') _cleanup();
+  };
+
+  try {
+    const offer = await rtcPeer.createOffer();
+    await rtcPeer.setLocalDescription(offer);
+    socket.emit('call-offer', { to: target, from: currentUser, sdp: offer });
+    toast('Переподключение через TURN…', 'info', 3000);
+  } catch(e) {
+    console.error('[TURN] Recreate peer failed:', e);
+    toast('Не удалось переподключиться', 'error', 4000);
+    _cleanup();
+  }
+}
 }
 
 // ── SCREEN RECEIVED (other person sharing screen during audio call) ──
@@ -2183,13 +2256,19 @@ async function _applyScreenShare(capturedStream) {
 async function switchToScreenShare() {
   if (!rtcPeer || !_connected) return;
 
-  // Check if screen share is supported (not on iOS/Android)
+  // Check if screen share is supported
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const msg = isIOS
-      ? 'iOS не поддерживает демонстрацию экрана в браузере'
-      : 'Ваш браузер не поддерживает демонстрацию экрана';
-    toast(msg, 'warning', 5000);
+    const isMobile = /Android|iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isMobile) {
+      await dialog({
+        icon: 'ti-device-mobile', iconType: 'warning',
+        title: 'Демонстрация экрана',
+        msg: 'Мобильные браузеры не позволяют приложениям захватывать экран. Чтобы поделиться экраном, используйте Aura на компьютере или установите PWA-приложение.',
+        ok: 'Понятно', cancel: null
+      });
+    } else {
+      toast('Ваш браузер не поддерживает демонстрацию экрана', 'warning', 5000);
+    }
     return;
   }
   if (_screenSharing) {
@@ -2332,25 +2411,73 @@ function vcTogglePlay(id) {
     wrap?.classList.remove('vc-expanded');
     msgs?.classList.remove('circle-expanded');
     v.currentTime = 0;
+    // Restore original positioning
+    if (wrap) {
+      wrap.style.position = '';
+      wrap.style.left = '';
+      wrap.style.top = '';
+      wrap.style.zIndex = '';
+      wrap.style.transform = '';
+      // Restore msg-row original margin
+      const row = wrap.closest('.msg-row');
+      if (row) row.style.marginBottom = '';
+    }
+    document.querySelector('.vc-backdrop')?.remove();
   };
 
   if (v.paused) {
     // Save scroll position before expanding — prevent scroll jump
     const scrollY = msgs ? msgs.scrollTop : 0;
+
+    // Expand: switch to position:absolute so overflow:visible works
+    if (wrap && !wrap.classList.contains('vc-expanded')) {
+      const rect = wrap.getBoundingClientRect();
+      const msgsRect = msgs?.getBoundingClientRect() || { left: 0, top: 0 };
+      // Calculate position relative to messages container
+      wrap.style.position = 'absolute';
+      wrap.style.left = (rect.left - msgsRect.left + msgs.scrollLeft) + 'px';
+      wrap.style.top = (rect.top - msgsRect.top + msgs.scrollTop) + 'px';
+      wrap.style.zIndex = '200';
+      wrap.style.transform = 'scale(2.4)';
+      wrap.style.transformOrigin = 'center center';
+      wrap.classList.add('vc-expanded');
+      msgs?.classList.add('circle-expanded');
+
+      // Backdrop behind expanded circle to separate from chat
+      let backdrop = document.querySelector('.vc-backdrop');
+      if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.className = 'vc-backdrop';
+        backdrop.style.cssText = 'position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);cursor:pointer;';
+        backdrop.onclick = _vcStop;
+        document.body.appendChild(backdrop);
+      }
+    }
+
     v.play().catch(() => {});
     if (ico) ico.className = 'ti ti-player-pause vc-play-ico';
-    ov?.classList.add('playing');
-    wrap?.classList.add('vc-expanded');
-    msgs?.classList.add('circle-expanded');
+    if (ov) ov.classList.add('playing');
+    v.onended = _vcStop;
+
     // Restore scroll after class change to prevent jump
     if (msgs) requestAnimationFrame(() => { msgs.scrollTop = scrollY; });
-    v.onended = _vcStop;
   } else {
     v.pause();
     if (ico) ico.className = 'ti ti-player-play vc-play-ico';
-    ov?.classList.remove('playing');
+    if (ov) ov.classList.remove('playing');
     wrap?.classList.remove('vc-expanded');
     msgs?.classList.remove('circle-expanded');
+    // Restore original positioning
+    if (wrap) {
+      wrap.style.position = '';
+      wrap.style.left = '';
+      wrap.style.top = '';
+      wrap.style.zIndex = '';
+      wrap.style.transform = '';
+      const row = wrap.closest('.msg-row');
+      if (row) row.style.marginBottom = '';
+    }
+    document.querySelector('.vc-backdrop')?.remove();
   }
 }
 function vcShowDuration(id) {
