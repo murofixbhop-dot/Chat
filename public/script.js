@@ -1778,7 +1778,7 @@ function _createPeer() {
     const rv = document.querySelector('#rv');
     if (rv) {
       rv.srcObject = null;
-      rv.srcObject = remoteStream; // force refresh
+      rv.srcObject = remoteStream;
       rv.play().catch(() => {});
     }
 
@@ -1786,6 +1786,11 @@ function _createPeer() {
     const ra = document.querySelector('#remoteAudio');
     if (ra && track.kind === 'audio') {
       ra.srcObject = remoteStream;
+    }
+
+    // New video track arrived on an AUDIO call = screen share from other side
+    if (_connected && track.kind === 'video' && !_callIsVid && !rv) {
+      _showScreenReceived(remoteStream);
     }
 
     if (!_connected && track.kind === 'audio') {
@@ -1811,6 +1816,38 @@ function _createPeer() {
       rtcPeer.restartIce?.();
     }
   };
+}
+
+// ── SCREEN RECEIVED (other person sharing screen during audio call) ──
+function _showScreenReceived(remoteStream) {
+  // Remove existing screen overlay if any
+  document.querySelector('#screenReceiveOverlay')?.remove();
+  const win = document.getElementById('activeCallWin');
+  if (!win) return;
+
+  // Add full-size video behind the audio controls
+  const scrVid = document.createElement('video');
+  scrVid.id = 'rv';
+  scrVid.autoplay = true;
+  scrVid.playsinline = true;
+  scrVid.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:inherit;background:#000;z-index:1;';
+  scrVid.srcObject = remoteStream;
+
+  // Add expand button overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'screenReceiveOverlay';
+  overlay.style.cssText = 'position:absolute;top:8px;left:8px;z-index:5;background:rgba(0,0,0,.55);border-radius:8px;padding:4px 8px;font-size:11px;color:#fff;display:flex;align-items:center;gap:5px;';
+  overlay.innerHTML = '<i class="ti ti-screen-share" style="font-size:13px"></i> Демонстрация экрана';
+
+  win.insertBefore(scrVid, win.firstChild);
+  win.appendChild(overlay);
+  scrVid.play().catch(() => {});
+
+  // Auto-remove overlay when screen track ends
+  remoteStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+    scrVid.remove();
+    overlay.remove();
+  });
 }
 
 // ── CALL WINDOW ──────────────────────────────────────────
@@ -1983,17 +2020,25 @@ async function switchToScreenShare() {
           socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
         } catch(e) { console.warn('[SS] offer error:', e); }
       }
-      // Show screen preview locally
-      const localPreview = document.querySelector('#lv');
-      if (localPreview) {
-        localPreview.srcObject = screenStream;
-        localPreview.style.width = '180px';
-        localPreview.style.height = '120px';
-        localPreview.style.objectFit = 'contain';
-        localPreview.style.borderRadius = '8px';
-        localPreview.style.bottom = '72px';
-        localPreview.style.right = '14px';
-        localPreview.style.position = 'absolute';
+      // Show screen preview for CALLER
+      const win = document.getElementById('activeCallWin');
+      const lv = win?.querySelector('#lv');
+      if (lv) {
+        // Video call: show screen in PiP overlay
+        lv.srcObject = screenStream;
+        lv.style.width = '180px'; lv.style.height = '120px';
+        lv.style.objectFit = 'contain'; lv.style.borderRadius = '8px';
+      } else if (win) {
+        // Audio call: show screen as main video
+        let rv = win.querySelector('#rv');
+        if (!rv) {
+          rv = document.createElement('video');
+          rv.id = 'rv'; rv.autoplay = true; rv.playsinline = true; rv.muted = true;
+          rv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:inherit;background:#000;z-index:1;';
+          win.insertBefore(rv, win.firstChild);
+        }
+        rv.srcObject = screenStream;
+        rv.play().catch(() => {});
       }
       _screenSharing = true;
       document.querySelectorAll('.ss-toggle').forEach(b => {
@@ -2053,6 +2098,20 @@ function endCall() {
 }
 function _cleanup() {
   stopRing();
+  // Add call record to chat if call was connected
+  if (_callTarget && currentRoom && _callConnectedTime) {
+    const dur = Math.floor((Date.now() - _callConnectedTime) / 1000);
+    const durStr = dur > 0
+      ? (dur < 60 ? `${dur}с` : `${Math.floor(dur/60)}м ${dur%60}с`)
+      : '';
+    const icon = _callIsVid ? '📹' : '📞';
+    const time = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    const label = _isCaller ? `Исходящий звонок` : `Входящий звонок`;
+    const durLabel = durStr ? ` · ${durStr}` : ' · Не отвечено';
+    addCallRecord(icon, label, durLabel, time);
+  }
+  _callConnectedTime = null;
+
   _inCall = false; _connected = false; _screenSharing = false; _muted = false;
   rtcPeer?.close(); rtcPeer = null;
   localStream?.getTracks().forEach(t => t.stop()); localStream = null;
@@ -2063,6 +2122,20 @@ function _cleanup() {
   if (callNm)  callNm.textContent = '';
   if (callSt)  callSt.textContent = '';
   _callTarget = null;
+}
+
+let _callConnectedTime = null;
+
+function addCallRecord(icon, label, extra, time) {
+  const row = document.createElement('div');
+  row.className = 'call-record';
+  row.innerHTML = `
+    <span class="cr-icon">${icon}</span>
+    <span class="cr-label">${label}</span>
+    <span class="cr-extra">${extra}</span>
+    <span class="cr-time">${time}</span>`;
+  messagesDiv?.appendChild(row);
+  if (messagesDiv) messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
 
