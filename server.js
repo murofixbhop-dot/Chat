@@ -335,6 +335,14 @@ app.post('/api/get-user-data', (req, res) => {
   });
 });
 
+// Получить аватарку пользователя
+app.post('/api/get-avatar', (req, res) => {
+  const { username } = req.body;
+  if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+  const userData = users.get(username);
+  res.json({ avatar: userData.avatar || null });
+});
+
 // Создать группу (упрощённо)
 app.post('/api/create-group', async (req, res) => {
   const { creator, name, members } = req.body;
