@@ -2212,6 +2212,9 @@ function closeSettings() { $('settingsModal').classList.remove('open'); }
 // ══════════════════════════════════════════════════════════════════════════
 //  AI CHAT  ← Mistral AI с памятью разговора
 // ══════════════════════════════════════════════════════════════════════════
+// ── AI ЧАТ — клиент ────────────────────────────────────────────────────────
+let _aiAttachment = null; // { type:'image'|'file', data, mimeType, name, preview }
+
 function openAiChat() {
   $('aiChatModal').classList.add('open');
   setTimeout(() => $('aiInput')?.focus(), 80);
@@ -2221,18 +2224,64 @@ function closeAiChat() {
   $('aiChatModal').classList.remove('open');
 }
 
-function _aiAddMessage(role, text) {
+// Кнопка прикрепить файл/фото в AI чате
+function aiAttach() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*,.txt,.py,.js,.ts,.html,.css,.json,.csv,.md,.xml,.yaml,.yml,.log,.sh,.sql';
+  inp.onchange = async () => {
+    const file = inp.files[0];
+    if (!file) return;
+    const isImage = file.type.startsWith('image/');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target.result.split(',')[1];
+      _aiAttachment = {
+        type: isImage ? 'image' : 'file',
+        data: base64,
+        mimeType: file.type || 'text/plain',
+        name: file.name,
+        preview: isImage ? e.target.result : null,
+        textContent: isImage ? null : atob(base64)
+      };
+      _aiUpdateAttachBar();
+    };
+    reader.readAsDataURL(file);
+  };
+  inp.click();
+}
+
+function _aiUpdateAttachBar() {
+  let bar = document.getElementById('aiAttachBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'aiAttachBar';
+    bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--surface2);border-top:1px solid var(--border);font-size:12px;flex-shrink:0;';
+    const inputZone = document.querySelector('#aiChatModal .input-box')?.parentElement;
+    if (inputZone) inputZone.parentElement.insertBefore(bar, inputZone);
+  }
+  if (!_aiAttachment) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const preview = _aiAttachment.preview
+    ? `<img src="${_aiAttachment.preview}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">`
+    : `<i class="ti ti-file" style="font-size:18px;color:var(--accent)"></i>`;
+  bar.innerHTML = `
+    ${preview}
+    <span style="flex:1;color:var(--text2)">📎 ${esc(_aiAttachment.name)}</span>
+    <button onclick="_aiAttachment=null;_aiUpdateAttachBar()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px">
+      <i class="ti ti-x"></i>
+    </button>`;
+}
+
+function _aiAddMessage(role, content, attachment) {
   const msgs = $('aiMessages');
   if (!msgs) return;
-
-  // Убираем welcome если есть
   const welcome = msgs.querySelector('.ai-welcome');
   if (welcome) welcome.remove();
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = `display:flex;gap:8px;align-items:flex-end;${role === 'user' ? 'flex-direction:row-reverse' : ''}`;
+  wrap.style.cssText = `display:flex;gap:8px;align-items:flex-end;margin-bottom:4px;${role === 'user' ? 'flex-direction:row-reverse' : ''}`;
 
-  // Аватар
   const ava = document.createElement('div');
   ava.style.cssText = 'width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;';
   if (role === 'user') {
@@ -2246,21 +2295,30 @@ function _aiAddMessage(role, text) {
   }
 
   const bubble = document.createElement('div');
-  bubble.style.cssText = `
-    max-width:78%; padding:9px 13px; border-radius:${role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px'};
-    font-size:13.5px; line-height:1.5; word-break:break-word;
-    ${role === 'user'
-      ? 'background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;'
-      : 'background:var(--surface3);color:var(--text);'}
-  `;
+  const isUser = role === 'user';
+  bubble.style.cssText = `max-width:82%;padding:9px 13px;border-radius:${isUser?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:13.5px;line-height:1.55;word-break:break-word;${isUser?'background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;':'background:var(--surface3);color:var(--text);'}`;
 
-  // Простой markdown: **bold**, `code`, новые строки
-  const rendered = esc(text)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:4px;font-family:monospace">$1</code>')
-    .replace(/\n/g, '<br>');
-  bubble.innerHTML = rendered;
+  // Показываем прикреплённое изображение
+  let bubbleHtml = '';
+  if (attachment?.type === 'image' && attachment.preview) {
+    bubbleHtml += `<img src="${attachment.preview}" style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer" onclick="viewMedia('${attachment.preview}','image')">`;
+  } else if (attachment?.type === 'file') {
+    bubbleHtml += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(0,0,0,.12);border-radius:8px;margin-bottom:6px;font-size:12px;"><i class="ti ti-file"></i>${esc(attachment.name)}</div>`;
+  }
 
+  // Markdown рендер
+  if (content) {
+    const rendered = esc(content)
+      .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+        `<pre style="background:rgba(0,0,0,.25);padding:10px;border-radius:10px;overflow-x:auto;font-family:monospace;font-size:12px;margin:6px 0;white-space:pre-wrap">${code}</pre>`)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px">$1</code>')
+      .replace(/^• (.+)$/gm, '<li style="margin-left:12px">$1</li>')
+      .replace(/\n/g, '<br>');
+    bubbleHtml += rendered;
+  }
+
+  bubble.innerHTML = bubbleHtml;
   wrap.appendChild(ava);
   wrap.appendChild(bubble);
   msgs.appendChild(wrap);
@@ -2273,7 +2331,7 @@ function _aiAddTyping() {
   if (!msgs) return null;
   const wrap = document.createElement('div');
   wrap.id = 'aiTyping';
-  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-end';
+  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-end;margin-bottom:4px';
   wrap.innerHTML = `
     <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0">
       <i class="ti ti-robot" style="font-size:14px;color:#fff"></i>
@@ -2288,30 +2346,81 @@ function _aiAddTyping() {
   return wrap;
 }
 
+function _aiAddFileCard(file) {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+  const card = document.createElement('div');
+  card.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:14px;margin:4px 0 4px 36px;max-width:300px;';
+  const ext = file.name.split('.').pop().toUpperCase();
+  card.innerHTML = `
+    <i class="ti ti-file-code" style="font-size:22px;color:var(--accent);flex-shrink:0"></i>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(file.name)}</div>
+      <div style="font-size:11px;color:var(--text2)">${ext} · ${file.content?.length || 0} байт · хранится 5 ответов</div>
+    </div>
+    <a href="/api/ai-file/${encodeURIComponent(currentUser)}/${file.id}" download="${encodeURIComponent(file.name)}"
+       style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;flex-shrink:0">
+      <i class="ti ti-download"></i>
+    </a>`;
+  msgs.appendChild(card);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+const _aiToolLabels = {
+  web_search: '🔍 Поиск', get_weather: '🌤 Погода', calculate: '🔢 Калькулятор',
+  get_time: '🕐 Время', convert_currency: '💱 Валюта', translate: '🌐 Перевод',
+  create_file: '📄 Файл', analyze_code: '🔬 Код'
+};
+
 async function aiSend() {
   const inp = $('aiInput');
   if (!inp) return;
   const text = inp.value.trim();
-  if (!text) return;
+  const attach = _aiAttachment;
+
+  if (!text && !attach) return;
 
   inp.value = '';
   autoGrow(inp);
+  _aiAttachment = null;
+  _aiUpdateAttachBar();
 
   const sendBtn = $('aiSendBtn');
   if (sendBtn) sendBtn.disabled = true;
 
-  _aiAddMessage('user', text);
+  _aiAddMessage('user', text, attach);
   const typing = _aiAddTyping();
 
   try {
+    const body = { username: currentUser, message: text };
+    if (attach?.type === 'image') {
+      body.imageData = attach.data;
+      body.imageType = attach.mimeType;
+    } else if (attach?.type === 'file') {
+      body.fileContent = attach.textContent || '';
+      body.fileName    = attach.name;
+    }
+
     const r = await fetch('/api/ai-chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, message: text })
+      body: JSON.stringify(body)
     });
     const d = await r.json();
     if (typing) typing.remove();
+
     if (d.success) {
+      if (d.toolsUsed?.length) {
+        const badges = d.toolsUsed.map(t => _aiToolLabels[t] || t).join(' · ');
+        const badgeEl = document.createElement('div');
+        badgeEl.style.cssText = 'font-size:11px;color:var(--text3);padding:2px 0 4px 36px;';
+        badgeEl.textContent = badges;
+        $('aiMessages')?.appendChild(badgeEl);
+      }
       _aiAddMessage('assistant', d.reply);
+      // Показываем карточки созданных файлов
+      if (d.createdFiles?.length) {
+        d.createdFiles.forEach(f => _aiAddFileCard(f));
+      }
     } else {
       _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка. Попробуй ещё раз.'));
     }
@@ -2331,6 +2440,8 @@ async function aiClearHistory() {
       body: JSON.stringify({ username: currentUser })
     });
   } catch {}
+  _aiAttachment = null;
+  _aiUpdateAttachBar();
   const msgs = $('aiMessages');
   if (msgs) msgs.innerHTML = `
     <div class="ai-welcome">
@@ -2773,25 +2884,30 @@ function _showOutgoingUI(target, isVid) {
 }
 
 // ── INCOMING ────────────────────────────────────────────
-socket.on('call-invite', ({ from, isVid }) => {
+socket.on('call-invite', ({ from, isVid, resumed }) => {
+  // Уведомление если вкладка скрыта
   if (document.hidden) {
     showPushNotification(
-      isVid ? `Видеозвонок от ${from}` : `Звонок от ${from}`,
+      isVid ? `Видеозвонок от ${userNicknames[from] || from}` : `Звонок от ${userNicknames[from] || from}`,
       'Нажмите чтобы ответить', 'call-' + from
     );
   }
 
-  // If this is a group call participant inviting us
+  // Групповой звонок
   if (groupPeers.has(from) && _groupCall) {
-    // This is a group call - answer and add to group
     _handleGroupAnswer(from, isVid);
     return;
   }
 
+  // Если resumed — это восстановление звонка после навигации/перезагрузки.
+  // Если уже в звонке с кем-то другим — тогда занят.
+  // Если в звонке с тем же — игнорируем (дубль).
   if (_inCall) {
+    if (_callTarget === from) return; // уже принимаем/отвечаем этот звонок
     socket.emit('call-busy', { to: from, from: currentUser });
     return;
   }
+
   _callTarget = from;
   _callIsVid  = isVid;
   _isCaller   = false;
@@ -2856,7 +2972,14 @@ function declineCall() {
   _cleanup();
 }
 
-socket.on('call-decline', () => { toast(_callTarget + ' отклонил звонок', 'info', 2500); _cleanup(); });
+socket.on('call-decline', () => { toast((_callTarget ? (userNicknames[_callTarget] || _callTarget) : '?') + ' отклонил звонок', 'info', 2500); _cleanup(); });
+
+// Адресат вернулся онлайн пока мы звоним — обновляем статус
+socket.on('call-callee-online', ({ to }) => {
+  if (_inCall && _callTarget === to && callSt) {
+    callSt.textContent = 'Соединяемся…';
+  }
+});
 
 // ── SIGNALING ────────────────────────────────────────────
 // 1. Callee ready → caller creates RTCPeer and offer
