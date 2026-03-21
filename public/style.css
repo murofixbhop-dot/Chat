@@ -746,7 +746,7 @@ option { background: var(--surface2); color: var(--text); }
 .msg-circle-wrap {
   position: relative; display: inline-block;
   margin-top: 2px; cursor: pointer;
-  border-radius: 50%; overflow: hidden;
+  border-radius: 18px; overflow: hidden;
   width: 130px; height: 130px;
   transition: width .35s cubic-bezier(.16,1,.3,1),
               height .35s cubic-bezier(.16,1,.3,1),
@@ -759,7 +759,7 @@ option { background: var(--surface2); color: var(--text); }
 .msg-circle-wrap:hover { box-shadow: 0 4px 20px rgba(0,0,0,.3); }
 .msg-circle {
   width: 100%; height: 100%;
-  border-radius: 50%;
+  border-radius: 18px;
   object-fit: cover; display: block;
   transition: width .35s cubic-bezier(.16,1,.3,1),
               height .35s cubic-bezier(.16,1,.3,1);
@@ -768,7 +768,7 @@ option { background: var(--surface2); color: var(--text); }
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,.28);
-  border-radius: 50%;
+  border-radius: 18px;
   transition: opacity .18s;
   pointer-events: none;
 }
@@ -786,7 +786,7 @@ option { background: var(--surface2); color: var(--text); }
 .msgs.vc-msgs-expanded { overflow: visible; }
 .msg-bubble:has(.msg-circle-wrap) {
   padding: 0 !important; background: transparent !important;
-  box-shadow: none !important; border-radius: 50% !important;
+  box-shadow: none !important; border-radius: 18px !important;
   overflow: visible !important;
 }
 /* Fullscreen overlay */
@@ -806,9 +806,11 @@ option { background: var(--surface2); color: var(--text); }
 .vc-fullscreen.open .vc-fs-bg { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .vc-fs-video {
   position: relative; z-index: 1;
-  width: min(88vw, 88vh); height: min(88vw, 88vh);
-  max-width: 560px; max-height: 560px;
-  border-radius: 50%;
+  width: min(88vw, 70vh);
+  height: auto;
+  max-width: 560px; max-height: 70vh;
+  aspect-ratio: 1;
+  border-radius: 22px;
   object-fit: cover; display: block;
   box-shadow: 0 20px 80px rgba(0,0,0,.7);
   opacity: 0; transform: scale(.85);
