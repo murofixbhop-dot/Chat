@@ -396,6 +396,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (m) m.addEventListener('click', e => { if (e.target === m) closeForgotPass(); });
   const ev = $('emailVerifyModal');
   if (ev) ev.addEventListener('click', e => { if (e.target === ev) closeEmailVerifyModal(); });
+  const ai = $('aiChatModal');
+  if (ai) ai.addEventListener('click', e => { if (e.target === ai) closeAiChat(); });
 });
 
 async function sendForgotCode() {
@@ -948,6 +950,7 @@ function gotoRoom(room) {
 
   socket.emit('join-room', room);
   renderFriends();
+  renderGroups();
 }
 
 // ══════════════════════════════════════════════
@@ -1609,7 +1612,7 @@ function showCtx(e) {
 
 function closeCtx() { ctxMenu.classList.remove('open'); }
 document.addEventListener('click', closeCtx);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx(); $('emojiPicker').classList.remove('open'); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx(); $('emojiPicker').classList.remove('open'); closeAiChat(); } });
 
 function copyMsgText(id) {
   const row = document.querySelector(`[data-id="${id}"]`);
@@ -1795,21 +1798,41 @@ socket.on('group-created', () => {
 
 // Обновление группы (название/аватарка)
 socket.on('group-updated', ({ groupId, name, avatar }) => {
-  // Обновляем в локальном массиве
   const g = groups.find(g => g.id === groupId);
   if (g) {
     if (name   !== undefined) g.name   = name;
     if (avatar !== undefined) g.avatar = avatar;
   }
-  // Если открыта эта группа — обновляем заголовок
   if (currentRoom === `group:${groupId}`) {
     if (roomName && name)     roomName.textContent = name;
     if (roomAvatar && avatar) setAvatar(roomAvatar, `group:${groupId}`, avatar);
     else if (roomAvatar && name) roomAvatar.innerHTML = name.charAt(0).toUpperCase();
   }
-  // Сбрасываем кэш рендера сайдбара
   if (groupsList) groupsList._lastKey = '';
   renderGroups();
+});
+
+socket.on('group-deleted', ({ groupId }) => {
+  // Удаляем из локального массива
+  groups = groups.filter(g => g.id !== groupId);
+  // Если была открыта — переходим к первому другу или пустому экрану
+  if (currentRoom === `group:${groupId}`) {
+    currentRoom = null;
+    try { localStorage.removeItem('aura_last_room'); } catch(e) {}
+    if (friends.length > 0) {
+      gotoRoom(getRoomId(friends[0]));
+    } else {
+      if (roomName)    roomName.textContent = 'Выберите чат';
+      if (roomSub)     roomSub.textContent  = '';
+      if (hdrRight)    hdrRight.innerHTML   = '';
+      if (messagesDiv) messagesDiv.innerHTML = '';
+      if (msgsEmpty)   { msgsEmpty.style.display = 'flex'; }
+      if (onlinePill)  onlinePill.style.display = 'none';
+    }
+  }
+  if (groupsList) groupsList._lastKey = '';
+  renderGroups();
+  toast('Группа удалена', 'info');
 });
 
 socket.on('avatar-updated', ({ username, avatar }) => {
@@ -1936,9 +1959,12 @@ function openGroupEdit(groupId) {
       <input id="grpEditName" class="field" type="text" value="${esc(g.name)}" placeholder="Название группы…" maxlength="40"/>
     </div>
     <div id="grpEditErr" class="login-err"></div>
-    <div class="dlg-btns">
-      <button class="btn-secondary" id="grpEditCancel">Отмена</button>
-      <button class="btn-primary" id="grpEditSave"><i class="ti ti-check"></i> Сохранить</button>
+    <div class="dlg-btns" style="flex-direction:column;gap:8px">
+      <div style="display:flex;gap:8px;width:100%">
+        <button class="btn-secondary" id="grpEditCancel" style="flex:1">Отмена</button>
+        <button class="btn-primary" id="grpEditSave" style="flex:2"><i class="ti ti-check"></i> Сохранить</button>
+      </div>
+      <button class="btn-danger w-full" id="grpEditDelete"><i class="ti ti-trash"></i> Удалить группу</button>
     </div>`;
 
   // Показываем текущую аватарку
@@ -1973,6 +1999,27 @@ function openGroupEdit(groupId) {
 
   box.querySelector('#grpEditCancel').onclick = () => ov.classList.remove('open');
   ov.onclick = e => { if (e.target === ov) ov.classList.remove('open'); };
+
+  box.querySelector('#grpEditDelete').onclick = async () => {
+    const ok = await dialog({
+      icon: 'ti-trash', iconType: 'error',
+      title: 'Удалить группу?',
+      msg: `Группа «${g.name}» и вся история чата будет удалена для всех участников.`,
+      ok: 'Удалить', cancel: 'Отмена', danger: true
+    });
+    if (!ok) return;
+    try {
+      const r = await fetch('/api/delete-group', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser, groupId })
+      });
+      const d = await r.json();
+      if (d.success) {
+        ov.classList.remove('open');
+        toast(`Группа «${g.name}» удалена`, 'success');
+      } else toast(d.error || 'Ошибка удаления', 'error');
+    } catch { toast('Нет соединения', 'error'); }
+  };
 
   box.querySelector('#grpEditSave').onclick = async () => {
     const newName = box.querySelector('#grpEditName').value.trim();
@@ -2161,6 +2208,137 @@ async function confirmEmailCode() {
 }
 
 function closeSettings() { $('settingsModal').classList.remove('open'); }
+
+// ══════════════════════════════════════════════════════════════════════════
+//  AI CHAT  ← Mistral AI с памятью разговора
+// ══════════════════════════════════════════════════════════════════════════
+function openAiChat() {
+  $('aiChatModal').classList.add('open');
+  setTimeout(() => $('aiInput')?.focus(), 80);
+}
+
+function closeAiChat() {
+  $('aiChatModal').classList.remove('open');
+}
+
+function _aiAddMessage(role, text) {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+
+  // Убираем welcome если есть
+  const welcome = msgs.querySelector('.ai-welcome');
+  if (welcome) welcome.remove();
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = `display:flex;gap:8px;align-items:flex-end;${role === 'user' ? 'flex-direction:row-reverse' : ''}`;
+
+  // Аватар
+  const ava = document.createElement('div');
+  ava.style.cssText = 'width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;';
+  if (role === 'user') {
+    ava.style.background = 'linear-gradient(135deg,var(--accent),var(--accent2))';
+    ava.style.color = '#fff';
+    ava.textContent = (userData.nickname || currentUser || '?').charAt(0).toUpperCase();
+  } else {
+    ava.style.background = 'linear-gradient(135deg,#6366f1,#8b5cf6)';
+    ava.style.color = '#fff';
+    ava.innerHTML = '<i class="ti ti-robot" style="font-size:14px"></i>';
+  }
+
+  const bubble = document.createElement('div');
+  bubble.style.cssText = `
+    max-width:78%; padding:9px 13px; border-radius:${role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px'};
+    font-size:13.5px; line-height:1.5; word-break:break-word;
+    ${role === 'user'
+      ? 'background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;'
+      : 'background:var(--surface3);color:var(--text);'}
+  `;
+
+  // Простой markdown: **bold**, `code`, новые строки
+  const rendered = esc(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:4px;font-family:monospace">$1</code>')
+    .replace(/\n/g, '<br>');
+  bubble.innerHTML = rendered;
+
+  wrap.appendChild(ava);
+  wrap.appendChild(bubble);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+  return wrap;
+}
+
+function _aiAddTyping() {
+  const msgs = $('aiMessages');
+  if (!msgs) return null;
+  const wrap = document.createElement('div');
+  wrap.id = 'aiTyping';
+  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-end';
+  wrap.innerHTML = `
+    <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <i class="ti ti-robot" style="font-size:14px;color:#fff"></i>
+    </div>
+    <div style="background:var(--surface3);border-radius:16px 16px 16px 4px;padding:10px 14px;display:flex;gap:5px;align-items:center">
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--text2);animation:dotBounce .8s ease-in-out infinite"></span>
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--text2);animation:dotBounce .8s ease-in-out .16s infinite"></span>
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--text2);animation:dotBounce .8s ease-in-out .32s infinite"></span>
+    </div>`;
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+  return wrap;
+}
+
+async function aiSend() {
+  const inp = $('aiInput');
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text) return;
+
+  inp.value = '';
+  autoGrow(inp);
+
+  const sendBtn = $('aiSendBtn');
+  if (sendBtn) sendBtn.disabled = true;
+
+  _aiAddMessage('user', text);
+  const typing = _aiAddTyping();
+
+  try {
+    const r = await fetch('/api/ai-chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, message: text })
+    });
+    const d = await r.json();
+    if (typing) typing.remove();
+    if (d.success) {
+      _aiAddMessage('assistant', d.reply);
+    } else {
+      _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка. Попробуй ещё раз.'));
+    }
+  } catch {
+    if (typing) typing.remove();
+    _aiAddMessage('assistant', '⚠️ Нет соединения с сервером.');
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    inp.focus();
+  }
+}
+
+async function aiClearHistory() {
+  try {
+    await fetch('/api/ai-clear', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser })
+    });
+  } catch {}
+  const msgs = $('aiMessages');
+  if (msgs) msgs.innerHTML = `
+    <div class="ai-welcome">
+      <i class="ti ti-robot" style="font-size:36px;color:var(--accent);display:block;text-align:center;margin-bottom:8px"></i>
+      <p style="text-align:center;color:var(--text2);font-size:14px">История очищена. Чем могу помочь?</p>
+    </div>`;
+  toast('История очищена', 'info');
+}
 
 async function resendEmailVerify() {
   const email = $('stRecoveryEmail')?.value?.trim() || userData.recoveryEmail;
