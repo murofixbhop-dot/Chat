@@ -269,7 +269,13 @@ async function doLogin() {
     if (d.success) {
       localStorage.setItem('aura_user', d.user.username);
       localStorage.setItem('aura_pass', password);
-      if (d.isNew) toast(`Добро пожаловать, ${d.user.username}!`, 'success');
+      if (d.isNew) {
+        toast(`Добро пожаловать, ${d.user.username}!`, 'success');
+        if (d.needsEmailVerify) {
+          const emailVal = $('loginEmailInput')?.value?.trim();
+          setTimeout(() => openEmailVerifyModal(emailVal || '', 'register'), 500);
+        }
+      }
       // Reset register mode
       _isRegisterMode = false;
       const emailWrap = $('loginEmailWrap');
@@ -361,6 +367,8 @@ function closeForgotPass() {
 document.addEventListener('DOMContentLoaded', () => {
   const m = $('forgotModal');
   if (m) m.addEventListener('click', e => { if (e.target === m) closeForgotPass(); });
+  const ev = $('emailVerifyModal');
+  if (ev) ev.addEventListener('click', e => { if (e.target === ev) closeEmailVerifyModal(); });
 });
 
 async function sendForgotCode() {
@@ -484,6 +492,7 @@ function startSession(user) {
   app.classList.remove('hidden');
   app.style.display = 'flex';
   updateProfileUI();
+  switchTab('friends'); // явно инициализируем таб без мигания
   socket.emit('identify', currentUser);
   loadUserData();
   enableInput();
@@ -572,6 +581,9 @@ async function loadUserData() {
     // Сохраняем email восстановления если вернулся с сервера
     if (d.recoveryEmail !== undefined) {
       userData.recoveryEmail = d.recoveryEmail;
+    }
+    if (d.emailVerified !== undefined) {
+      userData.emailVerified = d.emailVerified;
     }
     renderFriends();
     renderGroups();
@@ -1729,30 +1741,148 @@ function openSettings() {
   $('volRange').value = vol;
   $('volLabel').textContent = vol + '%';
   loadAudioDevices();
-  // Recovery email
+  // Recovery email + verified badge
   $('stRecoveryEmail').value = userData.recoveryEmail || '';
+  const badge = $('emailVerifiedBadge');
+  if (badge) badge.style.display = userData.emailVerified && userData.recoveryEmail ? 'flex' : 'none';
 }
 
 async function saveRecoveryEmail() {
   const email = $('stRecoveryEmail').value.trim();
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!email) {
+    // Удаление email
+    try {
+      await fetch('/api/update-recovery-email', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser, email: '' })
+      });
+      userData.recoveryEmail = null;
+      userData.emailVerified = false;
+      toast('Email удалён', 'info');
+    } catch { toast('Ошибка', 'error'); }
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     toast('Введите корректный email', 'warning');
     return;
   }
+
+  const btn = document.querySelector('#st_account .btn-secondary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>'; }
+
   try {
     const r = await fetch('/api/update-recovery-email', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: currentUser, email })
     });
     const d = await r.json();
-    if (d.success) {
-      userData.recoveryEmail = email || null;
+    if (d.success && d.needsVerify) {
+      toast(d.message || 'Код отправлен', 'info');
+      openEmailVerifyModal(email, 'email');
+    } else if (d.success) {
+      userData.recoveryEmail = email;
       toast('Email сохранён', 'success');
+    } else {
+      toast(d.error || 'Ошибка', 'error');
     }
-  } catch { toast('Ошибка сохранения', 'error'); }
+  } catch { toast('Нет соединения', 'error'); }
+  finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i>'; }
+  }
+}
+
+// ── Email verify modal (общий для настроек и регистрации) ──────────────────
+let _verifyContext = 'email'; // 'email' | 'register'
+
+function openEmailVerifyModal(email, context = 'email') {
+  _verifyContext = context;
+  const m = $('emailVerifyModal');
+  if (!m) return;
+  const hint = $('evHint');
+  if (hint) hint.textContent = `Код отправлен на ${email}`;
+  document.querySelectorAll('.ev-digit').forEach(d => { d.value = ''; });
+  $('evErr').textContent = '';
+  m.classList.add('open');
+  setTimeout(() => document.querySelector('.ev-digit')?.focus(), 80);
+}
+
+function closeEmailVerifyModal() {
+  $('emailVerifyModal')?.classList.remove('open');
+}
+
+function evDigit(input, idx) {
+  const digits = document.querySelectorAll('.ev-digit');
+  input.value = input.value.replace(/\D/g,'').slice(-1);
+  if (input.value && idx < 5) digits[idx+1]?.focus();
+  const code = [...digits].map(d => d.value).join('');
+  if (code.length === 6) confirmEmailCode();
+}
+
+function evBack(e, input, idx) {
+  if (e.key === 'Backspace' && !input.value && idx > 0) {
+    const digits = document.querySelectorAll('.ev-digit');
+    digits[idx-1].value = '';
+    digits[idx-1].focus();
+  }
+}
+
+async function confirmEmailCode() {
+  const digits = document.querySelectorAll('.ev-digit');
+  const code = [...digits].map(d => d.value).join('');
+  const err = $('evErr');
+  if (code.length < 6) { if (err) err.textContent = 'Введите все 6 цифр'; return; }
+  if (err) err.textContent = '';
+
+  const btn = $('evConfirmBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>'; }
+
+  try {
+    const r = await fetch('/api/verify-email-code', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, code })
+    });
+    const d = await r.json();
+    if (d.success) {
+      userData.recoveryEmail = d.email;
+      userData.emailVerified = true;
+      closeEmailVerifyModal();
+      // Update settings field with verified badge
+      const f = $('stRecoveryEmail');
+      if (f) f.value = d.email;
+      const badge = $('emailVerifiedBadge');
+      if (badge) badge.style.display = 'flex';
+      toast('Email подтверждён ✓', 'success');
+    } else {
+      if (err) err.textContent = d.error || 'Неверный код';
+      digits.forEach(d => d.value = '');
+      document.querySelector('.ev-digit')?.focus();
+    }
+  } catch { if (err) err.textContent = 'Нет соединения'; }
+  finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Подтвердить'; }
+  }
 }
 
 function closeSettings() { $('settingsModal').classList.remove('open'); }
+
+async function resendEmailVerify() {
+  const email = $('stRecoveryEmail')?.value?.trim() || userData.recoveryEmail;
+  if (!email) { toast('Введите email сначала', 'warning'); return; }
+  const btn = document.querySelector('#emailVerifyModal .btn-ghost');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>'; }
+  try {
+    const r = await fetch('/api/update-recovery-email', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, email })
+    });
+    const d = await r.json();
+    if (d.success) toast('Код отправлен повторно', 'info');
+    else toast(d.error || 'Ошибка', 'error');
+  } catch { toast('Нет соединения', 'error'); }
+  finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh"></i> Отправить снова'; }
+  }
+}
 
 function openStab(name) {
   document.querySelectorAll('.mtab').forEach((b,i) => {
