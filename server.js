@@ -72,7 +72,8 @@ function calculateSHA1(buffer) {
 // ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ==========
 const USERS_FILE = 'users.json';
 let users = new Map(); // username -> { nickname, avatar, theme, friends, friendRequests, groups, recoveryEmail }
-let recoveryCodes = new Map(); // username -> { code, expiry, email }
+let recoveryCodes     = new Map(); // username -> { code, expiry, email }
+let emailVerifyCodes  = new Map(); // username -> { code, expiry, pendingEmail }
 
 // ── EMAIL через Resend (resend.com) ──────────────────────────────────────
 // Бесплатно: 3000 писем/мес, регистрация за 1 мин на https://resend.com
@@ -110,10 +111,16 @@ async function sendRecoveryEmail(to, code) {
 </body></html>`;
 
   // ── Способ 1: Brevo (ex-Sendinblue) — бесплатно 300 писем/день, домен не нужен
+  const BREVO_FROM = process.env.BREVO_FROM; // твой email из Brevo аккаунта
+
   if (BREVO_KEY) {
+    if (!BREVO_FROM) {
+      console.error('📧 BREVO_FROM не задан в .env! Укажи email с которым регался в Brevo.');
+      throw new Error('BREVO_FROM не задан');
+    }
     try {
       const resp = await axios.post('https://api.brevo.com/v3/smtp/email', {
-        sender:  { name: 'Aura Messenger', email: 'noreply@aura-messenger.com' },
+        sender:  { name: 'Aura Messenger', email: BREVO_FROM },
         to:      [{ email: to }],
         subject: 'Код восстановления — Aura Messenger',
         htmlContent: html,
@@ -154,6 +161,60 @@ async function sendRecoveryEmail(to, code) {
   console.log(`📧 Email не настроен. Код для ${to}: [ ${code} ]`);
   console.log(`📧 Добавь в .env: BREVO_API_KEY=xkeysib-xxx`);
   console.log(`📧 ════════════════════════════════\n`);
+}
+
+async function sendVerifyEmail(to, code) {
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/></head>
+<body style="margin:0;padding:0;background:#f4f4f8;font-family:Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f8;padding:40px 0">
+<tr><td align="center">
+<table width="420" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.10)">
+<tr><td style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:36px 40px 28px;text-align:center">
+  <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">Aura Messenger</h1>
+  <p style="margin:6px 0 0;color:rgba(255,255,255,.75);font-size:14px">Подтверждение email</p>
+</td></tr>
+<tr><td style="padding:36px 40px">
+  <p style="margin:0 0 8px;font-size:16px;font-weight:600;color:#1a1a2e">Подтверди свой email</p>
+  <p style="margin:0 0 28px;font-size:14px;color:#6b7280;line-height:1.6">Введи этот код в приложении. Действует <strong style="color:#374151">15 минут</strong>.</p>
+  <div style="background:#f8f7ff;border:2px solid #e0e0ff;border-radius:14px;padding:28px 20px;text-align:center;margin-bottom:28px">
+    <div style="font-size:42px;font-weight:800;letter-spacing:14px;color:#6366f1;font-family:monospace;padding-left:14px">${code}</div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#9ca3af">Если ты не добавлял(а) этот email — просто проигнорируй письмо.</p>
+</td></tr>
+<tr><td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #f0f0f0;text-align:center">
+  <p style="margin:0;font-size:12px;color:#9ca3af">© 2026 Aura Messenger</p>
+</td></tr>
+</table></td></tr></table>
+</body></html>`;
+
+  const BREVO_KEY  = process.env.BREVO_API_KEY;
+  const BREVO_FROM = process.env.BREVO_FROM;
+  const GMAIL_USER = process.env.GMAIL_USER;
+  const GMAIL_PASS = process.env.GMAIL_PASS;
+
+  if (BREVO_KEY && BREVO_FROM) {
+    const resp = await axios.post('https://api.brevo.com/v3/smtp/email', {
+      sender:      { name: 'Aura Messenger', email: BREVO_FROM },
+      to:          [{ email: to }],
+      subject:     'Подтверждение email — Aura Messenger',
+      htmlContent: html,
+      textContent: `Код подтверждения email Aura: ${code}\nДействует 15 минут.`,
+    }, {
+      headers: { 'api-key': BREVO_KEY, 'Content-Type': 'application/json' },
+      timeout: 10000,
+    });
+    console.log('📧 Verify email отправлен через Brevo:', resp.data?.messageId);
+    return;
+  }
+  if (GMAIL_USER && GMAIL_PASS) {
+    const nodemailer = require('nodemailer');
+    const t = nodemailer.createTransport({ service: 'gmail', auth: { user: GMAIL_USER, pass: GMAIL_PASS } });
+    await t.sendMail({ from: `"Aura Messenger" <${GMAIL_USER}>`, to, subject: 'Подтверждение email — Aura Messenger', html, text: `Код: ${code}` });
+    console.log('📧 Verify email отправлен через Gmail:', to);
+    return;
+  }
+  console.log(`📧 [Dev] Код подтверждения для ${to}: [ ${code} ]`);
 }
 
 async function loadUsers() {
@@ -311,30 +372,42 @@ app.post('/api/login', async (req, res) => {
       }
     });
   } else {
-    // New registration
+    // Новая регистрация
     const newUser = {
-      nickname: cleanName,
-      passwordHash: pwHash,
-      avatar: null,
-      theme: 'dark',
-      friends: [],
-      friendRequests: [],
-      groups: [],
-      recoveryEmail: email || null
+      nickname:      cleanName,
+      passwordHash:  pwHash,
+      avatar:        null,
+      theme:         'dark',
+      friends:       [],
+      friendRequests:[],
+      groups:        [],
+      recoveryEmail: null,        // сохраняем только после подтверждения
+      emailVerified: false,
     };
     users.set(cleanName, newUser);
     await saveUsers();
+
+    // Если указан email — отправляем код подтверждения
+    if (email) {
+      const code   = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiry = Date.now() + 15 * 60 * 1000;
+      emailVerifyCodes.set(cleanName, { code, expiry, pendingEmail: email });
+      sendVerifyEmail(email, code).catch(e => console.warn('Ошибка отправки verify email при регистрации:', e.message));
+    }
+
     return res.json({
       success: true,
       isNew: true,
+      needsEmailVerify: !!email,
       user: {
-        username: cleanName,
-        nickname: cleanName,
-        avatar: null,
-        theme: 'dark',
-        friends: [],
-        friendRequests: [],
-        groups: []
+        username:      cleanName,
+        nickname:      cleanName,
+        avatar:        null,
+        theme:         'dark',
+        friends:       [],
+        friendRequests:[],
+        groups:        [],
+        recoveryEmail: null,
       }
     });
   }
@@ -423,14 +496,59 @@ app.post('/api/reset-password', async (req, res) => {
 });
 
 // Обновить email для восстановления
+// Шаг 1: Отправить код подтверждения на новый email
 app.post('/api/update-recovery-email', async (req, res) => {
   const { username, email } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (!email) {
+    // Удаление email — без подтверждения
+    const userData = users.get(username);
+    userData.recoveryEmail = null;
+    userData.emailVerified = false;
+    users.set(username, userData);
+    await saveUsers();
+    return res.json({ success: true, cleared: true });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Некорректный email' });
+  }
+
+  const code   = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiry = Date.now() + 15 * 60 * 1000;
+  emailVerifyCodes.set(username, { code, expiry, pendingEmail: email });
+
+  try {
+    await sendVerifyEmail(email, code);
+    res.json({ success: true, needsVerify: true, message: 'Код отправлен на ' + email });
+  } catch (err) {
+    const isDevMode = !process.env.GMAIL_USER && !process.env.BREVO_API_KEY;
+    if (isDevMode) {
+      res.json({ success: true, needsVerify: true, message: 'Dev: код в консоли сервера' });
+    } else {
+      res.status(500).json({ error: 'Не удалось отправить код: ' + err.message });
+    }
+  }
+});
+
+// Шаг 2: Подтвердить код
+app.post('/api/verify-email-code', async (req, res) => {
+  const { username, code } = req.body;
+  if (!username || !code) return res.status(400).json({ error: 'Нет данных' });
+  if (!users.has(username))  return res.status(404).json({ error: 'Пользователь не найден' });
+
+  const pending = emailVerifyCodes.get(username);
+  if (!pending || pending.code !== code || Date.now() > pending.expiry) {
+    return res.status(400).json({ error: 'Неверный или просроченный код' });
+  }
+
   const userData = users.get(username);
-  userData.recoveryEmail = email || null;
+  userData.recoveryEmail = pending.pendingEmail;
+  userData.emailVerified = true;
   users.set(username, userData);
+  emailVerifyCodes.delete(username);
   await saveUsers();
-  res.json({ success: true });
+
+  res.json({ success: true, email: pending.pendingEmail });
 });
 
 // Поиск пользователей по nickname
@@ -557,10 +675,11 @@ app.post('/api/get-user-data', (req, res) => {
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   const userData = users.get(username);
   res.json({
-    friends:       userData.friends       || [],
-    friendRequests:userData.friendRequests|| [],
-    groups:        userData.groups        || [],
-    recoveryEmail: userData.recoveryEmail || null,
+    friends:       userData.friends        || [],
+    friendRequests:userData.friendRequests || [],
+    groups:        userData.groups         || [],
+    recoveryEmail: userData.recoveryEmail  || null,
+    emailVerified: userData.emailVerified  || false,
   });
 });
 
@@ -709,8 +828,7 @@ io.on('connection', (socket) => {
     onlineUsers.set(socket.id, { username, lastSeen: Date.now() });
     userSockets.set(username, socket.id);
     broadcastOnlineCount();
-    socket.join('general');
-    socket.emit('history', messageHistory.filter(m => m.room === 'general').slice(-100));
+    // НЕ присоединяем к general — чат выбирается клиентом
     // Push pending friend requests to user on connect
     const userData = users.get(username);
     if (userData?.friendRequests?.length) {
