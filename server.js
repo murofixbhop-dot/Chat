@@ -261,6 +261,29 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 app.use(express.static('public'));
 
+// ── Прокси для скачивания файлов с B2 (токен обновляется автоматически) ──
+// Клиент запрашивает /api/dl?f=photos/1234-name.jpg
+// Сервер генерирует свежий токен и редиректит
+app.get('/api/dl', async (req, res) => {
+  const rawF = req.query.f;
+  if (!rawF) return res.status(400).send('Missing file param');
+
+  // Принимаем как чистый путь "photos/file.jpg",
+  // так и полный B2 URL из старых сообщений
+  let fileName = rawF;
+  const urlMatch = rawF.match(/\/file\/[^/]+\/(.+?)(\?|$)/);
+  if (urlMatch) fileName = urlMatch[1];
+  fileName = decodeURIComponent(fileName);
+
+  try {
+    const freshUrl = await getDownloadUrl(fileName);
+    res.redirect(302, freshUrl);
+  } catch (err) {
+    console.error('[dl proxy] Ошибка:', err.message);
+    res.status(500).send('Не удалось получить файл: ' + err.message);
+  }
+});
+
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
