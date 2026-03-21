@@ -912,11 +912,22 @@ socket.on('history', msgs => {
 socket.on('message', addMessage);
 socket.on('system', addSystem);
 
+// Конвертирует B2 URL в прокси /api/dl?f=... чтобы токены всегда были свежими
+function fileUrl(url) {
+  if (!url) return url;
+  // Уже прокси — не трогаем
+  if (url.startsWith('/api/dl')) return url;
+  // Извлекаем путь файла из B2 URL: /file/BUCKET/photos/...
+  const m = url.match(/\/file\/[^/]+\/(.+?)(\?|$)/);
+  if (m) return '/api/dl?f=' + encodeURIComponent(m[1]);
+  return url;
+}
+
 function addMessage(msg) {
   if (msgsEmpty) msgsEmpty.style.display = 'none';
   const own = msg.user === currentUser;
   const row = document.createElement('div');
-  row.className = `msg-row${own ? ' own' : ''}`;
+  row.className = `msg-row${own ? ' own' : ''}${_historyLoading ? ' no-anim' : ''}`;
   row.dataset.id = msg.id;
 
   // Avatar — mark with data-user so avatar-updated can refresh it
@@ -925,8 +936,8 @@ function addMessage(msg) {
   ava.dataset.user = msg.user;
   setAvatar(ava, msg.user, userAvatars[msg.user]);
 
-  // Fetch avatar if we don't have it cached
-  if (!own && !userAvatars[msg.user]) {
+  // Fetch avatar+nickname if we don't have it cached
+  if (!own && (!userAvatars[msg.user] || !userNicknames[msg.user])) {
     fetchUserAvatar(msg.user);
   }
 
@@ -934,22 +945,25 @@ function addMessage(msg) {
   const bub = document.createElement('div');
   bub.className = 'msg-bubble';
 
-  let inner = own ? '' : `<div class="msg-sender">${msg.user}</div>`;
+  let inner = own ? '' : `<div class="msg-sender">${esc(userNicknames[msg.user] || msg.user)}</div>`;
 
   if (msg.type === 'image') {
-    inner += `<div class="msg-img-wrap"><img class="msg-img" src="${msg.url}" loading="lazy" onclick="viewMedia('${msg.url}','image')" alt="фото"></div>`;
+    const u = fileUrl(msg.url);
+    inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="фото"></div>`;
     if (msg.text) inner += `<div class="msg-text">${esc(msg.text)}</div>`;
   } else if (msg.type === 'video') {
-    inner += `<video class="msg-video" controls preload="auto" playsinline src="${msg.url}"></video>`;
+    const u = fileUrl(msg.url);
+    inner += `<video class="msg-video" controls preload="auto" playsinline src="${u}"></video>`;
     if (msg.text) inner += `<div class="msg-text">${esc(msg.text)}</div>`;
   } else if (msg.type === 'video_circle') {
+    const u = fileUrl(msg.url);
     const vid_id = 'vc_' + (msg.id || Math.random().toString(36).slice(2,9));
     inner += `<div class="msg-circle-wrap" id="${vid_id}_wrap">
       <video class="msg-circle" id="${vid_id}" playsinline preload="metadata"
-        src="${msg.url}"
+        src="${u}"
         onmousedown="event.preventDefault()"
         onclick="vcTogglePlay('${vid_id}')"
-        ondblclick="viewMedia('${msg.url}','video')"
+        ondblclick="viewMedia('${u}','video')"
         onloadedmetadata="vcShowDuration('${vid_id}')"></video>
       <div class="vc-overlay" id="${vid_id}_ov">
         <i class="ti ti-player-play vc-play-ico"></i>
@@ -957,18 +971,20 @@ function addMessage(msg) {
       <span class="vc-dur" id="${vid_id}_dur"></span>
     </div>`;
   } else if (msg.type === 'audio') {
+    const u = fileUrl(msg.url);
     const pid = 'vp_' + (msg.id || Math.random().toString(36).slice(2));
     inner += `<div class="voice-player" id="${pid}">
-      <button class="vp-play" onclick="vpToggle('${pid}','${msg.url}')"><i class="ti ti-player-play"></i></button>
+      <button class="vp-play" onclick="vpToggle('${pid}','${u}')"><i class="ti ti-player-play"></i></button>
       <div class="vp-body">
-        <div class="vp-waveform" onclick="vpSeek(event,'${pid}','${msg.url}')">${Array.from({length:30},(_,i)=>`<div class="vp-bar" style="height:${8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8)}px"></div>`).join('')}</div>
+        <div class="vp-waveform" onclick="vpSeek(event,'${pid}','${u}')">${Array.from({length:30},(_,i)=>`<div class="vp-bar" style="height:${8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8)}px"></div>`).join('')}</div>
         <div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">—</span></div>
       </div>
     </div>`;
   } else if (msg.type === 'file') {
+    const u = fileUrl(msg.url);
     const fname = esc(msg.fileName || 'Файл');
     const ext = (msg.fileName||'').split('.').pop().toUpperCase().slice(0,4);
-    inner += `<a class="msg-file" href="${msg.url}" target="_blank" rel="noopener">
+    inner += `<a class="msg-file" href="${u}" target="_blank" rel="noopener">
       <i class="ti ti-file msg-file-ico"></i>
       <div class="msg-file-body">
         <div class="msg-file-name">${fname}</div>
@@ -1002,7 +1018,7 @@ function addMessage(msg) {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
   // Уведомление только для реально новых сообщений (не при загрузке истории)
   if (!_historyLoading && msg.user !== currentUser && document.visibilityState !== 'visible') {
-    const nick = msg.user;
+    const nick = userNicknames[msg.user] || msg.user;
     const txt  = msg.type === 'text' ? msg.text : (msg.type === 'audio' ? 'Голосовое сообщение' : 'Медиафайл');
     showPushNotification(nick, txt, 'msg-' + msg.user);
   }
@@ -1717,9 +1733,9 @@ socket.on('avatar-updated', ({ username, avatar }) => {
   if (settingsAva && username === currentUser) setAvatar(settingsAva, username, avatar);
 });
 
-// Fetch avatar for a user we don't have cached
+// Fetch avatar + nickname for a user we don't have cached
 async function fetchUserAvatar(username) {
-  if (userAvatars[username]) return;
+  if (userAvatars[username] && userNicknames[username]) return;
   try {
     const r = await fetch('/api/get-avatar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1727,20 +1743,30 @@ async function fetchUserAvatar(username) {
     });
     if (!r.ok) return;
     const d = await r.json();
-    if (!d.avatar) return;
-    userAvatars[username] = d.avatar;
-    // Update all rendered avatars for this user
-    document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => {
-      setAvatar(el, username, d.avatar);
-    });
-    document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => {
-      setAvatar(el, username, d.avatar);
-    });
-    // Update chat header if this is the current room partner
-    const other = currentRoom?.startsWith('private:')
-      ? currentRoom.split(':').slice(1).find(p => p !== currentUser)
-      : null;
-    if (other === username) setAvatar(roomAvatar, username, d.avatar);
+
+    if (d.avatar) {
+      userAvatars[username] = d.avatar;
+      document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, d.avatar));
+      document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, d.avatar));
+      const other = currentRoom?.startsWith('private:')
+        ? currentRoom.split(':').slice(1).find(p => p !== currentUser)
+        : null;
+      if (other === username) setAvatar(roomAvatar, username, d.avatar);
+    }
+
+    if (d.nickname && d.nickname !== username) {
+      userNicknames[username] = d.nickname;
+      // Update sender names in visible messages
+      document.querySelectorAll(`.msg-sender`).forEach(el => {
+        const row = el.closest('.msg-row');
+        if (row) {
+          const ava = row.querySelector(`.msg-ava[data-user="${username}"]`);
+          if (ava) el.textContent = d.nickname;
+        }
+      });
+      // Update sidebar items
+      if (friendsList) friendsList._lastKey = '';
+    }
   } catch {}
 }
 
@@ -2368,7 +2394,7 @@ function _showGroupCallUI(groupName, members) {
 
 function _showOutgoingUI(target, isVid) {
   setAvatar(callAva, target, userAvatars[target]);
-  callNm.textContent = target;
+  callNm.textContent = userNicknames[target] || target;
   callSt.textContent = isVid ? 'Видеозвонок…' : 'Звоним…';
   callAct.innerHTML  = `
     <button class="call-btn call-mute" id="callMuteBtn" onclick="toggleMute()">
@@ -2407,7 +2433,7 @@ socket.on('call-invite', ({ from, isVid }) => {
   _connected  = false;
 
   setAvatar(callAva, from, userAvatars[from]);
-  callNm.textContent = from;
+  callNm.textContent = userNicknames[from] || from;
   callSt.textContent = isVid ? 'Видеозвонок…' : 'Входящий звонок…';
   callAct.innerHTML  = `
     <button class="call-btn call-ans" onclick="answerCall()">
