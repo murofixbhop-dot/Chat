@@ -1590,3 +1590,87 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
 .cr-label { color: var(--text); font-weight: 600; }
 .cr-extra { color: var(--text2); }
 .cr-time  { color: var(--text3); font-size: 10px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+/* ════════════════════════════════════════════════
+   LOGIN LINKS — красивые кнопки под формой
+════════════════════════════════════════════════ */
+.login-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-top: 16px;
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.login-link {
+  flex: 1;
+  padding: 11px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background .15s, color .15s;
+  border: none;
+  background: none;
+  font-family: inherit;
+  position: relative;
+}
+.login-link:hover {
+  background: var(--hover);
+  color: var(--accent);
+}
+.login-link:active { background: var(--active); }
+
+/* Разделитель между кнопками */
+.login-link-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border2);
+  flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════
+   FORGOT PASSWORD MODAL
+════════════════════════════════════════════════ */
+.forgot-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+.forgot-step { display: none; }
+.forgot-step.active { display: flex; flex-direction: column; gap: 10px; }
+
+.code-inputs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.code-digit {
+  width: 44px; height: 52px;
+  background: var(--input-bg);
+  border: 1.5px solid var(--border2);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 22px; font-weight: 700;
+  text-align: center;
+  font-family: 'Geist Mono', monospace;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.code-digit:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
