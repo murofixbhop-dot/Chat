@@ -393,24 +393,37 @@ app.use(express.json());
 //  AI ЧАТ — Mistral с инструментами, памятью файлов и просмотром изображений
 // ════════════════════════════════════════════════════════════════════════════
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
-const aiConversations = new Map(); // username -> { history:[], files:[], msgCount:0 }
+const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
+const aiUserFiles     = new Map(); // username -> [{ id, name, content, ttl }]
 const AI_MAX_HISTORY  = 80;
 const AI_FILE_TTL     = 5; // файлы живут 5 ответов ИИ
 
-const AI_SYSTEM = `Ты — Aura AI, мощный ассистент встроенный в мессенджер Aura.
-Ты умеешь:
-• Искать информацию в интернете (web_search)
-• Проверять погоду (get_weather)
-• Считать математику (calculate)
-• Узнавать время/дату (get_time)
-• Конвертировать валюты (convert_currency)
-• Переводить текст (translate)
-• Читать и анализировать прикреплённые файлы/изображения (они добавляются автоматически)
-• Генерировать и редактировать файлы (create_file) — возвращает файл пользователю
-• Писать код, исправлять ошибки, объяснять код (analyze_code)
+const path = require('path');
+const fs   = require('fs');
+const os   = require('os');
 
-При форматировании: **жирный**, \`код\`, \`\`\`python\nблок кода\n\`\`\`.
-Отвечай на том же языке что пишет пользователь. Дата: ${new Date().toLocaleDateString('ru-RU')}.`;
+const AI_SYSTEM = `Ты — Aura AI, мощный ассистент встроенный в мессенджер Aura.
+
+ВАЖНЫЕ ПРАВИЛА:
+1. Когда пишешь КОД (любой язык программирования) — ВСЕГДА используй инструмент create_file для его сохранения. НЕ вставляй код в текст ответа, создавай файл.
+2. Когда просят написать скрипт, программу, функцию, класс — используй create_file.
+3. Когда обрабатываешь данные и нужен результат-файл (CSV, JSON, HTML) — используй create_file.
+4. Для поиска курсов валют — используй convert_currency, для новостей — web_search.
+
+Умеешь:
+• Искать в интернете: web_search
+• Погода: get_weather  
+• Калькулятор: calculate
+• Время/дата: get_time
+• Курсы валют: convert_currency
+• Перевод текста: translate
+• Создавать файлы: create_file (код, данные, документы)
+• Читать прикреплённые файлы и изображения
+• Анализировать архивы: analyze_archive
+• Генерировать данные: generate_data
+
+Форматирование: **жирный**, \`код\`, списки •.
+Отвечай на языке пользователя. Дата: ${new Date().toLocaleDateString('ru-RU')}.`;
 
 // ── Инструменты ──────────────────────────────────────────────────────────────
 const AI_TOOLS = [
@@ -418,15 +431,15 @@ const AI_TOOLS = [
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Поиск актуальной информации в интернете. Новости, факты, статьи.',
-      parameters: { type:'object', properties:{ query:{ type:'string', description:'Поисковый запрос' } }, required:['query'] }
+      description: 'Поиск АКТУАЛЬНОЙ информации в интернете. Новости, события, статьи, факты.',
+      parameters: { type:'object', properties:{ query:{ type:'string' } }, required:['query'] }
     }
   },
   {
     type: 'function',
     function: {
       name: 'get_weather',
-      description: 'Текущая погода в любом городе мира',
+      description: 'Текущая погода и прогноз в любом городе',
       parameters: { type:'object', properties:{ city:{ type:'string' } }, required:['city'] }
     }
   },
@@ -434,7 +447,7 @@ const AI_TOOLS = [
     type: 'function',
     function: {
       name: 'calculate',
-      description: 'Вычисляет математическое выражение. Поддерживает +,-,*,/,^,%,скобки.',
+      description: 'Математические вычисления: +,-,*,/,^,%, скобки, дроби',
       parameters: { type:'object', properties:{ expression:{ type:'string' } }, required:['expression'] }
     }
   },
@@ -442,7 +455,7 @@ const AI_TOOLS = [
     type: 'function',
     function: {
       name: 'get_time',
-      description: 'Текущее время и дата',
+      description: 'Текущее время, дата, день недели',
       parameters: { type:'object', properties:{} }
     }
   },
@@ -450,15 +463,15 @@ const AI_TOOLS = [
     type: 'function',
     function: {
       name: 'convert_currency',
-      description: 'Конвертация валют. Курсы в реальном времени.',
+      description: 'Актуальные курсы валют и конвертация. USD, EUR, RUB, GBP, JPY, CNY и др.',
       parameters: {
         type:'object',
         properties: {
-          amount:   { type:'number', description:'Сумма' },
-          from:     { type:'string', description:'Исходная валюта (USD, EUR, RUB...)' },
-          to:       { type:'string', description:'Целевая валюта' }
+          amount: { type:'number', description:'Сумма (0 чтобы просто узнать курс)' },
+          from:   { type:'string', description:'Исходная валюта: USD, EUR, RUB...' },
+          to:     { type:'string', description:'Целевая валюта' }
         },
-        required:['amount','from','to']
+        required:['from','to']
       }
     }
   },
@@ -470,8 +483,8 @@ const AI_TOOLS = [
       parameters: {
         type:'object',
         properties: {
-          text:        { type:'string', description:'Текст для перевода' },
-          target_lang: { type:'string', description:'Язык перевода: ru, en, de, fr, es, zh, ja...' }
+          text:        { type:'string' },
+          target_lang: { type:'string', description:'ru, en, de, fr, es, zh, ja, ar...' }
         },
         required:['text','target_lang']
       }
@@ -481,13 +494,13 @@ const AI_TOOLS = [
     type: 'function',
     function: {
       name: 'create_file',
-      description: 'Создаёт файл с указанным содержимым и отправляет его пользователю. Используй для кода, текстов, CSV, JSON, HTML.',
+      description: 'ОБЯЗАТЕЛЬНО используй для любого кода или файла с данными. Создаёт файл и отправляет пользователю для скачивания.',
       parameters: {
         type:'object',
         properties: {
-          filename: { type:'string', description:'Имя файла с расширением: script.py, data.csv, page.html' },
+          filename: { type:'string', description:'Имя файла: script.py, data.csv, page.html, notes.md' },
           content:  { type:'string', description:'Полное содержимое файла' },
-          language: { type:'string', description:'Язык программирования или формат (python, javascript, html, csv, json, text)' }
+          description: { type:'string', description:'Краткое описание что делает файл' }
         },
         required:['filename','content']
       }
@@ -496,26 +509,65 @@ const AI_TOOLS = [
   {
     type: 'function',
     function: {
-      name: 'analyze_code',
-      description: 'Анализирует код — находит ошибки, объясняет, улучшает, конвертирует между языками',
+      name: 'analyze_archive',
+      description: 'Анализирует содержимое архива (ZIP, TAR) прикреплённого пользователем — показывает структуру, файлы, размеры',
       parameters: {
         type:'object',
         properties: {
-          code:   { type:'string', description:'Код для анализа' },
-          action: { type:'string', description:'explain / fix / optimize / convert_to (укажи язык)' }
+          archive_info: { type:'string', description:'Информация об архиве из контекста' },
+          action: { type:'string', description:'list (список файлов) / summary (краткий анализ) / extract_text (извлечь текст)' }
         },
-        required:['code','action']
+        required:['action']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_data',
+      description: 'Генерирует структурированные данные: таблицы, JSON, CSV, базы данных, тестовые данные',
+      parameters: {
+        type:'object',
+        properties: {
+          type:        { type:'string', description:'csv / json / sql / markdown_table / yaml' },
+          description: { type:'string', description:'Что нужно сгенерировать' },
+          rows:        { type:'number', description:'Количество строк/записей' }
+        },
+        required:['type','description']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_crypto',
+      description: 'Курсы криптовалют в реальном времени: Bitcoin, Ethereum, и др.',
+      parameters: {
+        type:'object',
+        properties: {
+          coins: { type:'string', description:'Монеты через запятую: BTC,ETH,SOL' }
+        },
+        required:['coins']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'url_info',
+      description: 'Получает заголовок и краткое описание по URL',
+      parameters: {
+        type:'object',
+        properties: {
+          url: { type:'string', description:'URL сайта или страницы' }
+        },
+        required:['url']
       }
     }
   }
 ];
 
-// ── Хранилище файлов ──────────────────────────────────────────────────────────
-const aiUserFiles = new Map(); // username -> [{ id, name, content, type, ttl }]
-const path = require('path');
-const fs   = require('fs');
-const os   = require('os');
-
+// ── Утилиты ──────────────────────────────────────────────────────────────────
 function aiGetSession(username) {
   if (!aiConversations.has(username)) {
     aiConversations.set(username, { history: [], msgCount: 0 });
@@ -524,21 +576,31 @@ function aiGetSession(username) {
 }
 
 function aiTickFiles(username) {
-  // Уменьшаем TTL файлов и удаляем устаревшие
   const files = aiUserFiles.get(username) || [];
   const alive = files.map(f => ({ ...f, ttl: f.ttl - 1 })).filter(f => f.ttl > 0);
   if (alive.length) aiUserFiles.set(username, alive);
-  else aiUserFiles.delete(username);
+  else              aiUserFiles.delete(username);
   return alive;
+}
+
+function aiSaveFile(username, filename, content) {
+  const files  = aiUserFiles.get(username) || [];
+  const fileId = 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  const safe   = filename.replace(/[^a-zA-Z0-9._\-а-яёА-ЯЁ]/gi, '_');
+  files.push({ id: fileId, name: safe, content, ttl: AI_FILE_TTL });
+  aiUserFiles.set(username, files);
+  return { fileId, safe };
 }
 
 // ── Выполнение инструментов ──────────────────────────────────────────────────
 async function executeTool(name, args, username) {
   try {
-    // ── Время ─────────────────────────────────────────────────────────────
+
+    // ── Время ──────────────────────────────────────────────────────────────
     if (name === 'get_time') {
       const now = new Date();
-      return `${now.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} (МСК)`;
+      const days = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+      return `${days[now.getDay()]}, ${now.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} (МСК)`;
     }
 
     // ── Калькулятор ────────────────────────────────────────────────────────
@@ -547,26 +609,51 @@ async function executeTool(name, args, username) {
       if (!expr) return 'Некорректное выражение';
       try {
         const result = Function('"use strict"; return (' + expr + ')')();
-        return `${args.expression} = ${Number.isInteger(result) ? result : result.toFixed(8).replace(/\.?0+$/, '')}`;
-      } catch { return 'Не удалось вычислить'; }
+        const fmt = (n) => Number.isInteger(n) ? String(n) : parseFloat(n.toFixed(10)).toString();
+        return `${args.expression} = **${fmt(result)}**`;
+      } catch { return 'Не удалось вычислить выражение'; }
     }
 
     // ── Поиск в интернете ──────────────────────────────────────────────────
     if (name === 'web_search') {
-      const q = encodeURIComponent(args.query || '');
-      const ddg = await axios.get(
-        `https://api.duckduckgo.com/?q=${q}&format=json&no_html=1&skip_disambig=1`,
-        { timeout: 8000, headers: { 'User-Agent': 'AuraAI/1.0' } }
-      );
-      const d = ddg.data;
+      const q = args.query || '';
       let result = '';
-      if (d.AbstractText) result += d.AbstractText + '\n';
-      if (d.Answer)       result += 'Ответ: ' + d.Answer + '\n';
-      if (d.RelatedTopics?.length) {
-        d.RelatedTopics.slice(0, 4).forEach(t => { if (t.Text) result += `• ${t.Text}\n`; });
-      }
-      if (!result) result = `По "${args.query}" информация не найдена через DuckDuckGo. Отвечу по своим знаниям.`;
-      return result.trim().slice(0, 2000);
+
+      // Пробуем Wikipedia API для фактических запросов
+      try {
+        const lang = /[а-яё]/i.test(q) ? 'ru' : 'en';
+        const wikiR = await axios.get(
+          `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&utf8=&format=json&srlimit=3`,
+          { timeout: 5000 }
+        );
+        const hits = wikiR.data?.query?.search || [];
+        if (hits.length) {
+          result += `Wikipedia:\n`;
+          for (const h of hits.slice(0, 2)) {
+            const snippet = h.snippet.replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&#039;/g, "'");
+            result += `• **${h.title}**: ${snippet}\n`;
+          }
+          result += '\n';
+        }
+      } catch {}
+
+      // DuckDuckGo Instant Answers
+      try {
+        const ddg = await axios.get(
+          `https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`,
+          { timeout: 6000, headers: { 'User-Agent': 'AuraAI/1.0' } }
+        );
+        const d = ddg.data;
+        if (d.AbstractText)   result += d.AbstractText + '\n';
+        if (d.Answer)         result += 'Ответ: ' + d.Answer + '\n';
+        if (d.Definition)     result += 'Определение: ' + d.Definition + '\n';
+        if (d.RelatedTopics?.length) {
+          d.RelatedTopics.slice(0, 3).forEach(t => { if (t.Text) result += `• ${t.Text}\n`; });
+        }
+      } catch {}
+
+      if (!result) result = `По запросу "${q}" внешние источники не дали результата. Отвечу по своим знаниям.`;
+      return result.trim().slice(0, 3000);
     }
 
     // ── Погода ────────────────────────────────────────────────────────────
@@ -577,65 +664,145 @@ async function executeTool(name, args, username) {
       );
       const loc = geoR.data?.results?.[0];
       if (!loc) return `Город "${args.city}" не найден`;
+
       const wR = await axios.get(
-        `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,precipitation&hourly=temperature_2m&timezone=auto&forecast_days=1`,
+        `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&timezone=auto&forecast_days=3`,
         { timeout: 6000 }
       );
       const c = wR.data?.current;
+      const daily = wR.data?.daily;
       const wCode = c?.weather_code || 0;
-      const wDesc = wCode === 0 ? '☀️ Ясно' : wCode <= 3 ? '⛅ Переменная облачность' : wCode <= 48 ? '☁️ Пасмурно' : wCode <= 67 ? '🌧 Дождь' : wCode <= 77 ? '❄️ Снег' : '⛈ Гроза';
-      return `${loc.name}: ${c?.temperature_2m}°C (ощущается ${c?.apparent_temperature}°C)\n${wDesc}, влажность ${c?.relative_humidity_2m}%, ветер ${c?.wind_speed_10m} км/ч`;
+      const wEmoji = wCode === 0 ? '☀️' : wCode <= 3 ? '⛅' : wCode <= 48 ? '☁️' : wCode <= 67 ? '🌧' : wCode <= 77 ? '❄️' : '⛈';
+      const wDesc  = wCode === 0 ? 'Ясно' : wCode <= 3 ? 'Переменная облачность' : wCode <= 48 ? 'Пасмурно' : wCode <= 67 ? 'Дождь' : wCode <= 77 ? 'Снег' : 'Гроза';
+
+      let result = `**${loc.name}** сейчас: ${c?.temperature_2m}°C (ощущается ${c?.apparent_temperature}°C)\n`;
+      result += `${wEmoji} ${wDesc}, влажность ${c?.relative_humidity_2m}%, ветер ${c?.wind_speed_10m} км/ч\n\n`;
+      result += `Прогноз:\n`;
+      if (daily?.time) {
+        daily.time.slice(0, 3).forEach((date, i) => {
+          const dCode = daily.weather_code?.[i] || 0;
+          const dEmoji = dCode <= 3 ? '☀️' : dCode <= 48 ? '⛅' : dCode <= 67 ? '🌧' : dCode <= 77 ? '❄️' : '⛈';
+          const d = new Date(date);
+          const dayName = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][d.getDay()];
+          result += `• ${dayName} ${d.getDate()}: ${dEmoji} ${daily.temperature_2m_min?.[i]}…${daily.temperature_2m_max?.[i]}°C`;
+          if (daily.precipitation_sum?.[i] > 0) result += ` 💧${daily.precipitation_sum[i]}мм`;
+          result += '\n';
+        });
+      }
+      return result.trim();
     }
 
     // ── Конвертация валют ──────────────────────────────────────────────────
     if (name === 'convert_currency') {
-      const { amount, from, to } = args;
-      const r = await axios.get(
-        `https://api.frankfurter.app/latest?from=${from.toUpperCase()}&to=${to.toUpperCase()}`,
-        { timeout: 6000 }
-      );
-      const rate = r.data?.rates?.[to.toUpperCase()];
-      if (!rate) return `Не удалось получить курс ${from} → ${to}`;
-      const result = (amount * rate).toFixed(2);
-      return `${amount} ${from.toUpperCase()} = ${result} ${to.toUpperCase()} (курс: 1 ${from.toUpperCase()} = ${rate} ${to.toUpperCase()})`;
+      const { from, to, amount = 1 } = args;
+      const fromU = from.toUpperCase();
+      const toU   = to.toUpperCase();
+      try {
+        // Frankfurter API — реальные курсы ЕЦБ
+        const r = await axios.get(
+          `https://api.frankfurter.app/latest?from=${fromU}`,
+          { timeout: 6000 }
+        );
+        const rates = r.data?.rates || {};
+        if (toU === fromU) return `1 ${fromU} = 1 ${toU}`;
+        const rate = rates[toU];
+        if (!rate) {
+          // Попробуем обратный курс
+          const r2 = await axios.get(`https://api.frankfurter.app/latest?from=${toU}`, { timeout: 6000 });
+          const rate2 = r2.data?.rates?.[fromU];
+          if (!rate2) return `Курс ${fromU}/${toU} недоступен в Frankfurter API (не поддерживает RUB). Используй convert_currency для других пар.`;
+          const actualRate = 1 / rate2;
+          const result = (amount * actualRate).toFixed(2);
+          return `Курс: 1 ${fromU} ≈ ${actualRate.toFixed(4)} ${toU}\n${amount} ${fromU} = **${result} ${toU}**`;
+        }
+        const result = (amount * rate).toFixed(2);
+        return `Курс: 1 ${fromU} = ${rate} ${toU}\n${amount} ${fromU} = **${result} ${toU}**`;
+      } catch (e) {
+        return `Не удалось получить курс: ${e.message}`;
+      }
     }
 
     // ── Перевод текста ────────────────────────────────────────────────────
     if (name === 'translate') {
-      // MyMemory — бесплатный переводчик без ключа
-      const r = await axios.get(
-        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(args.text)}&langpair=auto|${args.target_lang}`,
-        { timeout: 8000 }
-      );
-      const translated = r.data?.responseData?.translatedText;
-      if (!translated) return 'Не удалось перевести';
-      return `Перевод: ${translated}`;
+      try {
+        const r = await axios.get(
+          `https://api.mymemory.translated.net/get?q=${encodeURIComponent(args.text.slice(0, 500))}&langpair=auto|${args.target_lang}`,
+          { timeout: 8000 }
+        );
+        const t = r.data?.responseData?.translatedText;
+        return t ? `Перевод (${args.target_lang}): **${t}**` : 'Не удалось перевести';
+      } catch (e) { return 'Ошибка перевода: ' + e.message; }
     }
 
     // ── Создание файла ────────────────────────────────────────────────────
     if (name === 'create_file') {
-      const { filename, content } = args;
+      const { filename, content, description } = args;
       if (!filename || !content) return 'Не указано имя файла или содержимое';
-
-      // Сохраняем во временный файл
-      const tmpDir  = os.tmpdir();
-      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const tmpPath  = path.join(tmpDir, `aura_ai_${Date.now()}_${safeName}`);
-      fs.writeFileSync(tmpPath, content, 'utf8');
-
-      // Сохраняем в файловую базу пользователя (TTL 5 ответов)
-      const files = aiUserFiles.get(username) || [];
-      const fileId = `file_${Date.now()}`;
-      files.push({ id: fileId, name: safeName, path: tmpPath, content, ttl: AI_FILE_TTL, created: new Date().toISOString() });
-      aiUserFiles.set(username, files);
-
-      return `FILE_CREATED:${fileId}:${safeName}:${content.length} байт`;
+      const { fileId, safe } = aiSaveFile(username, filename, content);
+      return `FILE_CREATED:${fileId}:${safe}:${description || ''}:${content.length}`;
     }
 
-    // ── Анализ кода ───────────────────────────────────────────────────────
-    if (name === 'analyze_code') {
-      // Используем Mistral для анализа — возвращаем промпт для второго вызова
-      return `CODE_ANALYSIS_REQUESTED:${args.action}:${args.code.slice(0, 500)}`;
+    // ── Анализ архива ──────────────────────────────────────────────────────
+    if (name === 'analyze_archive') {
+      // Архив приходит как текстовый файл с листингом (пользователь приложил)
+      const info = args.archive_info || '';
+      return `Анализ архива: ${args.action}. ${info ? 'Данные из контекста: ' + info.slice(0, 500) : 'Прикрепи архив как файл чтобы я мог его проанализировать.'}`;
+    }
+
+    // ── Генерация данных ──────────────────────────────────────────────────
+    if (name === 'generate_data') {
+      const { type, description, rows = 10 } = args;
+      // Генерируем через второй запрос к Mistral
+      const genResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+        model: 'mistral-small-latest',
+        messages: [{
+          role: 'user',
+          content: `Сгенерируй ${rows} строк данных в формате ${type.toUpperCase()} для: ${description}. Верни ТОЛЬКО данные без пояснений.`
+        }],
+        max_tokens: 2000,
+        temperature: 0.3,
+      }, {
+        headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+        timeout: 20000,
+      });
+      const data = genResp.data.choices?.[0]?.message?.content || '';
+      // Автоматически сохраняем как файл
+      const ext = type === 'csv' ? 'csv' : type === 'json' ? 'json' : type === 'sql' ? 'sql' : type === 'yaml' ? 'yaml' : 'txt';
+      const fname = `generated_data.${ext}`;
+      const { fileId, safe } = aiSaveFile(username, fname, data);
+      return `FILE_CREATED:${fileId}:${safe}:Сгенерированные данные (${type.toUpperCase()}):${data.length}\nПредпросмотр:\n${data.slice(0, 300)}...`;
+    }
+
+    // ── Криптовалюты ──────────────────────────────────────────────────────
+    if (name === 'get_crypto') {
+      const coins = (args.coins || 'BTC,ETH').split(',').map(c => c.trim().toLowerCase()).join(',');
+      const r = await axios.get(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${coins}&vs_currencies=usd,rub&include_24hr_change=true`,
+        { timeout: 8000 }
+      );
+      const prices = r.data || {};
+      let result = '**Курсы криптовалют:**\n';
+      for (const [coin, data] of Object.entries(prices)) {
+        const change = data.usd_24h_change?.toFixed(2);
+        const arrow  = change > 0 ? '📈' : '📉';
+        result += `• ${coin.toUpperCase()}: $${data.usd?.toLocaleString()} (${change}% ${arrow}) / ${data.rub?.toLocaleString()} ₽\n`;
+      }
+      return result.trim();
+    }
+
+    // ── URL инфо ──────────────────────────────────────────────────────────
+    if (name === 'url_info') {
+      const r = await axios.get(args.url, {
+        timeout: 8000,
+        headers: { 'User-Agent': 'Mozilla/5.0 AuraAI/1.0' },
+        maxContentLength: 50000,
+      });
+      const html = r.data?.toString() || '';
+      const title       = html.match(/<title[^>]*>([^<]+)/i)?.[1]?.trim() || '';
+      const description = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i)?.[1]?.trim()
+                       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i)?.[1]?.trim() || '';
+      const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400);
+      return `**${title}**\n${description || text}`;
     }
 
     return 'Инструмент не найден: ' + name;
@@ -654,45 +821,39 @@ app.post('/api/ai-chat', async (req, res) => {
   const session = aiGetSession(username);
   const { history } = session;
   session.msgCount++;
-
-  // Тикаем файлы (уменьшаем TTL)
   aiTickFiles(username);
+
   const currentFiles = aiUserFiles.get(username) || [];
 
-  // Строим контент сообщения (мультимодальный)
+  // Строим контент сообщения
   let userContent;
   if (imageData) {
-    // Изображение от пользователя
     userContent = [
-      { type: 'text', text: message?.trim() || 'Проанализируй это изображение' },
+      { type: 'text', text: message?.trim() || 'Проанализируй это изображение подробно' },
       { type: 'image_url', image_url: { url: `data:${imageType || 'image/jpeg'};base64,${imageData}` } }
     ];
   } else if (fileContent) {
-    // Текстовый файл
-    const preview = fileContent.slice(0, 8000);
-    userContent = `📎 Файл: ${fileName || 'file.txt'}\n\`\`\`\n${preview}\n\`\`\`\n\n${message?.trim() || 'Проанализируй этот файл'}`;
+    const isArchive = /\.(zip|tar|gz|rar|7z)$/i.test(fileName || '');
+    const preview = fileContent.slice(0, 10000);
+    const fileType = isArchive ? 'архив' : 'файл';
+    userContent = `📎 ${fileType}: **${fileName || 'file'}**\n\`\`\`\n${preview}${fileContent.length > 10000 ? '\n...(обрезано)' : ''}\n\`\`\`\n\n${message?.trim() || (isArchive ? 'Проанализируй этот архив' : 'Проанализируй этот файл')}`;
   } else {
-    userContent = message.trim();
+    let ctx = message.trim();
+    if (currentFiles.length) ctx += `\n\n[Файлы в базе: ${currentFiles.map(f => f.name + '(' + f.ttl + 'отв)').join(', ')}]`;
+    userContent = ctx;
   }
 
-  // Добавляем контекст файлов в базе если есть
-  let contextNote = '';
-  if (currentFiles.length) {
-    contextNote = `\n\n[В базе есть файлы: ${currentFiles.map(f => f.name + ' (ещё ' + f.ttl + ' отв.)').join(', ')}]`;
-  }
-
-  history.push({ role: 'user', content: Array.isArray(userContent) ? userContent : userContent + contextNote });
+  history.push({ role: 'user', content: userContent });
   while (history.length > AI_MAX_HISTORY) history.shift();
 
   try {
-    // Первый запрос — с инструментами
-    const model = imageData ? 'pixtral-12b-2409' : 'mistral-small-latest'; // pixtral для изображений
+    const model = imageData ? 'pixtral-12b-2409' : 'mistral-small-latest';
     const resp1 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
       model,
       messages:    [{ role: 'system', content: AI_SYSTEM }, ...history],
-      tools:       imageData ? undefined : AI_TOOLS, // инструменты только для текста
+      tools:       imageData ? undefined : AI_TOOLS,
       tool_choice: imageData ? undefined : 'auto',
-      max_tokens:  2048,
+      max_tokens:  3000,
       temperature: 0.7,
     }, {
       headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
@@ -700,7 +861,7 @@ app.post('/api/ai-chat', async (req, res) => {
     });
 
     const msg1 = resp1.data.choices?.[0]?.message;
-    let toolsUsed = [];
+    let toolsUsed    = [];
     let createdFiles = [];
 
     if (msg1?.tool_calls?.length) {
@@ -711,15 +872,15 @@ app.post('/api/ai-chat', async (req, res) => {
         const toolName = tc.function?.name;
         let args = {};
         try { args = JSON.parse(tc.function?.arguments || '{}'); } catch {}
-        console.log(`[AI Tool] ${toolName}:`, toolName !== 'create_file' ? args : { filename: args.filename });
+        console.log(`[AI Tool] ${toolName}`, toolName === 'create_file' ? args.filename : '');
         const result = await executeTool(toolName, args, username);
 
-        // Обрабатываем созданный файл
         if (result.startsWith('FILE_CREATED:')) {
-          const [, fileId, fileName2] = result.split(':');
+          const parts = result.split(':');
+          const fileId = parts[1], name2 = parts[2], desc = parts[3];
           const fileObj = (aiUserFiles.get(username) || []).find(f => f.id === fileId);
-          if (fileObj) createdFiles.push({ id: fileId, name: fileName2, content: fileObj.content });
-          toolResults.push({ role: 'tool', tool_call_id: tc.id, content: `Файл "${fileName2}" создан и будет отправлен пользователю.` });
+          if (fileObj) createdFiles.push({ id: fileId, name: name2, content: fileObj.content, description: desc });
+          toolResults.push({ role: 'tool', tool_call_id: tc.id, content: `Файл "${name2}" создан и будет отправлен пользователю.` });
         } else {
           toolResults.push({ role: 'tool', tool_call_id: tc.id, content: result });
         }
@@ -728,11 +889,10 @@ app.post('/api/ai-chat', async (req, res) => {
 
       toolResults.forEach(tr => history.push(tr));
 
-      // Второй запрос — финальный ответ
       const resp2 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
         model: 'mistral-small-latest',
         messages: [{ role: 'system', content: AI_SYSTEM }, ...history],
-        max_tokens: 2048,
+        max_tokens: 3000,
         temperature: 0.7,
       }, {
         headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
