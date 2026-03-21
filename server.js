@@ -261,26 +261,62 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 app.use(express.static('public'));
 
-// ── Прокси для скачивания файлов с B2 (токен обновляется автоматически) ──
-// Клиент запрашивает /api/dl?f=photos/1234-name.jpg
-// Сервер генерирует свежий токен и редиректит
+// ── Прокси для скачивания файлов с B2 ──────────────────────────────────────
+// Стримим файл через сервер — браузер не идёт на B2 напрямую (нет CORS проблем)
 app.get('/api/dl', async (req, res) => {
   const rawF = req.query.f;
   if (!rawF) return res.status(400).send('Missing file param');
 
-  // Принимаем как чистый путь "photos/file.jpg",
-  // так и полный B2 URL из старых сообщений
+  // Поддерживаем и короткий путь "photos/file.jpg" и полный B2 URL
   let fileName = rawF;
   const urlMatch = rawF.match(/\/file\/[^/]+\/(.+?)(\?|$)/);
   if (urlMatch) fileName = urlMatch[1];
   fileName = decodeURIComponent(fileName);
 
+  if (!b2Auth || !b2BucketId) {
+    return res.status(503).send('B2 не инициализирован');
+  }
+
   try {
     const freshUrl = await getDownloadUrl(fileName);
-    res.redirect(302, freshUrl);
+
+    // Стримим через сервер — не редиректим
+    const b2Response = await axios.get(freshUrl, {
+      responseType: 'stream',
+      timeout: 30000,
+      headers: {
+        // Передаём Range если браузер запросил (для видео seek)
+        ...(req.headers.range ? { Range: req.headers.range } : {})
+      }
+    });
+
+    // Пробрасываем заголовки от B2
+    const ct = b2Response.headers['content-type']  || 'application/octet-stream';
+    const cl = b2Response.headers['content-length'];
+    const cr = b2Response.headers['content-range'];
+    const cd = b2Response.headers['content-disposition'];
+
+    res.status(b2Response.status);
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (cl)  res.setHeader('Content-Length', cl);
+    if (cr)  res.setHeader('Content-Range', cr);
+    if (cd)  res.setHeader('Content-Disposition', cd);
+
+    // Для скачивания файлов (не медиа) — ставим download заголовок
+    const isMedia = /^(image|video|audio)\//.test(ct);
+    if (!isMedia && !cd) {
+      const fname = fileName.split('/').pop().replace(/^\d+-/, '');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fname)}"`);
+    }
+
+    b2Response.data.pipe(res);
   } catch (err) {
-    console.error('[dl proxy] Ошибка:', err.message);
-    res.status(500).send('Не удалось получить файл: ' + err.message);
+    if (!res.headersSent) {
+      console.error('[dl proxy] Ошибка:', err.message);
+      res.status(500).send('Не удалось получить файл');
+    }
   }
 });
 
