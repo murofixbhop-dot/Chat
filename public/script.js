@@ -494,17 +494,39 @@ function startSession(user) {
   updateProfileUI();
   switchTab('friends'); // явно инициализируем таб без мигания
   socket.emit('identify', currentUser);
-  loadUserData();
+  // Загружаем данные, затем восстанавливаем последний чат
+  loadUserData().then(() => {
+    const lastRoom = localStorage.getItem('aura_last_room');
+    if (lastRoom && lastRoom.startsWith('private:')) {
+      // Проверяем что собеседник всё ещё в друзьях
+      const parts = lastRoom.split(':');
+      const other = parts.slice(1).find(p => p !== currentUser) || parts[1];
+      if (friends.includes(other)) {
+        gotoRoom(lastRoom);
+        return;
+      }
+    } else if (lastRoom && lastRoom.startsWith('group:')) {
+      const gid = lastRoom.replace('group:', '');
+      if (groups.find(g => g.id === gid)) {
+        gotoRoom(lastRoom);
+        return;
+      }
+    }
+    // Нет сохранённого чата или друг удалён — открываем первый чат из списка
+    if (friends.length > 0) {
+      gotoRoom(getRoomId(friends[0]));
+    } else {
+      currentRoom = null;
+      if (roomName)  roomName.textContent  = 'Выберите чат';
+      if (roomSub)   roomSub.textContent   = '';
+      if (hdrRight)  hdrRight.innerHTML    = '';
+      if (messagesDiv) messagesDiv.innerHTML = '';
+      if (msgsEmpty) { msgsEmpty.style.display = 'flex'; msgsEmpty.innerHTML = '<i class="ti ti-message-circle" style="font-size:48px;opacity:.2"></i><p>Добавьте друга чтобы начать общение</p>'; }
+      if (onlinePill) onlinePill.style.display = 'none';
+    }
+  });
   enableInput();
   initCallDOM();
-  // Не открываем общий чат — ждём пока пользователь выберет друга
-  currentRoom = null;
-  if (roomName)  roomName.textContent  = 'Выберите чат';
-  if (roomSub)   roomSub.textContent   = '';
-  if (hdrRight)  hdrRight.innerHTML    = '';
-  if (messagesDiv) messagesDiv.innerHTML = '';
-  if (msgsEmpty) { msgsEmpty.style.display = 'flex'; msgsEmpty.innerHTML = '<i class="ti ti-message-circle" style="font-size:48px;opacity:.2"></i><p>Выберите друга слева чтобы начать чат</p>'; }
-  if (onlinePill) onlinePill.style.display = 'none';
   setupDragDrop();
   setupKeyboardShortcuts();
   requestNotificationPermission();
@@ -630,54 +652,92 @@ function setAvatar(el, name, url) {
 // ══════════════════════════════════════════════
 function renderFriends(filter = '') {
   const ul = friendsList;
-  ul.innerHTML = '';
   const list = filter
     ? friends.filter(f => {
         const nick = (userNicknames[f] || f).toLowerCase();
         return nick.includes(filter.toLowerCase()) || f.toLowerCase().includes(filter.toLowerCase());
       })
     : friends;
+
+  // ── Smart diff: не перерисовываем если список не изменился ──
+  const newKey = list.join('|') + '|' + (currentRoom || '');
+  if (ul._lastKey === newKey && !filter) return;
+  ul._lastKey = newKey;
+
   if (!list.length) {
     ul.innerHTML = `<li class="msgs-empty" style="padding:24px;font-size:13px;">
       <i class="ti ti-user-off"></i><p>${filter ? 'Не найдено' : 'Нет друзей'}</p></li>`;
     return;
   }
-  list.forEach(f => {
+
+  // Строим map существующих элементов
+  const existing = {};
+  ul.querySelectorAll('li[data-friend]').forEach(li => {
+    existing[li.dataset.friend] = li;
+  });
+
+  // Добавляем/обновляем без удаления — просто переставляем порядок
+  list.forEach((f, idx) => {
     const room     = getRoomId(f);
     const dispName = userNicknames[f] || f;
-    const li = document.createElement('li');
-    li.className = 'chat-item' + (currentRoom === room ? ' active' : '');
-    const avaEl = document.createElement('div');
-    avaEl.className = 'ci-ava';
-    avaEl.dataset.user = f;
-    setAvatar(avaEl, f, userAvatars[f]);
-    li.innerHTML = `
-      <div class="ci-body">
+    const isActive = currentRoom === room;
+
+    let li = existing[f];
+    if (!li) {
+      // Новый элемент
+      li = document.createElement('li');
+      li.dataset.friend = f;
+      li.className = 'chat-item' + (isActive ? ' active' : '');
+      const avaEl = document.createElement('div');
+      avaEl.className = 'ci-ava';
+      avaEl.dataset.user = f;
+      setAvatar(avaEl, f, userAvatars[f]);
+      li.innerHTML = `<div class="ci-body">
         <span class="ci-name">${esc(dispName)}</span>
         <span class="ci-sub">${dispName !== f ? '<span style="color:var(--text3)">@' + esc(f) + '</span>' : 'Личный чат'}</span>
       </div>`;
-    li.prepend(avaEl);
-    li.onclick = () => { gotoPrivate(f); closeSidebarMobile(); };
-    li.addEventListener('contextmenu', e => showCtxFriend(e, f));
-    ul.appendChild(li);
+      li.prepend(avaEl);
+      li.onclick = () => { gotoPrivate(f); closeSidebarMobile(); };
+      li.addEventListener('contextmenu', e => showCtxFriend(e, f));
+    } else {
+      // Обновляем существующий без мигания
+      li.classList.toggle('active', isActive);
+      const nameEl = li.querySelector('.ci-name');
+      if (nameEl && nameEl.textContent !== dispName) nameEl.textContent = dispName;
+    }
+
+    // Убеждаемся что порядок правильный
+    const atIdx = ul.children[idx];
+    if (atIdx !== li) ul.insertBefore(li, atIdx || null);
   });
-  // Fetch avatars + nicknames for friends we don't have yet
+
+  // Удаляем исчезнувших друзей
+  ul.querySelectorAll('li[data-friend]').forEach(li => {
+    if (!list.includes(li.dataset.friend)) li.remove();
+  });
+
+  // Убираем пустой-стейт li если он есть
+  ul.querySelectorAll('li.msgs-empty').forEach(li => li.remove());
+
+  // Загружаем аватарки/ники для тех у кого нет (тихо, без ре-рендера)
   list.forEach(f => {
     if (!userAvatars[f] || !userNicknames[f]) {
       fetch('/api/get-avatar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: f })
       }).then(r => r.json()).then(d => {
-        if (d.avatar) {
+        let changed = false;
+        if (d.avatar && !userAvatars[f]) {
           userAvatars[f] = d.avatar;
-          document.querySelectorAll(`.ci-ava[data-user="${f}"]`).forEach(el => setAvatar(el, f, d.avatar));
+          ul.querySelectorAll(`.ci-ava[data-user="${f}"]`).forEach(el => setAvatar(el, f, d.avatar));
+          changed = true;
         }
-        if (d.nickname) {
+        if (d.nickname && !userNicknames[f]) {
           userNicknames[f] = d.nickname;
-          // Update rendered name in sidebar
-          document.querySelectorAll(`.ci-name[data-user="${f}"]`).forEach(el => { el.textContent = d.nickname; });
-          renderFriends(filter); // re-render to update display
+          ul.querySelectorAll(`li[data-friend="${f}"] .ci-name`).forEach(el => { el.textContent = d.nickname; });
+          changed = true;
         }
+        if (changed) ul._lastKey = ''; // сбрасываем кэш чтобы следующий вызов обновил
       }).catch(() => {});
     }
   });
@@ -685,26 +745,44 @@ function renderFriends(filter = '') {
 
 function renderGroups() {
   const ul = groupsList;
-  ul.innerHTML = '';
+  const newKey = groups.map(g => g.id + g.name).join('|') + '|' + (currentRoom || '');
+  if (ul._lastKey === newKey) return;
+  ul._lastKey = newKey;
+
   if (!groups.length) {
     ul.innerHTML = `<li class="msgs-empty" style="padding:24px;font-size:13px;">
       <i class="ti ti-users"></i><p>Нет групп</p></li>`;
     return;
   }
-  groups.forEach(g => {
-    const li = document.createElement('li');
-    li.className = 'chat-item' + (currentRoom === `group:${g.id}` ? ' active' : '');
-    li.innerHTML = `
-      <div class="ci-ava" style="border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2))">
-        <i class="ti ti-users"></i>
-      </div>
-      <div class="ci-body">
-        <span class="ci-name">${g.name}</span>
-        <span class="ci-sub">${(g.members||[]).length} участников</span>
-      </div>`;
-    li.onclick = () => { gotoRoom(`group:${g.id}`); closeSidebarMobile(); };
-    ul.appendChild(li);
+  const existing = {};
+  ul.querySelectorAll('li[data-group]').forEach(li => { existing[li.dataset.group] = li; });
+
+  groups.forEach((g, idx) => {
+    const isActive = currentRoom === `group:${g.id}`;
+    let li = existing[g.id];
+    if (!li) {
+      li = document.createElement('li');
+      li.dataset.group = g.id;
+      li.className = 'chat-item' + (isActive ? ' active' : '');
+      li.innerHTML = `
+        <div class="ci-ava" style="border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2))">
+          <i class="ti ti-users"></i>
+        </div>
+        <div class="ci-body">
+          <span class="ci-name">${esc(g.name)}</span>
+          <span class="ci-sub">${(g.members||[]).length} участников</span>
+        </div>`;
+      li.onclick = () => { gotoRoom(`group:${g.id}`); closeSidebarMobile(); };
+    } else {
+      li.classList.toggle('active', isActive);
+    }
+    const at = ul.children[idx];
+    if (at !== li) ul.insertBefore(li, at || null);
   });
+  ul.querySelectorAll('li[data-group]').forEach(li => {
+    if (!groups.find(g => g.id === li.dataset.group)) li.remove();
+  });
+  ul.querySelectorAll('li.msgs-empty').forEach(li => li.remove());
 }
 
 function renderRequests() {
@@ -784,6 +862,11 @@ function gotoPrivate(friend) {
 function gotoRoom(room) {
   if (currentRoom === room) return;
   currentRoom = room;
+  // Запоминаем последний чат
+  try { localStorage.setItem('aura_last_room', room); } catch(e) {}
+  // Сбрасываем кэш рендера чтобы обновить выделение активного чата
+  if (friendsList) friendsList._lastKey = '';
+  if (groupsList)  groupsList._lastKey  = '';
 
   const callBtnsHtml = `
     <button class="icon-btn" title="Аудиозвонок" onclick="startCall(false)"><i class="ti ti-phone"></i></button>
