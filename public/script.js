@@ -2215,13 +2215,28 @@ function closeSettings() { $('settingsModal').classList.remove('open'); }
 // ── AI ЧАТ — клиент ────────────────────────────────────────────────────────
 let _aiAttachment = null; // { type:'image'|'file', data, mimeType, name, preview }
 
+let _aiDebugMode = false;
+
 function openAiChat() {
   $('aiChatModal').classList.add('open');
+  aiRefreshFileBadge();
   setTimeout(() => $('aiInput')?.focus(), 80);
 }
 
 function closeAiChat() {
   $('aiChatModal').classList.remove('open');
+  closeAiFilePanel();
+}
+
+async function aiRefreshFileBadge() {
+  if (!currentUser) return;
+  try {
+    const r = await fetch(`/api/ai-files/${encodeURIComponent(currentUser)}`);
+    const d = await r.json();
+    const cnt = d.files?.length || 0;
+    const badge = $('aiFilesBtn');
+    if (badge) badge.innerHTML = `<i class="ti ti-files"></i>${cnt > 0 ? `<span style="position:absolute;top:-4px;right:-4px;background:var(--accent);color:#fff;border-radius:99px;font-size:10px;width:16px;height:16px;display:flex;align-items:center;justify-content:center">${cnt}</span>` : ''}`;
+  } catch {}
 }
 
 // Кнопка прикрепить файл/фото в AI чате
@@ -2367,11 +2382,60 @@ function _aiAddFileCard(file) {
 }
 
 const _aiToolLabels = {
-  web_search: '🔍 Поиск', get_weather: '🌤 Погода', calculate: '🔢 Калькулятор',
-  get_time: '🕐 Время', convert_currency: '💱 Валюта', translate: '🌐 Перевод',
-  create_file: '📄 Файл создан', analyze_archive: '📦 Архив', generate_data: '📊 Данные',
-  get_crypto: '₿ Крипто', url_info: '🔗 URL'
+  web_search: '🔍 Поиск в интернете', get_weather: '🌤 Погода', calculate: '🔢 Калькулятор',
+  get_time: '🕐 Время', convert_currency: '💱 Курс валют', translate: '🌐 Перевод',
+  create_file: '📄 Создание файла', generate_data: '📊 Генерация данных',
+  get_crypto: '₿ Криптовалюты', url_info: '🔗 Анализ URL',
+  wiki_search: '📖 Wikipedia', get_stock: '📈 Котировки',
+  timezone_convert: '🕐 Часовые пояса', qr_generate: '🔲 QR-код',
+  color_palette: '🎨 Палитра', unit_convert: '📐 Конвертер единиц',
+  dictionary: '📚 Словарь', analyze_archive: '📦 Архив'
 };
+
+// Добавляет коллапсируемый лог инструментов (как на скрине)
+function _aiAddToolLog(tools) {
+  const msgs = $('aiMessages');
+  if (!msgs || !tools?.length) return;
+
+  const logId = 'ailog_' + Date.now();
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin: 2px 0 6px 36px;';
+
+  const count = tools.length;
+  const summary = tools.length === 1
+    ? _aiToolLabels[tools[0]] || tools[0]
+    : `Запущено ${count} инструмент${count===1?'':count<5?'а':'ов'}`;
+
+  wrap.innerHTML = `
+    <div class="ai-tool-log">
+      <button class="ai-tool-toggle" onclick="this.parentElement.classList.toggle('open')" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:0;color:var(--text2);font-size:12px;font-family:inherit">
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:99px;transition:background .15s">
+          <i class="ti ti-adjustments-horizontal" style="font-size:11px"></i>
+          ${esc(summary)}
+          <i class="ti ti-chevron-down ai-log-arrow" style="font-size:10px;transition:transform .2s"></i>
+        </span>
+      </button>
+      <div class="ai-tool-steps" style="display:none;margin-top:6px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-size:12px;display:none">
+        ${tools.map(t => `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--text2)">
+          <i class="ti ti-check" style="font-size:12px;color:var(--success);flex-shrink:0"></i>
+          ${esc(_aiToolLabels[t] || t)}
+        </div>`).join('')}
+      </div>
+    </div>`;
+
+  // Toggle logic
+  const toggle = wrap.querySelector('.ai-tool-toggle');
+  const steps  = wrap.querySelector('.ai-tool-steps');
+  const arrow  = wrap.querySelector('.ai-log-arrow');
+  toggle.addEventListener('click', () => {
+    const open = steps.style.display === 'none' || steps.style.display === '';
+    steps.style.display = open ? 'block' : 'none';
+    if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+  });
+
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+}
 
 async function aiSend() {
   const inp = $('aiInput');
@@ -2410,17 +2474,17 @@ async function aiSend() {
     if (typing) typing.remove();
 
     if (d.success) {
-      if (d.toolsUsed?.length) {
-        const badges = d.toolsUsed.map(t => _aiToolLabels[t] || t).join(' · ');
-        const badgeEl = document.createElement('div');
-        badgeEl.style.cssText = 'font-size:11px;color:var(--text3);padding:2px 0 4px 36px;';
-        badgeEl.textContent = badges;
-        $('aiMessages')?.appendChild(badgeEl);
-      }
+      // Debug mode indicator
+      if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
+      // Коллапсируемый лог инструментов
+      if (d.toolsUsed?.length) _aiAddToolLog(d.toolsUsed);
       _aiAddMessage('assistant', d.reply);
       // Показываем карточки созданных файлов
       if (d.createdFiles?.length) {
         d.createdFiles.forEach(f => _aiAddFileCard(f));
+        // Обновляем панель файлов если открыта
+        if (_aiFilePanelOpen) aiRenderFilePanel();
+        else aiRefreshFileBadge();
       }
     } else {
       _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка. Попробуй ещё раз.'));
@@ -2431,6 +2495,176 @@ async function aiSend() {
   } finally {
     if (sendBtn) sendBtn.disabled = false;
     inp.focus();
+  }
+}
+
+// ── AI Файловая база ────────────────────────────────────────────────────────
+let _aiFilePanelOpen = false;
+let _aiEditingFile   = null; // { id, name, content }
+
+function toggleAiFilePanel() {
+  _aiFilePanelOpen ? closeAiFilePanel() : openAiFilePanel();
+}
+
+async function openAiFilePanel() {
+  _aiFilePanelOpen = true;
+  let panel = $('aiFilePanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'aiFilePanel';
+    panel.style.cssText = `
+      position:absolute; right:0; top:0; bottom:0; width:260px;
+      background:var(--surface); border-left:1px solid var(--border);
+      display:flex; flex-direction:column; z-index:10;
+      animation:slideRight .2s cubic-bezier(.16,1,.3,1);`;
+    panel.innerHTML = `
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <span style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px">
+          <i class="ti ti-files" style="color:var(--accent)"></i> База файлов
+        </span>
+        <button class="icon-btn sm" onclick="closeAiFilePanel()"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="aiFilePanelList" style="flex:1;overflow-y:auto;padding:8px"></div>
+      <div style="padding:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);text-align:center;flex-shrink:0">
+        Файлы хранятся 5 ответов
+      </div>`;
+    const modal = $('aiChatModal')?.querySelector('.modal-card');
+    if (modal) { modal.style.position = 'relative'; modal.style.overflow = 'hidden'; modal.appendChild(panel); }
+  }
+  panel.style.display = 'flex';
+  await aiRenderFilePanel();
+}
+
+function closeAiFilePanel() {
+  _aiFilePanelOpen = false;
+  const panel = $('aiFilePanel');
+  if (panel) panel.style.display = 'none';
+}
+
+async function aiRenderFilePanel() {
+  const list = $('aiFilePanelList');
+  if (!list) return;
+  list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px"><i class="ti ti-loader" style="animation:spin 1s linear infinite"></i></div>';
+  try {
+    const r = await fetch(`/api/ai-files/${encodeURIComponent(currentUser)}`);
+    const d = await r.json();
+    const files = d.files || [];
+    if (!files.length) {
+      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px"><i class="ti ti-file-off" style="font-size:28px;display:block;margin-bottom:6px;opacity:.3"></i>Нет файлов</div>';
+      return;
+    }
+    list.innerHTML = '';
+    files.forEach(f => {
+      const ext  = f.name.split('.').pop().toUpperCase();
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:8px 10px;border-radius:10px;margin-bottom:4px;background:var(--surface2);border:1px solid var(--border);cursor:pointer;transition:background .15s;';
+      item.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--accent-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent)">${esc(ext.slice(0,4))}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(f.name)}">${esc(f.name)}</div>
+            <div style="font-size:11px;color:var(--text3)">${f.size} байт · ещё ${f.ttl} отв.</div>
+            ${f.description ? `<div style="font-size:11px;color:var(--text2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.description)}</div>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <a href="/api/ai-file/${encodeURIComponent(currentUser)}/${f.id}" download="${esc(f.name)}"
+             style="flex:1;padding:4px 6px;background:var(--accent);color:#fff;border-radius:6px;font-size:11px;text-decoration:none;text-align:center" onclick="event.stopPropagation()">
+            <i class="ti ti-download"></i> Скачать
+          </a>
+          <button onclick="aiEditFile('${f.id}','${esc(f.name).replace(/'/g,'\\\'')}')" style="padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text)">
+            <i class="ti ti-edit"></i>
+          </button>
+          <button onclick="aiDeleteFile('${f.id}')" style="padding:4px 8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;font-size:11px;cursor:pointer;color:var(--danger)">
+            <i class="ti ti-trash"></i>
+          </button>
+        </div>`;
+      // Preview on hover
+      if (f.preview) {
+        item.title = f.preview;
+      }
+      list.appendChild(item);
+    });
+  } catch (e) {
+    list.innerHTML = '<div style="padding:12px;color:var(--danger);font-size:12px">Ошибка загрузки</div>';
+  }
+  aiRefreshFileBadge();
+}
+
+async function aiEditFile(fileId, fileName) {
+  // Загружаем содержимое файла
+  try {
+    const r = await fetch(`/api/ai-file/${encodeURIComponent(currentUser)}/${fileId}`);
+    const content = await r.text();
+
+    // Создаём редактор поверх панели
+    const ov = $('dialogOverlay');
+    const box = $('dialogBox');
+    if (!ov || !box) return;
+
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <h3 style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px"><i class="ti ti-file-code" style="color:var(--accent)"></i> Редактировать файл</h3>
+        <button class="icon-btn sm" onclick="$('dialogOverlay').classList.remove('open')"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="field-wrap" style="margin-bottom:10px">
+        <i class="ti ti-file field-ico"></i>
+        <input id="aiEditName" class="field" type="text" value="${esc(fileName)}" placeholder="Имя файла" maxlength="80"/>
+      </div>
+      <textarea id="aiEditContent" style="width:100%;height:300px;background:var(--surface3);color:var(--text);border:1.5px solid var(--border);border-radius:12px;padding:12px;font-family:monospace;font-size:12px;outline:none;resize:vertical;line-height:1.5" spellcheck="false">${esc(content)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn-secondary" style="flex:1" onclick="$('dialogOverlay').classList.remove('open')">Отмена</button>
+        <button class="btn-primary" style="flex:2" onclick="aiSaveEdit('${fileId}')"><i class="ti ti-check"></i> Сохранить</button>
+      </div>`;
+
+    ov.classList.add('open');
+  } catch { toast('Ошибка загрузки файла', 'error'); }
+}
+
+async function aiSaveEdit(fileId) {
+  const name    = $('aiEditName')?.value?.trim();
+  const content = $('aiEditContent')?.value;
+  if (!name) { toast('Введите имя файла', 'warning'); return; }
+  try {
+    const r = await fetch('/api/ai-file-edit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, fileId, content, name })
+    });
+    const d = await r.json();
+    if (d.success) {
+      $('dialogOverlay').classList.remove('open');
+      toast('Файл сохранён', 'success');
+      aiRenderFilePanel();
+    } else { toast(d.error || 'Ошибка', 'error'); }
+  } catch { toast('Нет соединения', 'error'); }
+}
+
+async function aiDeleteFile(fileId) {
+  const ok = await dialog({ icon:'ti-trash', iconType:'error', title:'Удалить файл?', msg:'Файл будет удалён из базы AI.', ok:'Удалить', cancel:'Отмена', danger:true });
+  if (!ok) return;
+  try {
+    await fetch('/api/ai-file-delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, fileId })
+    });
+    aiRenderFilePanel();
+    toast('Файл удалён', 'info');
+  } catch { toast('Ошибка', 'error'); }
+}
+
+// ── Debug mode handling ─────────────────────────────────────────────────────
+function _aiSetDebugMode(active) {
+  _aiDebugMode = active;
+  const indicator = $('aiDebugIndicator');
+  if (indicator) {
+    indicator.style.display = active ? 'flex' : 'none';
+    indicator.innerHTML = active ? '<i class="ti ti-bug" style="font-size:11px"></i> DEBUG' : '';
+  }
+  const hd = $('aiChatModal')?.querySelector('.modal-hd h2');
+  if (hd) {
+    hd.innerHTML = active
+      ? '<i class="ti ti-robot"></i> Aura AI <span style="font-size:10px;background:var(--danger);color:#fff;padding:2px 7px;border-radius:99px;margin-left:4px">DEBUG</span>'
+      : '<i class="ti ti-robot"></i> Aura AI';
   }
 }
 
