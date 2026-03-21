@@ -4,7 +4,6 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 
 const app = express();
 const server = http.createServer(app);
@@ -74,30 +73,69 @@ const USERS_FILE = 'users.json';
 let users = new Map(); // username -> { nickname, avatar, theme, friends, friendRequests, groups, recoveryEmail }
 let recoveryCodes = new Map(); // username -> { code, expiry, email }
 
-// Email transporter — для продакшена настройте SMTP
-const emailTransporter = nodemailer.createTransport({
-  jsonTransport: true // logs to console instead of sending (dev mode)
-});
-// For production, replace with:
-// {
-//   host: 'smtp.example.com',
-//   port: 587,
-//   secure: false,
-//   auth: { user: '...', pass: '...' }
-// }
+// ── EMAIL через Resend (resend.com) ──────────────────────────────────────
+// Бесплатно: 3000 писем/мес, регистрация за 1 мин на https://resend.com
+// Укажи ключ в .env: RESEND_API_KEY=re_xxxxxxxxxxxx
+// И подтверждённый домен: RESEND_FROM=noreply@твой-домен.com
+// Если домена нет — используй: onboarding@resend.dev (только для теста)
 
-function sendRecoveryEmail(to, code) {
-  const msg = `Код восстановления пароля Aura: ${code}\nВведите этот код в приложении для сброса пароля.`;
-  return emailTransporter.sendMail({
-    from: '"Aura Messenger" <noreply@aura.app>',
-    to,
-    subject: 'Восстановление пароля Aura',
-    text: msg
-  }).then(info => {
-    console.log('📧 Email отправлен:', info.message);
-  }).catch(err => {
-    console.log('📧 (Dev mode) Код восстановления для', to, ':', code);
-  });
+async function sendRecoveryEmail(to, code) {
+  const RESEND_KEY  = process.env.RESEND_API_KEY;
+  const RESEND_FROM = process.env.RESEND_FROM || 'onboarding@resend.dev';
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:32px 24px;background:#0c0c0f;border-radius:16px;color:#e8e8f2">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px">
+          <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+            <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white"/>
+          </svg>
+        </div>
+        <h2 style="margin:16px 0 4px;font-size:20px;font-weight:700">Aura Messenger</h2>
+        <p style="color:#9898b0;font-size:13px;margin:0">Восстановление пароля</p>
+      </div>
+      <p style="color:#9898b0;font-size:14px;margin-bottom:20px">Используй этот код для сброса пароля. Код действует <strong style="color:#e8e8f2">15 минут</strong>.</p>
+      <div style="text-align:center;letter-spacing:12px;font-size:36px;font-weight:800;padding:20px;background:#18181f;border-radius:12px;border:1px solid #2a2a3a;color:#6366f1;font-family:monospace">
+        ${code}
+      </div>
+      <p style="color:#5c5c78;font-size:12px;margin-top:20px;text-align:center">Если вы не запрашивали сброс пароля — проигнорируйте это письмо.</p>
+    </div>`;
+
+  if (!RESEND_KEY) {
+    // Dev режим — код в консоли
+    console.log(`\n📧 ══════════════════════════════════`);
+    console.log(`📧 RESEND_API_KEY не задан!`);
+    console.log(`📧 Код для ${to}: ${code}`);
+    console.log(`📧 Чтобы слать реальные письма:`);
+    console.log(`📧   1. Зарегайся на resend.com (бесплатно)`);
+    console.log(`📧   2. Получи API ключ`);
+    console.log(`📧   3. Добавь RESEND_API_KEY=re_xxx в .env`);
+    console.log(`📧 ══════════════════════════════════\n`);
+    return;
+  }
+
+  try {
+    const resp = await axios.post('https://api.resend.com/emails', {
+      from:    RESEND_FROM,
+      to:      [to],
+      subject: 'Код восстановления Aura Messenger',
+      html,
+      text: `Код восстановления пароля Aura: ${code}\nДействует 15 минут.`
+    }, {
+      headers: {
+        'Authorization': `Bearer ${RESEND_KEY}`,
+        'Content-Type':  'application/json'
+      },
+      timeout: 8000
+    });
+    console.log('📧 Email отправлен через Resend:', resp.data?.id);
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message;
+    console.error('📧 Ошибка отправки email:', msg);
+    // Не падаем — просто логируем код в консоль как fallback
+    console.log(`📧 Fallback — код для ${to}: ${code}`);
+    throw new Error('Не удалось отправить email: ' + msg);
+  }
 }
 
 async function loadUsers() {
@@ -310,24 +348,27 @@ app.post('/api/delete-account', async (req, res) => {
 app.post('/api/request-password-reset', async (req, res) => {
   const { username } = req.body;
   if (!username || !users.has(username)) {
-    // Don't reveal if user exists
+    // Не раскрываем существование аккаунта
     return res.json({ success: true, message: 'Если аккаунт существует, код отправлен на email' });
   }
   const userData = users.get(username);
   if (!userData.recoveryEmail) {
-    return res.json({ success: false, error: 'Для этого аккаунта не указан email. Обратитесь к администратору.' });
+    return res.json({ success: false, error: 'Email не привязан к аккаунту. Добавь его в Настройки → Аккаунт.' });
   }
 
-  // Generate 6-digit code
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiry = Date.now() + 15 * 60 * 1000; // 15 minutes
+  // Генерируем 6-значный код
+  const code   = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiry = Date.now() + 15 * 60 * 1000; // 15 минут
 
   recoveryCodes.set(username, { code, expiry, email: userData.recoveryEmail });
 
-  // Send email
-  await sendRecoveryEmail(userData.recoveryEmail, code);
-
-  res.json({ success: true, message: 'Код отправлен на email' });
+  try {
+    await sendRecoveryEmail(userData.recoveryEmail, code);
+    res.json({ success: true, message: 'Код отправлен на email' });
+  } catch (err) {
+    // Код уже сохранён — даже если email не дошёл, можно попробовать ещё раз
+    res.json({ success: false, error: 'Не удалось отправить email: ' + err.message });
+  }
 });
 
 // Подтвердить сброс пароля
