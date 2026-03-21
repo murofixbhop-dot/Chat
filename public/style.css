@@ -1754,3 +1754,7 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* ── AI cursor blink ── */
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.ai-cursor { animation: blink .7s ease-in-out infinite; font-weight:300; }
