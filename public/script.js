@@ -95,12 +95,14 @@ setTimeout(hideSplash, 2500);
 // STATE  ← single source of truth
 // ══════════════════════════════════════════════
 let currentUser    = null;
+let _historyLoading = false; // true while loading history — подавляем уведомления
 let userData       = { nickname:'', avatar:null, theme:'dark' };
-let currentRoom    = 'general';
+let currentRoom    = null;
 let friends        = [];
 let groups         = [];
 let friendRequests = [];
 let userAvatars    = {};
+let userNicknames  = {}; // username -> nickname (кэш отображаемых имён)
 let selectedFiles  = [];
 
 // Recording state
@@ -486,7 +488,14 @@ function startSession(user) {
   loadUserData();
   enableInput();
   initCallDOM();
-  gotoRoom('general');
+  // Не открываем общий чат — ждём пока пользователь выберет друга
+  currentRoom = null;
+  if (roomName)  roomName.textContent  = 'Выберите чат';
+  if (roomSub)   roomSub.textContent   = '';
+  if (hdrRight)  hdrRight.innerHTML    = '';
+  if (messagesDiv) messagesDiv.innerHTML = '';
+  if (msgsEmpty) { msgsEmpty.style.display = 'flex'; msgsEmpty.innerHTML = '<i class="ti ti-message-circle" style="font-size:48px;opacity:.2"></i><p>Выберите друга слева чтобы начать чат</p>'; }
+  if (onlinePill) onlinePill.style.display = 'none';
   setupDragDrop();
   setupKeyboardShortcuts();
   requestNotificationPermission();
@@ -551,25 +560,37 @@ if (savedUser && savedPass) {
 // USER DATA  ← УДОБСТВО
 // ══════════════════════════════════════════════
 async function loadUserData() {
-  const r = await fetch('/api/get-user-data', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: currentUser })
-  });
-  const d = await r.json();
-  friends        = d.friends        || [];
-  friendRequests = d.friendRequests || [];
-  groups         = d.groups         || [];
-  renderFriends();
-  renderGroups();
-  renderRequests();
-  updateReqBadge();
-
-  // Refresh avatars for all friends (in case they changed while we were offline)
-  friends.forEach(f => {
-    if (!userAvatars[f]) {
-      fetchUserAvatar(f);
+  try {
+    const r = await fetch('/api/get-user-data', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser })
+    });
+    const d = await r.json();
+    friends        = d.friends        || [];
+    friendRequests = d.friendRequests || [];
+    groups         = d.groups         || [];
+    // Сохраняем email восстановления если вернулся с сервера
+    if (d.recoveryEmail !== undefined) {
+      userData.recoveryEmail = d.recoveryEmail;
     }
-  });
+    renderFriends();
+    renderGroups();
+    renderRequests();
+    updateReqBadge();
+
+    // Обновляем поле email в настройках если открыты
+    const emailField = $('stRecoveryEmail');
+    if (emailField && document.activeElement !== emailField) {
+      emailField.value = userData.recoveryEmail || '';
+    }
+
+    // Refresh avatars for all friends
+    friends.forEach(f => {
+      if (!userAvatars[f]) fetchUserAvatar(f);
+    });
+  } catch(e) {
+    console.warn('loadUserData error:', e);
+  }
 }
 
 function updateProfileUI() {
@@ -599,7 +620,10 @@ function renderFriends(filter = '') {
   const ul = friendsList;
   ul.innerHTML = '';
   const list = filter
-    ? friends.filter(f => f.toLowerCase().includes(filter.toLowerCase()))
+    ? friends.filter(f => {
+        const nick = (userNicknames[f] || f).toLowerCase();
+        return nick.includes(filter.toLowerCase()) || f.toLowerCase().includes(filter.toLowerCase());
+      })
     : friends;
   if (!list.length) {
     ul.innerHTML = `<li class="msgs-empty" style="padding:24px;font-size:13px;">
@@ -607,7 +631,8 @@ function renderFriends(filter = '') {
     return;
   }
   list.forEach(f => {
-    const room = getRoomId(f);
+    const room     = getRoomId(f);
+    const dispName = userNicknames[f] || f;
     const li = document.createElement('li');
     li.className = 'chat-item' + (currentRoom === room ? ' active' : '');
     const avaEl = document.createElement('div');
@@ -616,17 +641,17 @@ function renderFriends(filter = '') {
     setAvatar(avaEl, f, userAvatars[f]);
     li.innerHTML = `
       <div class="ci-body">
-        <span class="ci-name">${f}</span>
-        <span class="ci-sub">Личный чат</span>
+        <span class="ci-name">${esc(dispName)}</span>
+        <span class="ci-sub">${dispName !== f ? '<span style="color:var(--text3)">@' + esc(f) + '</span>' : 'Личный чат'}</span>
       </div>`;
     li.prepend(avaEl);
     li.onclick = () => { gotoPrivate(f); closeSidebarMobile(); };
     li.addEventListener('contextmenu', e => showCtxFriend(e, f));
     ul.appendChild(li);
   });
-  // Request avatars for friends we don't have yet
+  // Fetch avatars + nicknames for friends we don't have yet
   list.forEach(f => {
-    if (!userAvatars[f]) {
+    if (!userAvatars[f] || !userNicknames[f]) {
       fetch('/api/get-avatar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: f })
@@ -634,6 +659,12 @@ function renderFriends(filter = '') {
         if (d.avatar) {
           userAvatars[f] = d.avatar;
           document.querySelectorAll(`.ci-ava[data-user="${f}"]`).forEach(el => setAvatar(el, f, d.avatar));
+        }
+        if (d.nickname) {
+          userNicknames[f] = d.nickname;
+          // Update rendered name in sidebar
+          document.querySelectorAll(`.ci-name[data-user="${f}"]`).forEach(el => { el.textContent = d.nickname; });
+          renderFriends(filter); // re-render to update display
         }
       }).catch(() => {});
     }
@@ -746,19 +777,12 @@ function gotoRoom(room) {
     <button class="icon-btn" title="Аудиозвонок" onclick="startCall(false)"><i class="ti ti-phone"></i></button>
     <button class="icon-btn" title="Видеозвонок" onclick="startCall(true)"><i class="ti ti-video"></i></button>`;
 
-  if (room === 'general') {
-    roomName.textContent = 'Общий чат';
-    roomSub.textContent  = 'Публичный чат';
-    setAvatar(roomAvatar, '#', null);
-    roomAvatar.innerHTML = '<i class="ti ti-hash" style="font-size:15px"></i>';
-    onlinePill && (onlinePill.style.display = 'flex');
-    hdrRight.innerHTML = '';
-    if (onlinePill) { hdrRight.innerHTML = ''; hdrRight.appendChild(onlinePill); }
-  } else if (room.startsWith('private:')) {
+  if (room.startsWith('private:')) {
     const parts = room.split(':');
     const other = parts.slice(1).find(p => p !== currentUser) || parts[1];
-    roomName.textContent = other || '?';
-    roomSub.textContent  = 'Личные сообщения';
+    const dispName = userNicknames[other] || other;
+    roomName.textContent = dispName;
+    roomSub.textContent  = dispName !== other ? `@${other}` : 'Личные сообщения';
     setAvatar(roomAvatar, other, userAvatars[other]);
     if (onlinePill) onlinePill.style.display = 'none';
     hdrRight.innerHTML = callBtnsHtml;
@@ -782,9 +806,12 @@ function gotoRoom(room) {
 socket.on('online-count', n => { if (onlineCount) onlineCount.textContent = n; });
 
 socket.on('history', msgs => {
+  _historyLoading = true;
   messagesDiv.innerHTML = '';
   if (msgsEmpty) msgsEmpty.style.display = msgs.length ? 'none' : 'flex';
   msgs.forEach(addMessage);
+  // После отрисовки истории — разрешаем уведомления для новых сообщений
+  requestAnimationFrame(() => { _historyLoading = false; });
 });
 
 socket.on('message', addMessage);
@@ -878,8 +905,8 @@ function addMessage(msg) {
   row.appendChild(bub);
   messagesDiv.appendChild(row);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  // Notification for messages when tab is hidden
-  if (msg.user !== currentUser && document.visibilityState !== 'visible') {
+  // Уведомление только для реально новых сообщений (не при загрузке истории)
+  if (!_historyLoading && msg.user !== currentUser && document.visibilityState !== 'visible') {
     const nick = msg.user;
     const txt  = msg.type === 'text' ? msg.text : (msg.type === 'audio' ? 'Голосовое сообщение' : 'Медиафайл');
     showPushNotification(nick, txt, 'msg-' + msg.user);
@@ -1461,10 +1488,11 @@ async function openAddFriend() {
       resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Введите имя для поиска</div>';
       return;
     }
+    resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px"><i class="ti ti-loader" style="animation:spin 1s linear infinite"></i></div>';
     try {
       const r = await fetch('/api/search-users', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q })
+        body: JSON.stringify({ query: q, requester: currentUser })
       });
       const d = await r.json();
       searchResults = d.users || [];
@@ -1472,15 +1500,21 @@ async function openAddFriend() {
         resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Ничего не найдено</div>';
         return;
       }
-      resultsEl.innerHTML = searchResults.map(u => `
-        <div class="af-result-item" onclick="sendFriendReqTo('${u.username}')">
-          <div class="ci-ava" style="width:34px;height:34px;font-size:13px">${(u.nickname||u.username).charAt(0).toUpperCase()}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(u.nickname||u.username)}</div>
-            <div style="font-size:11px;color:var(--text2)">@${u.username}</div>
-          </div>
-          <button class="btn-secondary" style="padding:5px 10px;font-size:11px"><i class="ti ti-user-plus"></i></button>
-        </div>`).join('');
+      resultsEl.innerHTML = searchResults.map(u => {
+        const initials = (u.nickname || u.username).charAt(0).toUpperCase();
+        const friendBadge = u.isFriend
+          ? `<span style="font-size:10px;color:var(--success);background:rgba(34,197,94,.12);border-radius:6px;padding:2px 7px;border:1px solid rgba(34,197,94,.25)"><i class="ti ti-check"></i> Друг</span>`
+          : `<button class="btn-secondary" style="padding:5px 10px;font-size:11px;flex-shrink:0" onclick="sendFriendReqTo('${u.username}')"><i class="ti ti-user-plus"></i> Добавить</button>`;
+        return `
+          <div class="af-result-item" style="cursor:${u.isFriend?'default':'pointer'}" ${!u.isFriend ? `onclick="sendFriendReqTo('${u.username}')"` : ''}>
+            <div class="avatar sm" style="flex-shrink:0">${initials}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(u.nickname || u.username)}</div>
+              <div style="font-size:11px;color:var(--text2)">@${u.username}</div>
+            </div>
+            ${friendBadge}
+          </div>`;
+      }).join('');
     } catch {
       resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Ошибка поиска</div>';
     }
