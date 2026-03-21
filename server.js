@@ -181,7 +181,36 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// ========== API ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
+// ========== ICE SERVERS (динамические TURN credentials) ==========
+// Если у вас есть API ключ от metered.ca — укажите его в .env как METERED_API_KEY
+// Бесплатный план: https://dashboard.metered.ca/  (50 GB/месяц бесплатно)
+app.get('/api/ice-servers', async (req, res) => {
+  const METERED_API_KEY = process.env.METERED_API_KEY;
+  if (METERED_API_KEY) {
+    try {
+      const response = await axios.get(
+        `https://aura.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`,
+        { timeout: 5000 }
+      );
+      return res.json(response.data);
+    } catch (err) {
+      console.log('[ICE] metered.ca недоступен, возвращаем статичные серверы');
+    }
+  }
+  // Fallback — статичные серверы (всегда работают как запасной вариант)
+  res.json([
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:openrelay.metered.ca:3478' },
+    { urls: 'turn:openrelay.metered.ca:3478',  credential: 'openrelayproject', username: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443',   credential: 'openrelayproject', username: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443',  credential: 'openrelayproject', username: 'openrelayproject' },
+    { urls: 'turn:freeturn.net:3478',           credential: 'free',             username: 'free' },
+    { urls: 'turns:freeturn.tel:5349',          credential: 'free',             username: 'free' },
+  ]);
+});
+
+
 app.use(express.json());
 
 // Хэш пароля (простой SHA-256 без внешних зависимостей)
