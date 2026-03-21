@@ -746,43 +746,35 @@ option { background: var(--surface2); color: var(--text); }
 .msg-circle-wrap {
   position: relative; display: inline-block;
   margin-top: 2px; cursor: pointer;
-  border-radius: 12px; overflow: hidden;
-  transition: transform .3s cubic-bezier(.16,1,.3,1),
-              box-shadow .3s cubic-bezier(.16,1,.3,1),
-              width .3s cubic-bezier(.16,1,.3,1),
-              height .3s cubic-bezier(.16,1,.3,1);
+  border-radius: 50%; overflow: hidden;
+  width: 130px; height: 130px;
+  transition: width .35s cubic-bezier(.16,1,.3,1),
+              height .35s cubic-bezier(.16,1,.3,1),
+              border-radius .35s cubic-bezier(.16,1,.3,1),
+              box-shadow .35s cubic-bezier(.16,1,.3,1);
   user-select: none; -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
 }
-.msg-circle-wrap:hover { box-shadow: 0 6px 24px rgba(0,0,0,.3); }
-/* Expand on play — Telegram style */
-.msg-circle-wrap.vc-expanded {
-  transform: scale(2.4);
-  transform-origin: left bottom;
-  box-shadow: 0 16px 48px rgba(0,0,0,.6);
-  z-index: 9999;
-  position: relative;
-}
-.msg-row.own .msg-circle-wrap.vc-expanded { transform-origin: right bottom; }
+.msg-circle-wrap:hover { box-shadow: 0 4px 20px rgba(0,0,0,.3); }
 .msg-circle {
-  width: 130px; height: 130px;
-  border-radius: 12px;
+  width: 100%; height: 100%;
+  border-radius: 50%;
   object-fit: cover; display: block;
-  border: none; outline: none;
+  transition: width .35s cubic-bezier(.16,1,.3,1),
+              height .35s cubic-bezier(.16,1,.3,1);
 }
-/* Overlay with play button */
 .vc-overlay {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,.28);
-  border-radius: 14px;
+  border-radius: 50%;
   transition: opacity .18s;
   pointer-events: none;
 }
 .vc-overlay.playing { opacity: 0; }
 .vc-overlay.playing:hover { opacity: .6; }
 .vc-play-ico { font-size: 28px; color: #fff; filter: drop-shadow(0 1px 4px rgba(0,0,0,.4)); }
-/* Duration badge */
 .vc-dur {
   position: absolute; bottom: 6px; right: 8px;
   font-size: 11px; font-weight: 600; color: #fff;
@@ -790,6 +782,59 @@ option { background: var(--surface2); color: var(--text); }
   border-radius: 6px; padding: 1px 5px;
   pointer-events: none; letter-spacing: .02em;
   font-variant-numeric: tabular-nums;
+}
+.msgs.vc-msgs-expanded { overflow: visible; }
+.msg-bubble:has(.msg-circle-wrap) {
+  padding: 0 !important; background: transparent !important;
+  box-shadow: none !important; border-radius: 50% !important;
+  overflow: visible !important;
+}
+/* Fullscreen overlay */
+.vc-fullscreen {
+  position: fixed; inset: 0; z-index: 9950;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0);
+  transition: background .25s ease;
+  pointer-events: none;
+}
+.vc-fullscreen.open { background: rgba(0,0,0,.92); pointer-events: all; }
+.vc-fs-bg {
+  position: absolute; inset: 0;
+  backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px);
+  transition: backdrop-filter .25s;
+}
+.vc-fullscreen.open .vc-fs-bg { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.vc-fs-video {
+  position: relative; z-index: 1;
+  width: min(88vw, 88vh); height: min(88vw, 88vh);
+  max-width: 560px; max-height: 560px;
+  border-radius: 50%;
+  object-fit: cover; display: block;
+  box-shadow: 0 20px 80px rgba(0,0,0,.7);
+  opacity: 0; transform: scale(.85);
+  transition: opacity .25s ease, transform .3s cubic-bezier(.16,1,.3,1);
+  cursor: pointer;
+}
+.vc-fullscreen.open .vc-fs-video { opacity: 1; transform: scale(1); }
+.vc-fs-ui {
+  position: absolute; z-index: 2;
+  top: 0; left: 0; right: 0; padding: 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  pointer-events: none;
+}
+.vc-fs-close {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255,255,255,.15); border: none; color: #fff; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; pointer-events: all;
+  transition: background .15s; backdrop-filter: blur(8px);
+}
+.vc-fs-close:hover { background: rgba(255,255,255,.28); }
+.vc-fs-timer {
+  font-size: 13px; color: rgba(255,255,255,.85);
+  font-variant-numeric: tabular-nums;
+  background: rgba(0,0,0,.45); padding: 4px 12px; border-radius: 99px;
+  backdrop-filter: blur(8px);
 }
 
 /* Reaction row */
