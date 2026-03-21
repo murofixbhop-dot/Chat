@@ -255,6 +255,7 @@
         <span class="brand-name">Aura</span>
       </div>
       <div class="sb-hdr-actions">
+        <button class="icon-btn" title="Aura AI" onclick="openAiChat()"><i class="ti ti-robot"></i></button>
         <button class="icon-btn" title="Настройки (⌘,)" onclick="openSettings()"><i class="ti ti-settings"></i></button>
         <button class="icon-btn" title="Новый чат" onclick="openAddFriend()"><i class="ti ti-edit"></i></button>
       </div>
@@ -504,6 +505,36 @@
       <button class="btn-ghost w-full" style="font-size:13px" onclick="resendEmailVerify()">
         <i class="ti ti-refresh"></i> Отправить снова
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- AI CHAT MODAL -->
+<div id="aiChatModal" class="modal-bg">
+  <div class="modal-card" style="max-width:520px;height:70vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+    <div class="modal-hd" style="padding:16px 20px;flex-shrink:0;border-bottom:1px solid var(--border)">
+      <h2><i class="ti ti-robot"></i> Aura AI</h2>
+      <div style="display:flex;gap:6px">
+        <button class="icon-btn sm" title="Очистить историю" onclick="aiClearHistory()"><i class="ti ti-trash"></i></button>
+        <button class="icon-btn sm" onclick="closeAiChat()"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+    <div id="aiMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="ai-welcome">
+        <i class="ti ti-robot" style="font-size:36px;color:var(--accent);display:block;text-align:center;margin-bottom:8px"></i>
+        <p style="text-align:center;color:var(--text2);font-size:14px">Привет! Я Aura AI. Чем могу помочь?</p>
+      </div>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0">
+      <div class="input-box" style="display:flex;align-items:flex-end;gap:8px;background:var(--surface3);border-radius:16px;padding:6px 6px 6px 14px">
+        <textarea id="aiInput" class="msg-ta" placeholder="Спросите что-нибудь…" rows="1"
+          style="background:transparent;border:none;box-shadow:none;padding:6px 0;min-height:32px"
+          oninput="autoGrow(this)"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend()}"></textarea>
+        <button id="aiSendBtn" class="send-fab" style="width:36px;height:36px;border-radius:10px;flex-shrink:0" onclick="aiSend()">
+          <i class="ti ti-send"></i>
+        </button>
+      </div>
     </div>
   </div>
 </div>
