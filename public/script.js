@@ -1523,11 +1523,34 @@ function showCtxFriend(e, friend) {
 }
 
 function showCtx(e) {
-  const x = Math.min(e.clientX, window.innerWidth  - ctxMenu.offsetWidth  - 8);
-  const y = Math.min(e.clientY, window.innerHeight - ctxMenu.offsetHeight - 8);
-  ctxMenu.style.left = x + 'px';
-  ctxMenu.style.top  = y + 'px';
+  // Сначала размещаем в точке клика (за экраном не видно)
+  ctxMenu.style.left = '-9999px';
+  ctxMenu.style.top  = '-9999px';
   ctxMenu.classList.add('open');
+
+  // После рендера — измеряем реальный размер и корректируем позицию
+  requestAnimationFrame(() => {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const mw = ctxMenu.offsetWidth  || 180;
+    const mh = ctxMenu.offsetHeight || 80;
+
+    // Исходная точка — cursor/touch
+    let x = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+    let y = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+
+    // Если меню выходит за правый край — открываем левее курсора
+    if (x + mw + 8 > W) x = Math.max(8, x - mw);
+    // Если меню выходит за нижний край — открываем выше курсора
+    if (y + mh + 8 > H) y = Math.max(8, y - mh);
+
+    // Финальные ограничения
+    x = Math.max(8, Math.min(x, W - mw - 8));
+    y = Math.max(8, Math.min(y, H - mh - 8));
+
+    ctxMenu.style.left = x + 'px';
+    ctxMenu.style.top  = y + 'px';
+  });
 }
 
 function closeCtx() { ctxMenu.classList.remove('open'); }
