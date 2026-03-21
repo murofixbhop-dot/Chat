@@ -760,7 +760,7 @@ app.post('/api/create-group', async (req, res) => {
   if (!users.has(creator)) return res.status(404).json({ error: 'Создатель не найден' });
 
   const groupId = `group_${Date.now()}`;
-  const group = { id: groupId, name, members: [creator, ...(members || [])] };
+  const group = { id: groupId, name, creator, avatar: null, members: [creator, ...(members || [])] };
   for (const member of group.members) {
     if (users.has(member)) {
       const user = users.get(member);
@@ -770,12 +770,51 @@ app.post('/api/create-group', async (req, res) => {
     }
   }
   await saveUsers();
-  // Notify all group members in real-time
-  [...members, creator].forEach(m => {
+  [...(members || []), creator].forEach(m => {
     const sid = userSockets.get(m);
     if (sid) io.to(sid).emit('group-created', { groupId, name, creator });
   });
   res.json({ success: true, groupId });
+});
+
+// Обновить название группы (только создатель)
+app.post('/api/update-group', async (req, res) => {
+  const { username, groupId, name, avatar } = req.body;
+  if (!username || !groupId) return res.status(400).json({ error: 'Нет данных' });
+
+  let updated = false;
+  let groupData = null;
+
+  // Обновляем группу у всех её участников
+  for (const [uname, userData] of users.entries()) {
+    if (!userData.groups) continue;
+    const idx = userData.groups.findIndex(g => g.id === groupId);
+    if (idx === -1) continue;
+
+    // Проверяем что редактор — создатель
+    if (userData.groups[idx].creator !== username && uname === username) {
+      return res.status(403).json({ error: 'Только создатель может редактировать группу' });
+    }
+
+    if (name !== undefined)   userData.groups[idx].name   = name;
+    if (avatar !== undefined) userData.groups[idx].avatar = avatar;
+    groupData = userData.groups[idx];
+    users.set(uname, userData);
+    updated = true;
+  }
+
+  if (!updated) return res.status(404).json({ error: 'Группа не найдена' });
+  await saveUsers();
+
+  // Оповещаем всех участников
+  if (groupData) {
+    groupData.members.forEach(m => {
+      const sid = userSockets.get(m);
+      if (sid) io.to(sid).emit('group-updated', { groupId, name: groupData.name, avatar: groupData.avatar });
+    });
+  }
+
+  res.json({ success: true });
 });
 
 // ========== ХРАНЕНИЕ ИСТОРИИ ==========
