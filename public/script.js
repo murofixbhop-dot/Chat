@@ -2369,7 +2369,8 @@ function _aiAddFileCard(file) {
 const _aiToolLabels = {
   web_search: '🔍 Поиск', get_weather: '🌤 Погода', calculate: '🔢 Калькулятор',
   get_time: '🕐 Время', convert_currency: '💱 Валюта', translate: '🌐 Перевод',
-  create_file: '📄 Файл', analyze_code: '🔬 Код'
+  create_file: '📄 Файл создан', analyze_archive: '📦 Архив', generate_data: '📊 Данные',
+  get_crypto: '₿ Крипто', url_info: '🔗 URL'
 };
 
 async function aiSend() {
