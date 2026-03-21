@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
+// nodemailer используется для Gmail SMTP (загружается динамически в sendRecoveryEmail)
 
 const app = express();
 const server = http.createServer(app);
@@ -80,62 +81,79 @@ let recoveryCodes = new Map(); // username -> { code, expiry, email }
 // Если домена нет — используй: onboarding@resend.dev (только для теста)
 
 async function sendRecoveryEmail(to, code) {
-  const RESEND_KEY  = process.env.RESEND_API_KEY;
-  const RESEND_FROM = process.env.RESEND_FROM || 'onboarding@resend.dev';
+  const BREVO_KEY  = process.env.BREVO_API_KEY;
+  const GMAIL_USER = process.env.GMAIL_USER;
+  const GMAIL_PASS = process.env.GMAIL_PASS;
 
-  const html = `
-    <div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:32px 24px;background:#0c0c0f;border-radius:16px;color:#e8e8f2">
-      <div style="text-align:center;margin-bottom:24px">
-        <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px">
-          <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
-            <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white"/>
-          </svg>
-        </div>
-        <h2 style="margin:16px 0 4px;font-size:20px;font-weight:700">Aura Messenger</h2>
-        <p style="color:#9898b0;font-size:13px;margin:0">Восстановление пароля</p>
-      </div>
-      <p style="color:#9898b0;font-size:14px;margin-bottom:20px">Используй этот код для сброса пароля. Код действует <strong style="color:#e8e8f2">15 минут</strong>.</p>
-      <div style="text-align:center;letter-spacing:12px;font-size:36px;font-weight:800;padding:20px;background:#18181f;border-radius:12px;border:1px solid #2a2a3a;color:#6366f1;font-family:monospace">
-        ${code}
-      </div>
-      <p style="color:#5c5c78;font-size:12px;margin-top:20px;text-align:center">Если вы не запрашивали сброс пароля — проигнорируйте это письмо.</p>
-    </div>`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/></head>
+<body style="margin:0;padding:0;background:#f4f4f8;font-family:Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f8;padding:40px 0">
+<tr><td align="center">
+<table width="420" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.10)">
+<tr><td style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:36px 40px 28px;text-align:center">
+  <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700">Aura Messenger</h1>
+  <p style="margin:6px 0 0;color:rgba(255,255,255,.75);font-size:14px">Восстановление пароля</p>
+</td></tr>
+<tr><td style="padding:36px 40px">
+  <p style="margin:0 0 8px;font-size:16px;font-weight:600;color:#1a1a2e">Твой код подтверждения</p>
+  <p style="margin:0 0 28px;font-size:14px;color:#6b7280;line-height:1.6">Используй этот код для сброса пароля. Действует <strong style="color:#374151">15 минут</strong>.</p>
+  <div style="background:#f8f7ff;border:2px solid #e0e0ff;border-radius:14px;padding:28px 20px;text-align:center;margin-bottom:28px">
+    <div style="font-size:42px;font-weight:800;letter-spacing:14px;color:#6366f1;font-family:monospace;padding-left:14px">${code}</div>
+  </div>
+  <p style="margin:0;font-size:13px;color:#9ca3af">Если ты не запрашивал(а) сброс — просто проигнорируй это письмо.</p>
+</td></tr>
+<tr><td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #f0f0f0;text-align:center">
+  <p style="margin:0;font-size:12px;color:#9ca3af">© 2026 Aura Messenger</p>
+</td></tr>
+</table></td></tr></table>
+</body></html>`;
 
-  if (!RESEND_KEY) {
-    // Dev режим — код в консоли
-    console.log(`\n📧 ══════════════════════════════════`);
-    console.log(`📧 RESEND_API_KEY не задан!`);
-    console.log(`📧 Код для ${to}: ${code}`);
-    console.log(`📧 Чтобы слать реальные письма:`);
-    console.log(`📧   1. Зарегайся на resend.com (бесплатно)`);
-    console.log(`📧   2. Получи API ключ`);
-    console.log(`📧   3. Добавь RESEND_API_KEY=re_xxx в .env`);
-    console.log(`📧 ══════════════════════════════════\n`);
-    return;
+  // ── Способ 1: Brevo (ex-Sendinblue) — бесплатно 300 писем/день, домен не нужен
+  if (BREVO_KEY) {
+    try {
+      const resp = await axios.post('https://api.brevo.com/v3/smtp/email', {
+        sender:  { name: 'Aura Messenger', email: 'noreply@aura-messenger.com' },
+        to:      [{ email: to }],
+        subject: 'Код восстановления — Aura Messenger',
+        htmlContent: html,
+        textContent: `Код восстановления Aura Messenger: ${code}\nДействует 15 минут.`,
+      }, {
+        headers: {
+          'api-key':      BREVO_KEY,
+          'Content-Type': 'application/json',
+          'Accept':       'application/json',
+        },
+        timeout: 10000,
+      });
+      console.log('📧 Email отправлен через Brevo, messageId:', resp.data?.messageId);
+      return;
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message;
+      console.error('📧 Brevo ошибка:', msg);
+      throw new Error(msg);
+    }
   }
 
-  try {
-    const resp = await axios.post('https://api.resend.com/emails', {
-      from:    RESEND_FROM,
-      to:      [to],
-      subject: 'Код восстановления Aura Messenger',
-      html,
-      text: `Код восстановления пароля Aura: ${code}\nДействует 15 минут.`
-    }, {
-      headers: {
-        'Authorization': `Bearer ${RESEND_KEY}`,
-        'Content-Type':  'application/json'
-      },
-      timeout: 8000
-    });
-    console.log('📧 Email отправлен через Resend:', resp.data?.id);
-  } catch (err) {
-    const msg = err.response?.data?.message || err.message;
-    console.error('📧 Ошибка отправки email:', msg);
-    // Не падаем — просто логируем код в консоль как fallback
-    console.log(`📧 Fallback — код для ${to}: ${code}`);
-    throw new Error('Не удалось отправить email: ' + msg);
+  // ── Способ 2: Gmail SMTP (запасной)
+  if (GMAIL_USER && GMAIL_PASS) {
+    try {
+      const nodemailer = require('nodemailer');
+      const t = nodemailer.createTransport({ service: 'gmail', auth: { user: GMAIL_USER, pass: GMAIL_PASS } });
+      await t.sendMail({ from: `"Aura Messenger" <${GMAIL_USER}>`, to, subject: 'Код восстановления — Aura Messenger', html, text: `Код: ${code}. Действует 15 минут.` });
+      console.log('📧 Email отправлен через Gmail:', to);
+      return;
+    } catch (err) {
+      console.error('📧 Gmail ошибка:', err.message);
+      throw new Error(err.message);
+    }
   }
+
+  // ── Dev режим — код в консоли
+  console.log(`\n📧 ════════════════════════════════`);
+  console.log(`📧 Email не настроен. Код для ${to}: [ ${code} ]`);
+  console.log(`📧 Добавь в .env: BREVO_API_KEY=xkeysib-xxx`);
+  console.log(`📧 ════════════════════════════════\n`);
 }
 
 async function loadUsers() {
@@ -366,8 +384,13 @@ app.post('/api/request-password-reset', async (req, res) => {
     await sendRecoveryEmail(userData.recoveryEmail, code);
     res.json({ success: true, message: 'Код отправлен на email' });
   } catch (err) {
-    // Код уже сохранён — даже если email не дошёл, можно попробовать ещё раз
-    res.json({ success: false, error: 'Не удалось отправить email: ' + err.message });
+    // Если email не настроен — всё равно продолжаем (код есть в консоли сервера)
+    const isDevMode = !process.env.GMAIL_USER && !process.env.RESEND_API_KEY;
+    if (isDevMode) {
+      res.json({ success: true, message: 'Код выведен в консоль сервера (email не настроен)' });
+    } else {
+      res.json({ success: false, error: 'Не удалось отправить email: ' + err.message });
+    }
   }
 });
 
@@ -412,22 +435,45 @@ app.post('/api/update-recovery-email', async (req, res) => {
 
 // Поиск пользователей по nickname
 app.post('/api/search-users', async (req, res) => {
-  const { query } = req.body;
-  if (!query || query.trim().length < 2) {
+  const { query, requester } = req.body;
+  if (!query || query.trim().length < 1) {
     return res.json({ users: [] });
   }
   const q = query.toLowerCase().trim();
   const results = [];
+
+  // Получаем список друзей запрашивающего чтобы пометить их
+  const requesterData = requester && users.has(requester) ? users.get(requester) : null;
+  const myFriends = new Set(requesterData?.friends || []);
+
   for (const [username, userData] of users.entries()) {
-    if (username === q) continue; // skip exact match (it's the user themselves)
+    // Пропускаем себя
+    if (username === requester) continue;
+
     const nickname = (userData.nickname || '').toLowerCase();
-    const uname = username.toLowerCase();
+    const uname    = username.toLowerCase();
+
     if (nickname.includes(q) || uname.includes(q)) {
-      results.push({ username, nickname: userData.nickname || username, avatar: userData.avatar || null });
+      results.push({
+        username,
+        nickname:  userData.nickname || username,
+        avatar:    userData.avatar   || null,
+        isFriend:  myFriends.has(username),
+      });
     }
-    if (results.length >= 10) break;
+    if (results.length >= 20) break;
   }
-  res.json({ users: results });
+
+  // Сортируем: сначала точные совпадения по нику, потом по логину
+  results.sort((a, b) => {
+    const aNick = (a.nickname || '').toLowerCase();
+    const bNick = (b.nickname || '').toLowerCase();
+    const aScore = (aNick === q || a.username === q) ? 0 : (aNick.startsWith(q) || a.username.startsWith(q)) ? 1 : 2;
+    const bScore = (bNick === q || b.username === q) ? 0 : (bNick.startsWith(q) || b.username.startsWith(q)) ? 1 : 2;
+    return aScore - bScore;
+  });
+
+  res.json({ users: results.slice(0, 10) });
 });
 
 // Отправить заявку в друзья
@@ -511,9 +557,10 @@ app.post('/api/get-user-data', (req, res) => {
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   const userData = users.get(username);
   res.json({
-    friends: userData.friends || [],
-    friendRequests: userData.friendRequests || [],
-    groups: userData.groups || []
+    friends:       userData.friends       || [],
+    friendRequests:userData.friendRequests|| [],
+    groups:        userData.groups        || [],
+    recoveryEmail: userData.recoveryEmail || null,
   });
 });
 
@@ -522,7 +569,10 @@ app.post('/api/get-avatar', (req, res) => {
   const { username } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   const userData = users.get(username);
-  res.json({ avatar: userData.avatar || null });
+  res.json({
+    avatar:   userData.avatar    || null,
+    nickname: userData.nickname  || null,
+  });
 });
 
 // Создать группу (упрощённо)
