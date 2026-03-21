@@ -694,19 +694,27 @@ const AI_TOOLS = [
     type: 'function',
     function: {
       name: 'ask_user',
-      description: 'Задаёт пользователю уточняющий вопрос с вариантами ответов. Используй когда запрос неоднозначен или нужно уточнить детали перед выполнением задачи.',
+      description: 'Задаёт пользователю уточняющий вопрос с вариантами ответов. Поддерживает мультиселект (несколько вариантов) и последовательность вопросов. Используй когда нужно уточнить детали перед выполнением.',
       parameters: {
         type: 'object',
         properties: {
-          question: { type: 'string', description: 'Вопрос к пользователю' },
-          options:  {
+          questions: {
             type: 'array',
-            items: { type: 'string' },
-            description: 'Варианты ответов (2-5 вариантов). Можно оставить пустым для свободного ввода.'
-          },
-          allow_custom: { type: 'boolean', description: 'Разрешить свободный ввод вместо/дополнительно к вариантам' }
+            description: 'Список вопросов (1-5). Показываются по одному — после ответа на первый появляется второй.',
+            items: {
+              type: 'object',
+              properties: {
+                question:     { type: 'string', description: 'Текст вопроса' },
+                options:      { type: 'array', items: { type: 'string' }, description: 'Варианты ответов' },
+                multi_select: { type: 'boolean', description: 'true = можно выбрать несколько вариантов' },
+                allow_custom: { type: 'boolean', description: 'Разрешить свободный ввод' },
+                required:     { type: 'boolean', description: 'false = можно пропустить' }
+              },
+              required: ['question']
+            }
+          }
         },
-        required: ['question']
+        required: ['questions']
       }
     }
   }
@@ -1163,8 +1171,13 @@ img{border-radius:10px}p{margin:16px 0 0;color:#6366f1;font-size:14px;word-break
 
     // ── Вопрос пользователю ───────────────────────────────────────────────
     if (name === 'ask_user') {
-      const opts = args.options || [];
-      return `ASK_USER:${JSON.stringify({ question: args.question, options: opts, allow_custom: args.allow_custom || false })}`;
+      // Поддерживаем оба формата: { questions: [...] } и старый { question, options }
+      let questions = args.questions;
+      if (!questions) {
+        // Совместимость со старым форматом
+        questions = [{ question: args.question || '', options: args.options || [], allow_custom: args.allow_custom, required: true }];
+      }
+      return `ASK_USER:${JSON.stringify({ questions })}`;
     }
 
     return 'Инструмент не найден: ' + name;
@@ -1242,6 +1255,7 @@ app.post('/api/ai-chat', async (req, res) => {
     const msg1 = resp1.data.choices?.[0]?.message;
     let toolsUsed    = [];
     let createdFiles = [];
+    let pendingAskUser = null;
 
     if (msg1?.tool_calls?.length) {
       history.push(msg1);
@@ -1255,29 +1269,31 @@ app.post('/api/ai-chat', async (req, res) => {
         const result = await executeTool(toolName, args, username);
 
         if (result.startsWith('ASK_USER:')) {
-          // Немедленно возвращаем вопрос пользователю
-          const askData = JSON.parse(result.slice('ASK_USER:'.length));
-          history.push({ role: 'assistant', content: `[ask_user]: ${askData.question}` });
-          return res.json({
-            success: true,
-            reply: '',
-            toolsUsed,
-            createdFiles,
-            askUser: askData,
-          });
+          // Добавляем tool_result чтобы история не сломалась
+          toolResults.push({ role: 'tool', tool_call_id: tc.id, content: 'Вопрос задан пользователю.' });
+          toolsUsed.push(toolName);
+          // Парсим вопрос для отправки клиенту
+          pendingAskUser = JSON.parse(result.slice('ASK_USER:'.length));
         } else if (result.startsWith('FILE_CREATED:')) {
           const parts = result.split(':');
           const fileId = parts[1], name2 = parts[2], desc = parts[3];
           const fileObj = (aiUserFiles.get(username) || []).find(f => f.id === fileId);
           if (fileObj) createdFiles.push({ id: fileId, name: name2, content: fileObj.content, description: desc });
           toolResults.push({ role: 'tool', tool_call_id: tc.id, content: `Файл "${name2}" создан и будет отправлен пользователю.` });
+          toolsUsed.push(toolName);
         } else {
           toolResults.push({ role: 'tool', tool_call_id: tc.id, content: result });
+          toolsUsed.push(toolName);
         }
-        toolsUsed.push(toolName);
       }
 
       toolResults.forEach(tr => history.push(tr));
+
+      // Если есть pending вопрос — возвращаем его без второго запроса
+      if (pendingAskUser) {
+        history.push({ role: 'assistant', content: `Вопрос: ${pendingAskUser.question}` });
+        return res.json({ success: true, reply: '', toolsUsed, createdFiles, askUser: pendingAskUser });
+      }
 
       const resp2 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
         model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
