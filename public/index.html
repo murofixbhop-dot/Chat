@@ -209,9 +209,12 @@
         </div>
       </div>
       <label class="lbl mt"><i class="ti ti-mail"></i> Email для восстановления</label>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
         <input type="email" id="stRecoveryEmail" class="field" placeholder="email@example.com" style="flex:1"/>
         <button class="btn-secondary" onclick="saveRecoveryEmail()" style="padding:12px 16px"><i class="ti ti-check"></i></button>
+      </div>
+      <div id="emailVerifiedBadge" style="display:none;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--success)">
+        <i class="ti ti-circle-check"></i> Email подтверждён
       </div>
       <p class="sub-text" style="margin-top:4px">Используется для восстановления пароля</p>
       <button class="btn-danger w-full mt" onclick="deleteAccount()"><i class="ti ti-trash"></i> Удалить аккаунт</button>
@@ -474,6 +477,33 @@
           <i class="ti ti-lock-check"></i> Сменить пароль
         </button>
       </div>
+    </div>
+  </div>
+</div>
+<!-- EMAIL VERIFY MODAL -->
+<div id="emailVerifyModal" class="modal-bg">
+  <div class="modal-card" style="max-width:380px">
+    <div class="modal-hd">
+      <h2><i class="ti ti-mail-check"></i> Подтверждение email</h2>
+      <button class="icon-btn" onclick="closeEmailVerifyModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:20px 20px 24px;display:flex;flex-direction:column;gap:14px">
+      <p id="evHint" class="sub-text" style="text-align:center;font-size:13px;color:var(--text2)">Код отправлен на ваш email</p>
+      <div class="code-inputs">
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,0)" onkeydown="evBack(event,this,0)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,1)" onkeydown="evBack(event,this,1)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,2)" onkeydown="evBack(event,this,2)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,3)" onkeydown="evBack(event,this,3)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,4)" onkeydown="evBack(event,this,4)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,5)" onkeydown="evBack(event,this,5)"/>
+      </div>
+      <div id="evErr" class="login-err" style="margin:0;text-align:center"></div>
+      <button id="evConfirmBtn" class="btn-primary w-full" onclick="confirmEmailCode()">
+        <i class="ti ti-check"></i> Подтвердить
+      </button>
+      <button class="btn-ghost w-full" style="font-size:13px" onclick="resendEmailVerify()">
+        <i class="ti ti-refresh"></i> Отправить снова
+      </button>
     </div>
   </div>
 </div>
