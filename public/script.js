@@ -306,41 +306,69 @@ let _isRegisterMode = false;
 
 function toggleRegisterMode() {
   _isRegisterMode = !_isRegisterMode;
-  const emailWrap = $('loginEmailWrap');
-  const subText = $('loginSubText');
-  const btn = $('loginBtn');
-  const registerLink = $('registerLink');
+  const emailWrap  = $('loginEmailWrap');
+  const subText    = $('loginSubText');
+  const btn        = $('loginBtn');
+  const regText    = $('registerLinkText');
   const forgotLink = $('forgotLink');
 
   if (_isRegisterMode) {
     emailWrap.style.display = 'flex';
     subText.textContent = 'Создайте аккаунт';
     btn.innerHTML = 'Зарегистрироваться <i class="ti ti-user-plus"></i>';
-    registerLink.textContent = 'Войти';
+    if (regText) regText.textContent = 'Войти';
     forgotLink.style.display = 'none';
     $('loginEmailInput')?.focus();
   } else {
     emailWrap.style.display = 'none';
     subText.textContent = 'Введите имя и пароль';
     btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
-    registerLink.textContent = 'Регистрация';
+    if (regText) regText.textContent = 'Регистрация';
     forgotLink.style.display = '';
   }
 }
 
-async function openForgotPass() {
-  const username = await dialog({
-    icon: 'ti-key', iconType: 'info',
-    title: 'Восстановление пароля',
-    msg: 'Введите имя пользователя',
-    input: true, placeholder: 'Имя пользователя',
-    ok: 'Отправить код', cancel: 'Отмена'
-  });
-  if (!username) return;
+// ── FORGOT PASSWORD — красивый модал ──────────────────────────────────────
+let _forgotUsername = '';
+let _forgotCode     = '';
 
-  const btn = $('loginBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>';
+function openForgotPass() {
+  _forgotUsername = '';
+  _forgotCode     = '';
+  // Reset to step 1
+  ['forgotStep1','forgotStep2','forgotStep3'].forEach((id, i) => {
+    const el = $(id);
+    if (el) el.classList.toggle('active', i === 0);
+  });
+  const un = $('forgotUsername');
+  if (un) un.value = '';
+  ['forgotErr1','forgotErr2','forgotErr3'].forEach(id => {
+    const el = $(id); if (el) el.textContent = '';
+  });
+  const m = $('forgotModal');
+  if (m) m.classList.add('open');
+  setTimeout(() => $('forgotUsername')?.focus(), 80);
+}
+
+function closeForgotPass() {
+  const m = $('forgotModal');
+  if (m) m.classList.remove('open');
+}
+
+// Закрытие по клику на фон
+document.addEventListener('DOMContentLoaded', () => {
+  const m = $('forgotModal');
+  if (m) m.addEventListener('click', e => { if (e.target === m) closeForgotPass(); });
+});
+
+async function sendForgotCode() {
+  const username = $('forgotUsername')?.value?.trim();
+  const err = $('forgotErr1');
+  if (!username) { if (err) err.textContent = 'Введите имя пользователя'; return; }
+  if (err) err.textContent = '';
+
+  const btn = document.querySelector('#forgotStep1 .btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Отправка…'; }
 
   try {
     const r = await fetch('/api/request-password-reset', {
@@ -349,48 +377,98 @@ async function openForgotPass() {
     });
     const d = await r.json();
     if (d.success) {
-      toast(d.message, 'success');
-      // Show code entry dialog
-      setTimeout(async () => {
-        const code = await dialog({
-          icon: 'ti-lock', iconType: 'info',
-          title: 'Введите код',
-          msg: 'Код отправлен на ваш email. Введите его вместе с новым паролем.',
-          input: true, placeholder: '6-значный код',
-          ok: 'Сбросить пароль', cancel: 'Отмена'
-        });
-        if (!code) return;
-
-        const newPass = await dialog({
-          icon: 'ti-lock-open', iconType: 'info',
-          title: 'Новый пароль',
-          msg: 'Введите новый пароль (мин. 4 символа)',
-          input: true, placeholder: 'Новый пароль…',
-          ok: 'Сохранить', cancel: 'Отмена'
-        });
-        if (!newPass) return;
-
-        const r2 = await fetch('/api/reset-password', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, code, newPassword: newPass })
-        });
-        const d2 = await r2.json();
-        if (d2.success) {
-          toast('Пароль изменён! Теперь войдите с новым паролем.', 'success');
-          _isRegisterMode = false;
-          toggleRegisterMode();
-        } else {
-          toast(d2.error || 'Ошибка сброса', 'error');
-        }
-      }, 500);
+      _forgotUsername = username;
+      // Switch to step 2
+      $('forgotStep1').classList.remove('active');
+      $('forgotStep2').classList.add('active');
+      setTimeout(() => document.querySelector('.code-digit')?.focus(), 80);
+      toast('Код отправлен на email', 'success');
     } else {
-      toast(d.error || 'Ошибка', 'error');
+      if (err) err.textContent = d.error || 'Ошибка. Проверьте имя пользователя.';
     }
   } catch {
-    toast('Нет соединения', 'error');
+    if (err) err.textContent = 'Нет соединения с сервером';
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-send"></i> Отправить код'; }
+  }
+}
+
+// Автопереход между цифрами кода
+function codeDigit(input, idx) {
+  const digits = document.querySelectorAll('.code-digit');
+  const val = input.value.replace(/\D/g, '');
+  input.value = val.slice(-1);
+  if (val && idx < 5) digits[idx + 1]?.focus();
+  // Если все заполнены — автосабмит
+  const code = [...digits].map(d => d.value).join('');
+  if (code.length === 6) verifyForgotCode();
+}
+
+function codeBack(e, input, idx) {
+  if (e.key === 'Backspace' && !input.value && idx > 0) {
+    const digits = document.querySelectorAll('.code-digit');
+    digits[idx - 1].value = '';
+    digits[idx - 1].focus();
+  }
+}
+
+async function verifyForgotCode() {
+  const digits = document.querySelectorAll('.code-digit');
+  const code = [...digits].map(d => d.value).join('');
+  const err = $('forgotErr2');
+  if (code.length < 6) { if (err) err.textContent = 'Введите все 6 цифр'; return; }
+  if (err) err.textContent = '';
+  _forgotCode = code;
+  // Go to step 3
+  $('forgotStep2').classList.remove('active');
+  $('forgotStep3').classList.add('active');
+  setTimeout(() => $('forgotNewPass')?.focus(), 80);
+}
+
+function toggleForgotPass() {
+  const inp = $('forgotNewPass');
+  const ico = $('forgotEyeIco');
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  if (ico) ico.className = inp.type === 'password' ? 'ti ti-eye' : 'ti ti-eye-off';
+}
+
+async function resetPassword() {
+  const newPass = $('forgotNewPass')?.value?.trim();
+  const err = $('forgotErr3');
+  if (!newPass || newPass.length < 4) {
+    if (err) err.textContent = 'Пароль должен быть не менее 4 символов';
+    return;
+  }
+  if (err) err.textContent = '';
+
+  const btn = document.querySelector('#forgotStep3 .btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>'; }
+
+  try {
+    const r = await fetch('/api/reset-password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: _forgotUsername, code: _forgotCode, newPassword: newPass })
+    });
+    const d = await r.json();
+    if (d.success) {
+      closeForgotPass();
+      toast('Пароль изменён! Войдите с новым паролем.', 'success');
+      // Prefill username
+      const inp = $('loginInput');
+      if (inp) { inp.value = _forgotUsername; $('loginPassInput')?.focus(); }
+    } else {
+      if (err) err.textContent = d.error || 'Неверный или просроченный код';
+      // Go back to step 2
+      $('forgotStep3').classList.remove('active');
+      $('forgotStep2').classList.add('active');
+      document.querySelectorAll('.code-digit').forEach(d => d.value = '');
+      document.querySelector('.code-digit')?.focus();
+    }
+  } catch {
+    if (err) err.textContent = 'Нет соединения с сервером';
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-lock-check"></i> Сменить пароль'; }
   }
 }
 
@@ -1755,6 +1833,14 @@ function selectTheme(t) {
   _pendingTheme = t;
   $('thDark')?.classList.toggle('active', t === 'dark');
   $('thLight')?.classList.toggle('active', t === 'light');
+  // Apply instantly — no separate button needed
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('aura_theme', t);
+  userData.theme = t;
+  fetch('/api/update-profile', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: currentUser, theme: t })
+  }).catch(() => {});
 }
 
 function applyTheme() {
