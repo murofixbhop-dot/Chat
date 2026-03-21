@@ -22,13 +22,20 @@ const splashInterval = setInterval(() => {
   if (splashFill) splashFill.style.width = splashProgress + '%';
 }, 200);
 
+let _splashHidden = false;
 function hideSplash() {
-  if (!splash || !splash.classList.contains('active')) return;
+  if (_splashHidden) return;
+  _splashHidden = true;
   clearInterval(splashInterval);
+  if (!splash) return;
   if (splashFill) splashFill.style.width = '100%';
   setTimeout(() => {
     splash.classList.add('fade-out');
-    setTimeout(() => splash.classList.remove('active'), 420);
+    splash.style.opacity = '0';
+    setTimeout(() => {
+      splash.classList.remove('active');
+      splash.style.display = 'none';
+    }, 420);
   }, 250);
 }
 
@@ -59,8 +66,8 @@ socket.on('connect_error', () => {
 });
 socket.on('reconnect_failed', () => hideSplash());
 
-// Hide splash after max 700ms regardless
-setTimeout(hideSplash, 700);
+// Hide splash after max 2500ms regardless (covers slow B2 response)
+setTimeout(hideSplash, 2500);
 
 // ══════════════════════════════════════════════
 // PALETTE / THEME BOOTSTRAP  ← КРАСОТА
@@ -218,6 +225,7 @@ function applyPalette(name) {
 // LOGIN  ← УДОБСТВО
 // ══════════════════════════════════════════════
 function showLogin() {
+  hideSplash(); // ← ИСПРАВЛЕНИЕ: всегда прячем splash перед показом логина
   loginScreen.style.display = 'flex';
   loginScreen.classList.add('open');
   setTimeout(() => $('loginInput')?.focus(), 100);
@@ -387,6 +395,7 @@ async function openForgotPass() {
 }
 
 function startSession(user) {
+  hideSplash(); // ← ИСПРАВЛЕНИЕ: прячем splash при старте сессии
   currentUser = user.username;
   userData    = user;
   if (user.avatar) userAvatars[user.username] = user.avatar;
@@ -438,12 +447,15 @@ function showPushNotification(title, body, tag) {
 const savedUser = localStorage.getItem('aura_user');
 const savedPass = localStorage.getItem('aura_pass');
 if (savedUser && savedPass) {
+  // Timeout: если B2 / сервер не отвечает за 4с — показываем логин
+  const restoreTimeout = setTimeout(() => showLogin(), 4000);
   fetch('/api/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: savedUser, password: savedPass })
   })
   .then(r => r.json())
   .then(d => {
+    clearTimeout(restoreTimeout);
     if (d.success) { startSession(d.user); }
     else {
       // Password changed or account deleted — show login
@@ -452,7 +464,7 @@ if (savedUser && savedPass) {
       showLogin();
     }
   })
-  .catch(() => showLogin());
+  .catch(() => { clearTimeout(restoreTimeout); showLogin(); });
 } else {
   showLogin();
 }
@@ -1776,15 +1788,45 @@ async function deleteAccount() {
 //  CALLS — WebRTC + Socket.IO (clean rewrite)
 // ══════════════════════════════════════════════════════════
 
-const ICE_SERVERS = [
+// ══════════════════════════════════════════════
+// ICE / TURN  — динамические TURN credentials
+// ══════════════════════════════════════════════
+// Статичный fallback (бесплатный openrelay — работает, но ненадёжно)
+const ICE_SERVERS_STATIC = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
+  // openrelay — бесплатный публичный TURN (нет SLA, но лучше чем ничего)
   { urls: 'stun:openrelay.metered.ca:3478' },
-  { urls: 'turn:openrelay.metered.ca:3478', credential: 'openrelayproject', username: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:3478',       credential: 'openrelayproject', username: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443',         credential: 'openrelayproject', username: 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443',        credential: 'openrelayproject', username: 'openrelayproject' },
+  // Freeturn — ещё один публичный TURN
+  { urls: 'turn:freeturn.net:3478',                credential: 'free',             username: 'free' },
+  { urls: 'turns:freeturn.tel:5349',               credential: 'free',             username: 'free' },
 ];
+
+let ICE_SERVERS = ICE_SERVERS_STATIC; // будет обновлён ниже если есть API ключ
+
+// ── Если задан METERED_API_KEY в .env — получаем временные TURN credentials ──
+// Для этого в server.js добавьте эндпоинт /api/ice-servers (уже добавлено в server.js)
+async function fetchIceServers() {
+  try {
+    const r = await fetch('/api/ice-servers', { method: 'GET' });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (Array.isArray(data) && data.length > 0) {
+      ICE_SERVERS = data;
+      console.log('[ICE] Получены динамические TURN серверы:', data.length);
+    }
+  } catch (e) {
+    console.log('[ICE] Используем статичные TURN серверы');
+  }
+}
+// Загружаем ICE серверы при старте (не блокирует UI)
+fetchIceServers();
 
 // State
 let rtcPeer      = null;
@@ -2325,12 +2367,12 @@ async function _recreatePeerWithTurnFallback() {
   rtcPeer?.close();
   rtcPeer = null;
 
-  // TURN-first config — prioritize TURN relay for restrictive NATs
+  // TURN-first config — приоритет TURN relay для строгих NAT
   const TURN_FIRST = [
-    { urls: 'turn:openrelay.metered.ca:3478', credential: 'openrelayproject', username: 'openrelayproject' },
+    ...ICE_SERVERS.filter(s => s.urls?.toString().startsWith('turn') || s.urls?.toString().startsWith('turns')),
+    // Добавляем STUN в конец как запасной вариант
+    { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:openrelay.metered.ca:3478' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
   ];
 
   rtcPeer = new RTCPeerConnection({
