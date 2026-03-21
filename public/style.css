@@ -317,19 +317,24 @@ option { background: var(--surface2); color: var(--text); }
   border: 1px solid var(--border2);
   border-radius: 14px; padding: 6px;
   min-width: 180px;
+  max-width: min(240px, calc(100vw - 16px)); /* не выходит за экран */
   box-shadow: var(--shadow);
+  /* Анимация от точки открытия */
   animation: scaleIn .15s cubic-bezier(.16,1,.3,1);
+  transform-origin: top left;
 }
 .ctx-menu.open { display: block; }
 .ctx-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; border-radius: 9px;
+  padding: 11px 14px; border-radius: 9px;
   font-size: 13px; font-weight: 500; color: var(--text);
   cursor: pointer; transition: background .12s;
+  white-space: nowrap;
+  min-height: 40px; /* удобно тапать на мобиле */
 }
 .ctx-item:hover { background: var(--hover); }
 .ctx-item.danger { color: var(--danger); }
-.ctx-item i { font-size: 16px; color: var(--text2); width: 18px; }
+.ctx-item i { font-size: 16px; color: var(--text2); width: 18px; flex-shrink: 0; }
 .ctx-item.danger i { color: var(--danger); }
 .ctx-sep { height: 1px; background: var(--border); margin: 4px 8px; }
 
