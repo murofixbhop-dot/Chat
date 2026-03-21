@@ -770,6 +770,7 @@ async function executeTool(name, args, username) {
     // ── Поиск в интернете ──────────────────────────────────────────────────
     if (name === 'web_search') {
       const q = args.query || '';
+      aiSseEmit(username, 'log', { icon: '🔍', text: `Ищу: ${q}`, type: 'search' });
       let result = '';
 
       // Пробуем Wikipedia API для фактических запросов
@@ -811,6 +812,7 @@ async function executeTool(name, args, username) {
 
     // ── Погода ────────────────────────────────────────────────────────────
     if (name === 'get_weather') {
+      aiSseEmit(username, 'log', { icon: '🌤', text: `Погода: ${args.city}`, type: 'fetch' });
       const geoR = await axios.get(
         `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(args.city)}&count=1&language=ru&format=json`,
         { timeout: 6000 }
@@ -848,6 +850,7 @@ async function executeTool(name, args, username) {
     // ── Конвертация валют ──────────────────────────────────────────────────
     if (name === 'convert_currency') {
       const { from, to, amount = 1 } = args;
+      aiSseEmit(username, 'log', { icon: '💱', text: `Курс ${from} → ${to}`, type: 'fetch' });
       const fromU = from.toUpperCase();
       const toU   = to.toUpperCase();
       if (toU === fromU) return `1 ${fromU} = 1 ${toU}`;
@@ -908,6 +911,7 @@ async function executeTool(name, args, username) {
 
     // ── Перевод текста ────────────────────────────────────────────────────
     if (name === 'translate') {
+      aiSseEmit(username, 'log', { icon: '🌐', text: `Перевод → ${args.target_lang}`, type: 'process' });
       try {
         const r = await axios.get(
           `https://api.mymemory.translated.net/get?q=${encodeURIComponent(args.text.slice(0, 500))}&langpair=auto|${args.target_lang}`,
@@ -922,6 +926,7 @@ async function executeTool(name, args, username) {
     if (name === 'create_file') {
       const { filename, content, description } = args;
       if (!filename || !content) return 'Не указано имя файла или содержимое';
+      aiSseEmit(username, 'log', { icon: '📄', text: `Создаю файл: ${filename}`, type: 'write' });
       const { fileId, safe } = aiSaveFile(username, filename, content, description);
       return `FILE_CREATED:${fileId}:${safe}:${description || ''}:${content.length}`;
     }
@@ -936,6 +941,7 @@ async function executeTool(name, args, username) {
     // ── Генерация данных ──────────────────────────────────────────────────
     if (name === 'generate_data') {
       const { type, description, rows = 10 } = args;
+      aiSseEmit(username, 'log', { icon: '📊', text: `Генерирую ${type.toUpperCase()} данные...`, type: 'process' });
       // Генерируем через второй запрос к Mistral
       const genResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
         model: 'mistral-small-latest',
@@ -959,6 +965,7 @@ async function executeTool(name, args, username) {
 
     // ── Криптовалюты ──────────────────────────────────────────────────────
     if (name === 'get_crypto') {
+      aiSseEmit(username, 'log', { icon: '₿', text: `Крипто: ${args.coins}`, type: 'fetch' });
       const coins = (args.coins || 'BTC,ETH').split(',').map(c => c.trim().toLowerCase()).join(',');
       const r = await axios.get(
         `https://api.coingecko.com/api/v3/simple/price?ids=${coins}&vs_currencies=usd,rub&include_24hr_change=true`,
@@ -991,6 +998,7 @@ async function executeTool(name, args, username) {
 
     // ── Wikipedia поиск ───────────────────────────────────────────────────
     if (name === 'wiki_search') {
+      aiSseEmit(username, 'log', { icon: '📖', text: `Wikipedia: ${args.query}`, type: 'search' });
       const lang = args.language || (/[а-яё]/i.test(args.query) ? 'ru' : 'en');
       const q = encodeURIComponent(args.query);
       // Получаем извлечение статьи
@@ -1013,6 +1021,7 @@ async function executeTool(name, args, username) {
 
     // ── Котировки акций ───────────────────────────────────────────────────
     if (name === 'get_stock') {
+      aiSseEmit(username, 'log', { icon: '📈', text: `Котировка: ${args.symbol}`, type: 'fetch' });
       const sym = (args.symbol || '').toUpperCase().trim();
       try {
         // Yahoo Finance API (неофициальный, бесплатный)
@@ -1239,6 +1248,7 @@ app.post('/api/ai-chat', async (req, res) => {
   try {
     const isDebug  = session.debugMode;
     const model    = imageData ? 'pixtral-12b-2409' : (isDebug ? 'mistral-large-latest' : 'mistral-small-latest');
+    aiSseEmit(username, 'log', { icon: '🤖', text: 'Думаю...', type: 'think' });
     const resp1 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
       model,
       messages:    [{ role: 'system', content: currentSystemPrompt }, ...history],
@@ -1295,23 +1305,72 @@ app.post('/api/ai-chat', async (req, res) => {
         return res.json({ success: true, reply: '', toolsUsed, createdFiles, askUser: pendingAskUser });
       }
 
-      const resp2 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
-        model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
-        messages: [{ role: 'system', content: currentSystemPrompt }, ...history],
-        max_tokens: 3000,
-        temperature: isDebug ? 0.4 : 0.7,
-        ...(isDebug ? { safe_prompt: false } : {}),
-      }, {
-        headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
-        timeout: 30000,
-      });
-
-      const reply = resp2.data.choices?.[0]?.message?.content || 'Готово';
+      // Стриминг финального ответа через SSE
+      aiSseEmit(username, 'log', { icon: '🤖', text: 'Формирую ответ...', type: 'think' });
+      let reply = '';
+      try {
+        const streamResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+          model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
+          messages: [{ role: 'system', content: currentSystemPrompt }, ...history],
+          max_tokens: 3000,
+          temperature: isDebug ? 0.4 : 0.7,
+          stream: true,
+          ...(isDebug ? { safe_prompt: false } : {}),
+        }, {
+          headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+          responseType: 'stream',
+          timeout: 45000,
+        });
+        await new Promise((resolve, reject) => {
+          let buf = '';
+          streamResp.data.on('data', chunk => {
+            buf += chunk.toString();
+            const lines = buf.split('\n');
+            buf = lines.pop();
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              const raw = line.slice(6).trim();
+              if (raw === '[DONE]') return resolve();
+              try {
+                const j = JSON.parse(raw);
+                const delta = j.choices?.[0]?.delta?.content || '';
+                if (delta) {
+                  reply += delta;
+                  aiSseEmit(username, 'chunk', { text: delta });
+                }
+              } catch {}
+            }
+          });
+          streamResp.data.on('end', resolve);
+          streamResp.data.on('error', reject);
+        });
+      } catch {
+        // fallback non-stream
+        const r2 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+          model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
+          messages: [{ role: 'system', content: currentSystemPrompt }, ...history],
+          max_tokens: 3000, temperature: isDebug ? 0.4 : 0.7,
+          ...(isDebug ? { safe_prompt: false } : {}),
+        }, { headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 30000 });
+        reply = r2.data.choices?.[0]?.message?.content || 'Готово';
+      }
+      if (!reply) reply = 'Готово';
       history.push({ role: 'assistant', content: reply });
+      aiSseEmit(username, 'done', {});
       res.json({ success: true, reply, toolsUsed, createdFiles });
     } else {
+      // Прямой ответ без инструментов — тоже стримим если есть SSE клиент
       const reply = msg1?.content || 'Нет ответа';
       history.push({ role: 'assistant', content: reply });
+      if (aiSseClients.has(username)) {
+        // Имитируем стриминг — разбиваем на слова
+        const words = reply.split(' ');
+        for (const w of words) {
+          aiSseEmit(username, 'chunk', { text: w + ' ' });
+          await new Promise(r => setTimeout(r, 15));
+        }
+        aiSseEmit(username, 'done', {});
+      }
       res.json({ success: true, reply, toolsUsed: [], createdFiles });
     }
   } catch (err) {
@@ -1332,7 +1391,128 @@ app.get('/api/ai-file/:username/:fileId', (req, res) => {
   res.send(file.content);
 });
 
-// ── Список файлов в базе пользователя ────────────────────────────────────────
+// ── Скачать несколько файлов как ZIP ─────────────────────────────────────────
+app.post('/api/ai-files-zip', (req, res) => {
+  const { username, fileIds } = req.body;
+  if (!username || !fileIds?.length) return res.status(400).json({ error: 'Нет данных' });
+
+  const userFiles = aiUserFiles.get(username) || [];
+  const toZip = userFiles.filter(f => fileIds.includes(f.id));
+  if (!toZip.length) return res.status(404).send('Файлы не найдены');
+
+  // Простой ZIP без внешних зависимостей — используем Node.js zlib + manual ZIP
+  // Для простоты пакуем как tar-подобный текстовый архив если zlib недоступен
+  try {
+    const zlib = require('zlib');
+    // Создаём ZIP вручную (минимальный формат)
+    const buffers = [];
+    const localHeaders = [];
+    let offset = 0;
+
+    toZip.forEach(file => {
+      const nameBytes    = Buffer.from(file.name, 'utf8');
+      const contentBytes = Buffer.from(file.content, 'utf8');
+      const compressed   = zlib.deflateRawSync(contentBytes);
+      const crc          = crc32(contentBytes);
+
+      const localHeader = Buffer.alloc(30 + nameBytes.length);
+      localHeader.writeUInt32LE(0x04034b50, 0);  // signature
+      localHeader.writeUInt16LE(20, 4);           // version
+      localHeader.writeUInt16LE(0, 6);            // flags
+      localHeader.writeUInt16LE(8, 8);            // deflate
+      localHeader.writeUInt16LE(0, 10);           // mod time
+      localHeader.writeUInt16LE(0, 12);           // mod date
+      localHeader.writeUInt32LE(crc, 14);
+      localHeader.writeUInt32LE(compressed.length, 18);
+      localHeader.writeUInt32LE(contentBytes.length, 22);
+      localHeader.writeUInt16LE(nameBytes.length, 26);
+      localHeader.writeUInt16LE(0, 28);
+      nameBytes.copy(localHeader, 30);
+
+      localHeaders.push({ nameBytes, compressed, crc, size: contentBytes.length, offset });
+      offset += localHeader.length + compressed.length;
+      buffers.push(localHeader, compressed);
+    });
+
+    // Central directory
+    const cdEntries = [];
+    localHeaders.forEach(({ nameBytes, compressed, crc, size, offset: off }) => {
+      const cd = Buffer.alloc(46 + nameBytes.length);
+      cd.writeUInt32LE(0x02014b50, 0);
+      cd.writeUInt16LE(20, 4); cd.writeUInt16LE(20, 6);
+      cd.writeUInt16LE(0, 8); cd.writeUInt16LE(8, 10);
+      cd.writeUInt16LE(0, 12); cd.writeUInt16LE(0, 14);
+      cd.writeUInt32LE(crc, 16);
+      cd.writeUInt32LE(compressed.length, 20);
+      cd.writeUInt32LE(size, 24);
+      cd.writeUInt16LE(nameBytes.length, 28);
+      cd.writeUInt16LE(0, 30); cd.writeUInt16LE(0, 32);
+      cd.writeUInt16LE(0, 34); cd.writeUInt16LE(0, 36);
+      cd.writeUInt32LE(0, 38); cd.writeUInt32LE(off, 42);
+      nameBytes.copy(cd, 46);
+      cdEntries.push(cd);
+    });
+
+    const cdBuf = Buffer.concat(cdEntries);
+    const eocd  = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(0, 4); eocd.writeUInt16LE(0, 6);
+    eocd.writeUInt16LE(localHeaders.length, 8);
+    eocd.writeUInt16LE(localHeaders.length, 10);
+    eocd.writeUInt32LE(cdBuf.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    eocd.writeUInt16LE(0, 20);
+
+    buffers.push(cdBuf, eocd);
+    const zipBuf = Buffer.concat(buffers);
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="aura_ai_files.zip"`);
+    res.send(zipBuf);
+  } catch (e) {
+    // Fallback: объединяем файлы в один текстовый файл
+    const combined = toZip.map(f => `=== ${f.name} ===\n${f.content}`).join('\n\n');
+    res.setHeader('Content-Disposition', 'attachment; filename="aura_ai_files.txt"');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(combined);
+  }
+});
+
+function crc32(buf) {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c;
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+// ── SSE стриминг для AI (прогресс инструментов + итоговый ответ) ──────────────
+const aiSseClients = new Map(); // username -> res
+
+app.get('/api/ai-stream/:username', (req, res) => {
+  const { username } = req.params;
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+  aiSseClients.set(username, res);
+  req.on('close', () => aiSseClients.delete(username));
+});
+
+function aiSseEmit(username, event, data) {
+  const client = aiSseClients.get(username);
+  if (!client) return;
+  try {
+    client.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  } catch {}
+}
+
+
 app.get('/api/ai-files/:username', (req, res) => {
   const files = (aiUserFiles.get(req.params.username) || []).map(f => ({
     id: f.id, name: f.name, ttl: f.ttl,
