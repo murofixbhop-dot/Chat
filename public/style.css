@@ -572,7 +572,7 @@ option { background: var(--surface2); color: var(--text); }
   display: flex; align-items: center; gap: 11px;
   padding: 10px 12px; border-radius: 13px; cursor: pointer;
   transition: background .15s, transform .1s; position: relative;
-  animation: slideLeft .2s ease;
+
 }
 .chat-item:hover { background: var(--hover); }
 .chat-item:active { transform: scale(.98); }
