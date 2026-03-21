@@ -963,7 +963,6 @@ function addMessage(msg) {
         src="${u}"
         onmousedown="event.preventDefault()"
         onclick="vcTogglePlay('${vid_id}')"
-        ondblclick="viewMedia('${u}','video')"
         onloadedmetadata="vcShowDuration('${vid_id}')"></video>
       <div class="vc-overlay" id="${vid_id}_ov">
         <i class="ti ti-player-play vc-play-ico"></i>
@@ -3265,121 +3264,233 @@ function addCallRecord(icon, label, extra, time) {
 // ══════════════════════════════════════════════
 // VIDEO CIRCLE — fullscreen viewer  ← КРАСОТА
 // ══════════════════════════════════════════════
+// ── Video Circle ─────────────────────────────────────────────────────────
+// Одно нажатие:  expand в чате (сообщения плавно отодвигаются)
+// Двойное:       fullscreen на весь экран
+// Конец видео:   автоматически схлопывается обратно
+
+let _vcExpandedId   = null; // id текущего развёрнутого кружка
+let _vcExpandTimer  = null; // таймер для различения одиночного/двойного тапа
+
 function vcTogglePlay(id) {
   const v    = document.getElementById(id);
-  if (!v) return;
+  const wrap = document.getElementById(id + '_wrap');
+  if (!v || !wrap) return;
 
-  // Find the existing fullscreen viewer for this video
-  const existingViewer = document.querySelector(`.vc-fullscreen[data-vid="${id}"]`);
-  if (existingViewer) {
-    // Already open — just close it
-    closeVcFullscreen(id);
+  const now = Date.now();
+  const lastTap = wrap._lastTap || 0;
+  const isDouble = (now - lastTap) < 350;
+  wrap._lastTap = now;
+
+  if (isDouble) {
+    // ─── Двойное нажатие → fullscreen ───────────────────────────────────
+    clearTimeout(_vcExpandTimer);
+    _vcOpenFullscreen(id);
     return;
   }
+
+  // ─── Одиночное нажатие — даём паузу чтобы различить двойное ──────────
+  clearTimeout(_vcExpandTimer);
+  _vcExpandTimer = setTimeout(() => {
+    if (_vcExpandedId === id) {
+      // Уже развёрнут — схлопнуть
+      _vcCollapse(id);
+    } else {
+      // Схлопнуть предыдущий если есть
+      if (_vcExpandedId) _vcCollapse(_vcExpandedId);
+      // Развернуть этот
+      _vcExpand(id);
+    }
+  }, 220);
+}
+
+// ─── Expand в чате ────────────────────────────────────────────────────────
+function _vcExpand(id) {
+  const v    = document.getElementById(id);
+  const wrap = document.getElementById(id + '_wrap');
+  const row  = wrap?.closest('.msg-row');
+  if (!v || !wrap) return;
+
+  _vcExpandedId = id;
+
+  // Вычисляем целевой размер — вписываем в 70% ширины чата, макс 400px
+  const msgs     = document.getElementById('messages');
+  const msgsW    = msgs ? msgs.clientWidth : window.innerWidth;
+  const baseSize = 130; // исходный размер
+  const target   = Math.min(Math.floor(msgsW * 0.7), 400);
+  const scale    = target / baseSize;
+
+  // Добавляем класс expanded на .msgs чтобы разрешить overflow
+  if (msgs) msgs.classList.add('vc-msgs-expanded');
+
+  // Плавно раздвигаем высоту wrap чтобы сообщения отъехали
+  wrap.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1), box-shadow .35s';
+  wrap.style.width  = target + 'px';
+  wrap.style.height = target + 'px';
+  wrap.style.borderRadius = '50%';
+  wrap.style.boxShadow = '0 16px 48px rgba(0,0,0,.5)';
+  wrap.style.zIndex = '100';
+  wrap.style.position = 'relative';
+
+  // Масштабируем видео внутри
+  v.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1)';
+  v.style.width  = target + 'px';
+  v.style.height = target + 'px';
+  v.style.borderRadius = '50%';
+
+  // Прячем overlay (иконку play)
+  const ov = document.getElementById(id + '_ov');
+  if (ov) { ov.style.transition = 'opacity .2s'; ov.style.opacity = '0'; }
+
+  // Запускаем
+  v.play().catch(() => {});
+  v.onended = () => _vcCollapse(id);
+
+  // При клике на развёрнутый — пауза/плей
+  wrap._expandHandler = () => {
+    if (v.paused) v.play().catch(() => {});
+    else          v.pause();
+  };
+  wrap.addEventListener('click', wrap._expandHandler);
+}
+
+// ─── Collapse обратно ─────────────────────────────────────────────────────
+function _vcCollapse(id) {
+  const v    = document.getElementById(id);
+  const wrap = document.getElementById(id + '_wrap');
+  if (!wrap) return;
+
+  _vcExpandedId = null;
+
+  const msgs = document.getElementById('messages');
+
+  // Возвращаем размеры
+  wrap.style.transition = 'width .3s cubic-bezier(.16,1,.3,1), height .3s cubic-bezier(.16,1,.3,1), box-shadow .3s';
+  wrap.style.width  = '';
+  wrap.style.height = '';
+  wrap.style.borderRadius = '';
+  wrap.style.boxShadow = '';
+  wrap.style.zIndex = '';
+  wrap.style.position = '';
+
+  if (v) {
+    v.style.transition = 'width .3s cubic-bezier(.16,1,.3,1), height .3s cubic-bezier(.16,1,.3,1)';
+    v.style.width  = '';
+    v.style.height = '';
+    v.style.borderRadius = '';
+    v.pause();
+    v.onended = null;
+  }
+
+  // Восстанавливаем overlay
+  const ov = document.getElementById(id + '_ov');
+  if (ov) { ov.style.opacity = ''; ov.style.transition = ''; }
+
+  // Убираем expandHandler
+  if (wrap._expandHandler) {
+    wrap.removeEventListener('click', wrap._expandHandler);
+    wrap._expandHandler = null;
+  }
+
+  setTimeout(() => {
+    if (msgs) msgs.classList.remove('vc-msgs-expanded');
+  }, 320);
+}
+
+// ─── Fullscreen ───────────────────────────────────────────────────────────
+function _vcOpenFullscreen(id) {
+  const v = document.getElementById(id);
+  if (!v) return;
+
+  // Если уже развёрнут инлайн — схлопываем сначала
+  if (_vcExpandedId === id) _vcCollapse(id);
 
   const src = v.src || v.getAttribute('src');
   if (!src) return;
 
-  // Create fullscreen overlay — like Telegram/TikTok
   const overlay = document.createElement('div');
   overlay.className = 'vc-fullscreen';
   overlay.dataset.vid = id;
   overlay.innerHTML = `
-    <div class="vc-fs-inner">
-      <video class="vc-fs-video" src="${src}" autoplay playsinline></video>
-      <div class="vc-fs-controls">
-        <button class="vc-fs-close" onclick="closeVcFullscreen('${id}')">
-          <i class="ti ti-x"></i>
-        </button>
-        <div class="vc-fs-timer" id="vc_fs_timer_${id}">0:00</div>
-      </div>
+    <div class="vc-fs-bg"></div>
+    <video class="vc-fs-video" src="${src}" playsinline autoplay></video>
+    <div class="vc-fs-ui">
+      <button class="vc-fs-close" onclick="_vcCloseFullscreen('${id}')">
+        <i class="ti ti-x"></i>
+      </button>
+      <div class="vc-fs-timer" id="vc_fs_t_${id}">0:00</div>
     </div>`;
 
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add('open'));
 
   const fsV = overlay.querySelector('.vc-fs-video');
-  const fsTimer = overlay.querySelector('.vc-fs-timer');
+  fsV.currentTime = v.currentTime;
 
-  // Sync playback state with original
-  if (v.paused) {
-    fsV.pause();
-  } else {
-    fsV.play().catch(() => {});
-  }
+  // Таймер
+  fsV.addEventListener('timeupdate', () => {
+    const el = document.getElementById('vc_fs_t_' + id);
+    if (!el || !isFinite(fsV.duration)) return;
+    const fmt = t => `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+    el.textContent = fmt(fsV.currentTime) + ' / ' + fmt(fsV.duration);
+  });
 
-  // Sync timer
-  let fsInterval = null;
-  const updateTimer = () => {
-    if (!fsV || !fsTimer) return;
-    const m = Math.floor(fsV.currentTime / 60);
-    const s = Math.floor(fsV.currentTime % 60);
-    fsTimer.textContent = `${m}:${s.toString().padStart(2,'0')}`;
-    if (isFinite(fsV.duration)) {
-      const dm = Math.floor(fsV.duration / 60);
-      const ds = Math.floor(fsV.duration % 60);
-      fsTimer.textContent += ` / ${dm}:${ds.toString().padStart(2,'0')}`;
-    }
-  };
-  fsV.addEventListener('timeupdate', updateTimer);
-  fsInterval = setInterval(updateTimer, 500);
-
-  // Sync play/pause with original on interaction
+  // Пауза/плей по тапу на видео
   fsV.addEventListener('click', () => {
-    if (fsV.paused) {
-      fsV.play().catch(() => {});
-      v.play().catch(() => {});
-    } else {
-      fsV.pause();
-      v.pause();
-    }
-    updateTimer();
+    if (fsV.paused) fsV.play().catch(()=>{});
+    else fsV.pause();
   });
 
-  // Close on backdrop click
+  // Закрытие
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay || e.target.classList.contains('vc-fs-inner')) {
-      closeVcFullscreen(id);
-    }
+    if (e.target === overlay) _vcCloseFullscreen(id);
   });
 
-  // Close on Escape
-  const escHandler = (e) => {
-    if (e.key === 'Escape') { closeVcFullscreen(id); document.removeEventListener('keydown', escHandler); }
+  const escH = (e) => {
+    if (e.key === 'Escape') { _vcCloseFullscreen(id); document.removeEventListener('keydown', escH); }
   };
-  document.addEventListener('keydown', escHandler);
+  document.addEventListener('keydown', escH);
+  overlay._escH = escH;
 
-  // Sync ended
-  v.onended = () => closeVcFullscreen(id);
-  fsV.onended = () => closeVcFullscreen(id);
+  fsV.onended = () => _vcCloseFullscreen(id);
 
-  // Pause original inline video to save resources
+  // Пауза оригинала
   v.pause();
 }
 
-function closeVcFullscreen(id) {
+function _vcCloseFullscreen(id) {
   const overlay = document.querySelector(`.vc-fullscreen[data-vid="${id}"]`);
   if (!overlay) return;
 
-  overlay.classList.remove('open');
   const fsV = overlay.querySelector('.vc-fs-video');
+  const v   = document.getElementById(id);
+  if (v && fsV) v.currentTime = fsV.currentTime;
+  if (fsV) fsV.pause();
 
-  // Sync playback position back to original
-  const v = document.getElementById(id);
-  if (v && fsV) {
-    v.currentTime = fsV.currentTime;
-    if (!fsV.paused) v.play().catch(() => {});
-  }
+  if (overlay._escH) document.removeEventListener('keydown', overlay._escH);
 
-  setTimeout(() => overlay.remove(), 300);
+  overlay.classList.remove('open');
+  setTimeout(() => overlay.remove(), 280);
 
-  // Update play button state on original
-  const wrap = document.getElementById(id + '_wrap');
-  const ov = wrap ? wrap.querySelector('.vc-overlay') : null;
+  // Обновляем overlay оригинала
+  const ov  = document.getElementById(id + '_ov');
   const ico = ov?.querySelector('.vc-play-ico');
   if (ico) ico.className = 'ti ti-player-play vc-play-ico';
-  if (ov) ov.classList.remove('playing');
+  if (ov)  ov.classList.remove('playing');
 }
+
+// Оставляем для совместимости (ondblclick="viewMedia" в старом HTML)
+function closeVcFullscreen(id) { _vcCloseFullscreen(id); }
+
+function vcShowDuration(id) {
+  const v   = document.getElementById(id);
+  const dur = document.getElementById(id + '_dur');
+  if (!v || !dur || !isFinite(v.duration)) return;
+  const m = Math.floor(v.duration / 60);
+  const s = Math.floor(v.duration % 60);
+  dur.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+
 function vcShowDuration(id) {
   const v   = document.getElementById(id);
   const dur = document.getElementById(id + '_dur');
