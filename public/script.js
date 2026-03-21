@@ -2220,6 +2220,7 @@ let _aiDebugMode = false;
 function openAiChat() {
   $('aiChatModal').classList.add('open');
   aiRefreshFileBadge();
+  _aiConnectSse(); // подключаемся к SSE стримингу
   setTimeout(() => $('aiInput')?.focus(), 80);
 }
 
@@ -2323,14 +2324,7 @@ function _aiAddMessage(role, content, attachment) {
 
   // Markdown рендер
   if (content) {
-    const rendered = esc(content)
-      .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-        `<pre style="background:rgba(0,0,0,.25);padding:10px;border-radius:10px;overflow-x:auto;font-family:monospace;font-size:12px;margin:6px 0;white-space:pre-wrap">${code}</pre>`)
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px">$1</code>')
-      .replace(/^• (.+)$/gm, '<li style="margin-left:12px">$1</li>')
-      .replace(/\n/g, '<br>');
-    bubbleHtml += rendered;
+    bubbleHtml += _aiRenderMarkdown(content);
   }
 
   bubble.innerHTML = bubbleHtml;
@@ -2361,24 +2355,64 @@ function _aiAddTyping() {
   return wrap;
 }
 
+// Трекер созданных файлов в текущем ответе (для ZIP скачивания)
+let _aiLastCreatedFiles = [];
+
 function _aiAddFileCard(file) {
+  _aiLastCreatedFiles.push(file);
   const msgs = $('aiMessages');
   if (!msgs) return;
+
+  // Если несколько файлов — добавляем кнопку ZIP над карточками
+  if (_aiLastCreatedFiles.length > 1) {
+    // Обновляем или создаём ZIP-строку
+    let zipBar = $('aiZipBar');
+    if (!zipBar) {
+      zipBar = document.createElement('div');
+      zipBar.id = 'aiZipBar';
+      zipBar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 14px;margin:4px 0 4px 36px;max-width:300px;background:var(--accent-dim);border:1px solid var(--border2);border-radius:10px;font-size:12px;cursor:pointer';
+      zipBar.onclick = _aiDownloadZip;
+      msgs.insertBefore(zipBar, msgs.querySelector('[id^=aiZipBar]')?.nextSibling || null);
+    }
+    zipBar.innerHTML = `<i class="ti ti-archive" style="color:var(--accent)"></i><span style="color:var(--accent);font-weight:600">Скачать все ${_aiLastCreatedFiles.length} файла как ZIP</span><i class="ti ti-download" style="color:var(--accent);margin-left:auto"></i>`;
+  }
+
   const card = document.createElement('div');
   card.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:14px;margin:4px 0 4px 36px;max-width:300px;';
   const ext = file.name.split('.').pop().toUpperCase();
+  const icons = { py:'ti-brand-python', js:'ti-brand-javascript', html:'ti-brand-html5', css:'ti-brand-css3', json:'ti-json', csv:'ti-table', md:'ti-markdown', sh:'ti-terminal', sql:'ti-database' };
+  const icon = icons[file.name.split('.').pop()?.toLowerCase()] || 'ti-file-code';
   card.innerHTML = `
-    <i class="ti ti-file-code" style="font-size:22px;color:var(--accent);flex-shrink:0"></i>
+    <i class="ti ${icon}" style="font-size:22px;color:var(--accent);flex-shrink:0"></i>
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(file.name)}</div>
-      <div style="font-size:11px;color:var(--text2)">${ext} · ${file.content?.length || 0} байт · хранится 5 ответов</div>
+      <div style="font-size:11px;color:var(--text2)">${ext} · ${(file.content?.length||0).toLocaleString()} байт · хранится 5 ответов</div>
+      ${file.description ? `<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.description)}</div>` : ''}
     </div>
     <a href="/api/ai-file/${encodeURIComponent(currentUser)}/${file.id}" download="${encodeURIComponent(file.name)}"
-       style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;flex-shrink:0">
+       style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;flex-shrink:0" title="Скачать">
       <i class="ti ti-download"></i>
     </a>`;
   msgs.appendChild(card);
   msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function _aiDownloadZip() {
+  const ids = _aiLastCreatedFiles.map(f => f.id);
+  try {
+    const r = await fetch('/api/ai-files-zip', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, fileIds: ids })
+    });
+    if (!r.ok) { toast('Ошибка создания ZIP', 'error'); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'aura_ai_files.zip';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch { toast('Ошибка скачивания', 'error'); }
 }
 
 const _aiToolLabels = {
@@ -2484,72 +2518,75 @@ function _aiRenderQuestionBar() {
     bar.appendChild(btnGrid);
   }
 
-  // Свободный ввод
-  let customInput = null;
-  if (q.allow_custom || !q.options?.length) {
-    const inputWrap = document.createElement('div');
-    inputWrap.style.cssText = 'display:flex;gap:6px;margin-bottom:6px';
-    customInput = document.createElement('input');
-    customInput.type = 'text';
-    customInput.placeholder = q.options?.length ? 'Или введите свой вариант…' : 'Ваш ответ…';
-    customInput.style.cssText = `flex:1;padding:7px 12px;background:var(--surface2);
-      border:1.5px solid var(--border);border-radius:10px;color:var(--text);
-      font-size:13px;outline:none;font-family:inherit;`;
-    customInput.onfocus = () => customInput.style.borderColor = 'var(--accent)';
-    customInput.onblur  = () => customInput.style.borderColor = 'var(--border)';
-    customInput.onkeydown = (e) => { if (e.key === 'Enter') confirmQ(); };
-    inputWrap.appendChild(customInput);
-    bar.appendChild(inputWrap);
-    setTimeout(() => customInput.focus(), 80);
-  }
-
-  // Кнопки действий
-  const actWrap = document.createElement('div');
-  actWrap.style.cssText = 'display:flex;gap:6px;justify-content:flex-end';
-
-  // Пропустить
-  if (canSkip || !q.options?.length || q.allow_custom) {
-    const skipBtn = document.createElement('button');
-    skipBtn.style.cssText = `padding:6px 14px;border-radius:10px;background:var(--surface3);
-      border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;`;
-    skipBtn.textContent = 'Пропустить';
-    skipBtn.onclick = () => {
-      _aiQuestionAnswers[_aiQuestionIdx] = null;
-      _aiQuestionIdx++;
-      _aiRenderQuestionBar();
-    };
-    actWrap.appendChild(skipBtn);
-  }
-
-  // Подтвердить (для мультиселекта или свободного ввода)
-  const needConfirm = multi || q.allow_custom || !q.options?.length;
-  if (needConfirm) {
-    const confirmBtn = document.createElement('button');
-    confirmBtn.style.cssText = `padding:6px 16px;border-radius:10px;background:var(--accent);
+  // ── Для мультиселекта: кнопка "Далее/Пропустить" ──────────────────────
+  if (multi) {
+    const actWrap = document.createElement('div');
+    actWrap.style.cssText = 'display:flex;gap:6px;justify-content:flex-end;margin-top:6px';
+    if (canSkip) {
+      const skipBtn = document.createElement('button');
+      skipBtn.style.cssText = `padding:6px 14px;border-radius:10px;background:var(--surface3);
+        border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;`;
+      skipBtn.textContent = 'Пропустить';
+      skipBtn.onclick = () => { _aiQuestionAnswers[_aiQuestionIdx] = null; _aiQuestionIdx++; _aiRenderQuestionBar(); };
+      actWrap.appendChild(skipBtn);
+    }
+    const nextBtn = document.createElement('button');
+    nextBtn.style.cssText = `padding:6px 16px;border-radius:10px;background:var(--accent);
       border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;`;
-    confirmBtn.textContent = isLast ? 'Готово' : 'Далее';
-
-    const confirmQ = () => {
-      let answer = [];
-      if (multi) answer = [...selected];
-      const custom = customInput?.value?.trim();
-      if (custom) answer.push(custom);
-      if (!answer.length && !canSkip) {
-        customInput && (customInput.style.borderColor = 'var(--danger)');
-        return;
-      }
-      _aiQuestionAnswers[_aiQuestionIdx] = answer.length === 1 ? answer[0] : answer.length > 1 ? answer : null;
+    nextBtn.textContent = isLast ? 'Готово' : 'Далее →';
+    nextBtn.onclick = () => {
+      const answer = [...selected];
+      _aiQuestionAnswers[_aiQuestionIdx] = answer.length > 1 ? answer : answer[0] || null;
       _aiQuestionIdx++;
       _aiRenderQuestionBar();
     };
-
-    confirmBtn.onclick = confirmQ;
-    // Expose для Enter в input
-    if (customInput) customInput.onkeydown = (e) => { if (e.key === 'Enter') confirmQ(); };
-    actWrap.appendChild(confirmBtn);
+    actWrap.appendChild(nextBtn);
+    bar.appendChild(actWrap);
   }
 
-  if (actWrap.children.length) bar.appendChild(actWrap);
+  // ── Свободный ввод: заменяет главный input bar ──────────────────────────
+  let customInput = null;
+  if (!multi && (q.allow_custom || !q.options?.length)) {
+    // Перехватываем главный инпут чата
+    const mainInput = $('aiInput');
+    const mainSend  = $('aiSendBtn');
+    if (mainInput) {
+      const prevPlaceholder = mainInput.placeholder;
+      const prevOnkeydown   = mainInput.onkeydown;
+      mainInput.placeholder = q.options?.length ? 'Или введите свой вариант…' : 'Ваш ответ…';
+      mainInput.value = '';
+      mainInput.focus();
+
+      const submitCustom = () => {
+        const val = mainInput.value.trim();
+        // Восстанавливаем инпут
+        mainInput.placeholder = prevPlaceholder;
+        mainInput.onkeydown   = prevOnkeydown;
+        if (mainSend) mainSend.onclick = () => aiSend();
+        _aiQuestionAnswers[_aiQuestionIdx] = val || null;
+        _aiQuestionIdx++;
+        mainInput.value = '';
+        _aiRenderQuestionBar();
+      };
+
+      mainInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitCustom(); } };
+      if (mainSend) mainSend.onclick = submitCustom;
+
+      // Пропустить — ссылка под баром
+      if (canSkip) {
+        const skipLink = document.createElement('div');
+        skipLink.style.cssText = 'text-align:right;margin-top:4px';
+        skipLink.innerHTML = `<button onclick="
+          $('aiInput').placeholder = 'Спросите что-нибудь…';
+          $('aiInput').onkeydown = (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();aiSend();} };
+          $('aiSendBtn').onclick = () => aiSend();
+          _aiQuestionAnswers[_aiQuestionIdx] = null; _aiQuestionIdx++; _aiRenderQuestionBar();"
+          style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;font-family:inherit;padding:0">
+          Пропустить →</button>`;
+        bar.appendChild(skipLink);
+      }
+    }
+  }
 
   // Вставляем перед полем ввода
   const inputZone = modal.querySelector('.input-box')?.parentElement;
@@ -2560,13 +2597,12 @@ function _aiRenderQuestionBar() {
 async function _aiSubmitAnswers() {
   document.getElementById('aiQuestionBar')?.remove();
 
-  // Собираем все ответы в сообщение
+  // Собираем ответы — только значения, без повторения вопросов
   const answered = _aiQuestionQueue
     .map((q, i) => {
       const ans = _aiQuestionAnswers[i];
       if (ans === null || ans === undefined) return null;
-      const ansStr = Array.isArray(ans) ? ans.join(', ') : ans;
-      return `${q.question}: ${ansStr}`;
+      return Array.isArray(ans) ? ans.join(', ') : String(ans);
     })
     .filter(Boolean);
 
@@ -2575,7 +2611,10 @@ async function _aiSubmitAnswers() {
     return;
   }
 
-  const summaryMsg = answered.join('\n');
+  // Если один вопрос — просто ответ. Если несколько — нумерованный список
+  const summaryMsg = answered.length === 1
+    ? answered[0]
+    : answered.map((a, i) => `${i+1}. ${a}`).join('\n');
   _aiAddMessage('user', summaryMsg);
 
   const sendBtn = $('aiSendBtn');
@@ -2687,6 +2726,134 @@ function _aiAddToolLog(tools) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+// ── SSE стриминг ────────────────────────────────────────────────────────────
+let _aiSse = null;          // EventSource
+let _aiStreamBubble = null; // текущий стримящийся bubble div
+let _aiStreamContent = '';  // накопленный текст
+
+function _aiConnectSse() {
+  if (_aiSse) return;
+  if (!currentUser) return;
+  _aiSse = new EventSource(`/api/ai-stream/${encodeURIComponent(currentUser)}`);
+
+  _aiSse.addEventListener('log', (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      _aiAddLiveLog(d);
+    } catch {}
+  });
+
+  _aiSse.addEventListener('chunk', (e) => {
+    try {
+      const { text } = JSON.parse(e.data);
+      if (!_aiStreamBubble) {
+        // Создаём bubble для стриминга
+        _aiStreamContent = '';
+        const { wrap, bubble } = _aiCreateStreamBubble();
+        _aiStreamBubble = bubble;
+        // Убираем typing если есть
+        document.getElementById('aiTyping')?.remove();
+      }
+      _aiStreamContent += text;
+      _aiStreamBubble.innerHTML = _aiRenderMarkdown(_aiStreamContent) + '<span class="ai-cursor">▋</span>';
+      const msgs = $('aiMessages');
+      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    } catch {}
+  });
+
+  _aiSse.addEventListener('done', () => {
+    if (_aiStreamBubble) {
+      // Убираем курсор
+      _aiStreamBubble.innerHTML = _aiRenderMarkdown(_aiStreamContent);
+      _aiStreamBubble = null;
+      _aiStreamContent = '';
+    }
+    document.getElementById('aiTyping')?.remove();
+  });
+
+  _aiSse.onerror = () => {};
+}
+
+function _aiCreateStreamBubble() {
+  const msgs = $('aiMessages');
+  if (!msgs) return { wrap: null, bubble: null };
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:4px';
+
+  const ava = document.createElement('div');
+  ava.style.cssText = 'width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px';
+  ava.innerHTML = '<i class="ti ti-robot" style="font-size:14px;color:#fff"></i>';
+
+  const bubble = document.createElement('div');
+  bubble.style.cssText = 'max-width:82%;padding:9px 13px;border-radius:16px 16px 16px 4px;font-size:13.5px;line-height:1.55;word-break:break-word;background:var(--surface3);color:var(--text);';
+  bubble.innerHTML = '<span class="ai-cursor">▋</span>';
+
+  wrap.appendChild(ava);
+  wrap.appendChild(bubble);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  return { wrap, bubble };
+}
+
+// Живой лог инструментов — добавляется постепенно
+let _aiLiveLogWrap = null;
+let _aiLiveLogList = null;
+let _aiLiveLogItems = [];
+
+function _aiAddLiveLog(d) {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+
+  if (!_aiLiveLogWrap) {
+    _aiLiveLogWrap = document.createElement('div');
+    _aiLiveLogWrap.style.cssText = 'margin:2px 0 6px 36px;';
+    const toggle = document.createElement('div');
+    toggle.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:4px;user-select:none';
+    toggle.innerHTML = `<i class="ti ti-adjustments-horizontal" style="font-size:11px"></i><span id="aiLogSummary">Запускаю инструменты...</span><i class="ti ti-chevron-down" id="aiLogArrow" style="font-size:10px;transition:transform .2s;margin-left:auto"></i>`;
+    _aiLiveLogList = document.createElement('div');
+    _aiLiveLogList.style.cssText = 'padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-size:12px;display:none;';
+    toggle.onclick = () => {
+      const open = _aiLiveLogList.style.display === 'none';
+      _aiLiveLogList.style.display = open ? 'block' : 'none';
+      const arrow = document.getElementById('aiLogArrow');
+      if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+    };
+    _aiLiveLogWrap.appendChild(toggle);
+    _aiLiveLogWrap.appendChild(_aiLiveLogList);
+    msgs.appendChild(_aiLiveLogWrap);
+  }
+
+  const item = document.createElement('div');
+  item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--text2);animation:fadeIn .2s ease';
+  item.innerHTML = `<span style="font-size:14px">${d.icon || '⚡'}</span><span>${esc(d.text || '')}</span>`;
+  _aiLiveLogList.appendChild(item);
+  _aiLiveLogItems.push(item);
+
+  // Обновляем summary
+  const summary = document.getElementById('aiLogSummary');
+  if (summary) summary.textContent = d.text || 'Работаю...';
+
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function _aiResetLiveLog() {
+  _aiLiveLogWrap = null;
+  _aiLiveLogList = null;
+  _aiLiveLogItems = [];
+}
+
+function _aiRenderMarkdown(text) {
+  return esc(text)
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre style="background:rgba(0,0,0,.25);padding:10px;border-radius:10px;overflow-x:auto;font-family:monospace;font-size:12px;margin:6px 0;white-space:pre-wrap">${code}</pre>`)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px">$1</code>')
+    .replace(/^• (.+)$/gm, '<li style="margin-left:12px">$1</li>')
+    .replace(/\n/g, '<br>');
+}
+
 async function aiSend() {
   const inp = $('aiInput');
   if (!inp) return;
@@ -2699,6 +2866,9 @@ async function aiSend() {
   autoGrow(inp);
   _aiAttachment = null;
   _aiUpdateAttachBar();
+  _aiResetLiveLog();
+  _aiLastCreatedFiles = []; // сбрасываем трекер файлов
+  document.getElementById('aiZipBar')?.remove();
 
   const sendBtn = $('aiSendBtn');
   if (sendBtn) sendBtn.disabled = true;
@@ -2721,19 +2891,29 @@ async function aiSend() {
       body: JSON.stringify(body)
     });
     const d = await r.json();
+    // Typing убирается через SSE 'done' event, но на всякий случай
     if (typing) typing.remove();
 
     if (d.success) {
-      // Debug mode indicator
       if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
-      // Коллапсируемый лог инструментов
-      if (d.toolsUsed?.length) _aiAddToolLog(d.toolsUsed);
       // Вопрос от AI пользователю
       if (d.askUser) {
         _aiShowQuestion(d.askUser);
-        return; // не добавляем пустой ответ
+        return;
       }
-      if (d.reply) _aiAddMessage('assistant', d.reply);
+      // Если ответ уже пришёл через SSE streaming — _aiStreamBubble уже готов
+      // Если нет SSE клиента — добавляем обычно
+      if (d.reply && !_aiStreamBubble && _aiStreamContent === '') {
+        _aiAddMessage('assistant', d.reply);
+      }
+      // Файлы
+      if (d.createdFiles?.length) {
+        d.createdFiles.forEach(f => _aiAddFileCard(f));
+        if (_aiFilePanelOpen) aiRenderFilePanel();
+        else aiRefreshFileBadge();
+      }
+      // Лог инструментов (fallback если SSE не было)
+      if (d.toolsUsed?.length && !_aiLiveLogWrap) _aiAddToolLog(d.toolsUsed);
       // Показываем карточки созданных файлов
       if (d.createdFiles?.length) {
         d.createdFiles.forEach(f => _aiAddFileCard(f));
