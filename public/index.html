@@ -126,9 +126,13 @@
       Войти <i class="ti ti-arrow-right"></i>
     </button>
     <div class="login-links">
-      <a class="login-link" id="forgotLink" onclick="openForgotPass()">Забыли пароль?</a>
-      <span class="login-link-sep">·</span>
-      <a class="login-link" id="registerLink" onclick="toggleRegisterMode()">Регистрация</a>
+      <a class="login-link" id="forgotLink" onclick="openForgotPass()">
+        <i class="ti ti-lock-open"></i>Забыли пароль?
+      </a>
+      <span class="login-link-sep"></span>
+      <a class="login-link" id="registerLink" onclick="toggleRegisterMode()">
+        <i class="ti ti-user-plus"></i><span id="registerLinkText">Регистрация</span>
+      </a>
     </div>
     <div class="palette-row">
       <span class="pal-label">Тема:</span>
@@ -194,7 +198,6 @@
         <button class="theme-opt active" id="thDark" onclick="selectTheme('dark')"><i class="ti ti-moon"></i> Тёмная</button>
         <button class="theme-opt" id="thLight" onclick="selectTheme('light')"><i class="ti ti-sun"></i> Светлая</button>
       </div>
-      <button class="btn-primary w-full mt" onclick="applyTheme()"><i class="ti ti-check"></i> Применить</button>
     </div>
 
     <div id="st_account" class="stab-pane hidden">
@@ -415,5 +418,64 @@
     else document.body.appendChild(btn);
   }
 </script>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div id="forgotModal" class="modal-bg">
+  <div class="modal-card" style="max-width:400px">
+    <div class="modal-hd">
+      <h2><i class="ti ti-lock-open"></i> Восстановление пароля</h2>
+      <button class="icon-btn" onclick="closeForgotPass()"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:20px 20px 24px">
+      <!-- Шаг 1: ввод логина -->
+      <div id="forgotStep1" class="forgot-step active">
+        <p class="sub-text" style="margin-bottom:12px">Введите ваш логин — отправим код на привязанный email.</p>
+        <div class="field-wrap">
+          <i class="ti ti-user field-ico"></i>
+          <input id="forgotUsername" class="field" type="text" placeholder="Имя пользователя…"
+                 onkeydown="if(event.key==='Enter')sendForgotCode()"/>
+        </div>
+        <div id="forgotErr1" class="login-err"></div>
+        <button class="btn-primary w-full" onclick="sendForgotCode()">
+          <i class="ti ti-send"></i> Отправить код
+        </button>
+      </div>
+      <!-- Шаг 2: ввод кода -->
+      <div id="forgotStep2" class="forgot-step">
+        <p class="sub-text" style="margin-bottom:16px;text-align:center">Введите 6-значный код из письма</p>
+        <div class="code-inputs">
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,0)" onkeydown="codeBack(event,this,0)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,1)" onkeydown="codeBack(event,this,1)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,2)" onkeydown="codeBack(event,this,2)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,3)" onkeydown="codeBack(event,this,3)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,4)" onkeydown="codeBack(event,this,4)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,5)" onkeydown="codeBack(event,this,5)"/>
+        </div>
+        <div id="forgotErr2" class="login-err" style="margin-top:8px"></div>
+        <button class="btn-primary w-full" onclick="verifyForgotCode()">
+          <i class="ti ti-check"></i> Подтвердить
+        </button>
+        <button class="btn-ghost w-full" style="margin-top:8px" onclick="sendForgotCode()">
+          <i class="ti ti-refresh"></i> Отправить снова
+        </button>
+      </div>
+      <!-- Шаг 3: новый пароль -->
+      <div id="forgotStep3" class="forgot-step">
+        <p class="sub-text" style="margin-bottom:12px">Придумайте новый пароль</p>
+        <div class="field-wrap has-toggle">
+          <i class="ti ti-lock field-ico"></i>
+          <input id="forgotNewPass" class="field" type="password" placeholder="Новый пароль (мин. 4 символа)…"/>
+          <button class="pass-toggle" onclick="toggleForgotPass()" type="button">
+            <i class="ti ti-eye" id="forgotEyeIco"></i>
+          </button>
+        </div>
+        <div id="forgotErr3" class="login-err"></div>
+        <button class="btn-primary w-full" onclick="resetPassword()">
+          <i class="ti ti-lock-check"></i> Сменить пароль
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
