@@ -1731,3 +1731,26 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
 .msg-row.no-anim {
   animation: none !important;
 }
+
+/* ── Фикс иконки выделения текста на мобиле ── */
+/* По умолчанию запрещаем выделение на UI элементах */
+.chat-item, .ci-ava, .ci-body, .sb-tab, .sb-profile,
+.chat-hdr, .hdr-info, .hdr-right, .online-pill,
+.input-zone, .input-row, .send-fab, .icon-btn,
+.attach-popup, .fp-bar, .rec-bar,
+.msg-row .msg-ava, .msg-meta, .msg-time, .msg-sender,
+.reactions, .vc-overlay, .vc-dur {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Но разрешаем выделять текст сообщений */
+.msg-text, .msg-bubble p, .msg-file-name {
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* Поле ввода всегда выделяемо */
+.msg-ta, .field, input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
