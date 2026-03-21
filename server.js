@@ -390,66 +390,393 @@ app.get('/api/ice-servers', async (req, res) => {
 app.use(express.json());
 
 // ════════════════════════════════════════════════════════════════════════════
-//  AI ЧАТ — Mistral API с памятью разговора для каждого юзера
+//  AI ЧАТ — Mistral с инструментами, памятью файлов и просмотром изображений
 // ════════════════════════════════════════════════════════════════════════════
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
-const aiConversations = new Map(); // username -> [{role, content}, ...]
-const AI_MAX_HISTORY  = 40;        // макс сообщений в памяти
+const aiConversations = new Map(); // username -> { history:[], files:[], msgCount:0 }
+const AI_MAX_HISTORY  = 80;
+const AI_FILE_TTL     = 5; // файлы живут 5 ответов ИИ
 
-const AI_SYSTEM = `Ты — Aura AI, умный и дружелюбный ассистент встроенный в мессенджер Aura.
-Отвечай коротко и по делу. Поддерживай разговор естественно.
-Если спрашивают про мессенджер — помогай с его функциями.
-Отвечай на том же языке что пишет пользователь.`;
+const AI_SYSTEM = `Ты — Aura AI, мощный ассистент встроенный в мессенджер Aura.
+Ты умеешь:
+• Искать информацию в интернете (web_search)
+• Проверять погоду (get_weather)
+• Считать математику (calculate)
+• Узнавать время/дату (get_time)
+• Конвертировать валюты (convert_currency)
+• Переводить текст (translate)
+• Читать и анализировать прикреплённые файлы/изображения (они добавляются автоматически)
+• Генерировать и редактировать файлы (create_file) — возвращает файл пользователю
+• Писать код, исправлять ошибки, объяснять код (analyze_code)
 
-app.post('/api/ai-chat', async (req, res) => {
-  const { username, message } = req.body;
-  if (!username || !message?.trim()) {
-    return res.status(400).json({ error: 'Нет данных' });
+При форматировании: **жирный**, \`код\`, \`\`\`python\nблок кода\n\`\`\`.
+Отвечай на том же языке что пишет пользователь. Дата: ${new Date().toLocaleDateString('ru-RU')}.`;
+
+// ── Инструменты ──────────────────────────────────────────────────────────────
+const AI_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: 'Поиск актуальной информации в интернете. Новости, факты, статьи.',
+      parameters: { type:'object', properties:{ query:{ type:'string', description:'Поисковый запрос' } }, required:['query'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: 'Текущая погода в любом городе мира',
+      parameters: { type:'object', properties:{ city:{ type:'string' } }, required:['city'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'calculate',
+      description: 'Вычисляет математическое выражение. Поддерживает +,-,*,/,^,%,скобки.',
+      parameters: { type:'object', properties:{ expression:{ type:'string' } }, required:['expression'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_time',
+      description: 'Текущее время и дата',
+      parameters: { type:'object', properties:{} }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'convert_currency',
+      description: 'Конвертация валют. Курсы в реальном времени.',
+      parameters: {
+        type:'object',
+        properties: {
+          amount:   { type:'number', description:'Сумма' },
+          from:     { type:'string', description:'Исходная валюта (USD, EUR, RUB...)' },
+          to:       { type:'string', description:'Целевая валюта' }
+        },
+        required:['amount','from','to']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'translate',
+      description: 'Перевод текста на любой язык',
+      parameters: {
+        type:'object',
+        properties: {
+          text:        { type:'string', description:'Текст для перевода' },
+          target_lang: { type:'string', description:'Язык перевода: ru, en, de, fr, es, zh, ja...' }
+        },
+        required:['text','target_lang']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_file',
+      description: 'Создаёт файл с указанным содержимым и отправляет его пользователю. Используй для кода, текстов, CSV, JSON, HTML.',
+      parameters: {
+        type:'object',
+        properties: {
+          filename: { type:'string', description:'Имя файла с расширением: script.py, data.csv, page.html' },
+          content:  { type:'string', description:'Полное содержимое файла' },
+          language: { type:'string', description:'Язык программирования или формат (python, javascript, html, csv, json, text)' }
+        },
+        required:['filename','content']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'analyze_code',
+      description: 'Анализирует код — находит ошибки, объясняет, улучшает, конвертирует между языками',
+      parameters: {
+        type:'object',
+        properties: {
+          code:   { type:'string', description:'Код для анализа' },
+          action: { type:'string', description:'explain / fix / optimize / convert_to (укажи язык)' }
+        },
+        required:['code','action']
+      }
+    }
   }
+];
 
-  // Получаем или создаём историю разговора
+// ── Хранилище файлов ──────────────────────────────────────────────────────────
+const aiUserFiles = new Map(); // username -> [{ id, name, content, type, ttl }]
+const path = require('path');
+const fs   = require('fs');
+const os   = require('os');
+
+function aiGetSession(username) {
   if (!aiConversations.has(username)) {
-    aiConversations.set(username, []);
+    aiConversations.set(username, { history: [], msgCount: 0 });
   }
-  const history = aiConversations.get(username);
+  return aiConversations.get(username);
+}
 
-  // Добавляем сообщение пользователя
-  history.push({ role: 'user', content: message.trim() });
+function aiTickFiles(username) {
+  // Уменьшаем TTL файлов и удаляем устаревшие
+  const files = aiUserFiles.get(username) || [];
+  const alive = files.map(f => ({ ...f, ttl: f.ttl - 1 })).filter(f => f.ttl > 0);
+  if (alive.length) aiUserFiles.set(username, alive);
+  else aiUserFiles.delete(username);
+  return alive;
+}
 
-  // Обрезаем если слишком длинная история
+// ── Выполнение инструментов ──────────────────────────────────────────────────
+async function executeTool(name, args, username) {
+  try {
+    // ── Время ─────────────────────────────────────────────────────────────
+    if (name === 'get_time') {
+      const now = new Date();
+      return `${now.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} (МСК)`;
+    }
+
+    // ── Калькулятор ────────────────────────────────────────────────────────
+    if (name === 'calculate') {
+      const expr = (args.expression || '').replace(/[^0-9+\-*/().,\s%eE]/g, '').trim();
+      if (!expr) return 'Некорректное выражение';
+      try {
+        const result = Function('"use strict"; return (' + expr + ')')();
+        return `${args.expression} = ${Number.isInteger(result) ? result : result.toFixed(8).replace(/\.?0+$/, '')}`;
+      } catch { return 'Не удалось вычислить'; }
+    }
+
+    // ── Поиск в интернете ──────────────────────────────────────────────────
+    if (name === 'web_search') {
+      const q = encodeURIComponent(args.query || '');
+      const ddg = await axios.get(
+        `https://api.duckduckgo.com/?q=${q}&format=json&no_html=1&skip_disambig=1`,
+        { timeout: 8000, headers: { 'User-Agent': 'AuraAI/1.0' } }
+      );
+      const d = ddg.data;
+      let result = '';
+      if (d.AbstractText) result += d.AbstractText + '\n';
+      if (d.Answer)       result += 'Ответ: ' + d.Answer + '\n';
+      if (d.RelatedTopics?.length) {
+        d.RelatedTopics.slice(0, 4).forEach(t => { if (t.Text) result += `• ${t.Text}\n`; });
+      }
+      if (!result) result = `По "${args.query}" информация не найдена через DuckDuckGo. Отвечу по своим знаниям.`;
+      return result.trim().slice(0, 2000);
+    }
+
+    // ── Погода ────────────────────────────────────────────────────────────
+    if (name === 'get_weather') {
+      const geoR = await axios.get(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(args.city)}&count=1&language=ru&format=json`,
+        { timeout: 6000 }
+      );
+      const loc = geoR.data?.results?.[0];
+      if (!loc) return `Город "${args.city}" не найден`;
+      const wR = await axios.get(
+        `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,precipitation&hourly=temperature_2m&timezone=auto&forecast_days=1`,
+        { timeout: 6000 }
+      );
+      const c = wR.data?.current;
+      const wCode = c?.weather_code || 0;
+      const wDesc = wCode === 0 ? '☀️ Ясно' : wCode <= 3 ? '⛅ Переменная облачность' : wCode <= 48 ? '☁️ Пасмурно' : wCode <= 67 ? '🌧 Дождь' : wCode <= 77 ? '❄️ Снег' : '⛈ Гроза';
+      return `${loc.name}: ${c?.temperature_2m}°C (ощущается ${c?.apparent_temperature}°C)\n${wDesc}, влажность ${c?.relative_humidity_2m}%, ветер ${c?.wind_speed_10m} км/ч`;
+    }
+
+    // ── Конвертация валют ──────────────────────────────────────────────────
+    if (name === 'convert_currency') {
+      const { amount, from, to } = args;
+      const r = await axios.get(
+        `https://api.frankfurter.app/latest?from=${from.toUpperCase()}&to=${to.toUpperCase()}`,
+        { timeout: 6000 }
+      );
+      const rate = r.data?.rates?.[to.toUpperCase()];
+      if (!rate) return `Не удалось получить курс ${from} → ${to}`;
+      const result = (amount * rate).toFixed(2);
+      return `${amount} ${from.toUpperCase()} = ${result} ${to.toUpperCase()} (курс: 1 ${from.toUpperCase()} = ${rate} ${to.toUpperCase()})`;
+    }
+
+    // ── Перевод текста ────────────────────────────────────────────────────
+    if (name === 'translate') {
+      // MyMemory — бесплатный переводчик без ключа
+      const r = await axios.get(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(args.text)}&langpair=auto|${args.target_lang}`,
+        { timeout: 8000 }
+      );
+      const translated = r.data?.responseData?.translatedText;
+      if (!translated) return 'Не удалось перевести';
+      return `Перевод: ${translated}`;
+    }
+
+    // ── Создание файла ────────────────────────────────────────────────────
+    if (name === 'create_file') {
+      const { filename, content } = args;
+      if (!filename || !content) return 'Не указано имя файла или содержимое';
+
+      // Сохраняем во временный файл
+      const tmpDir  = os.tmpdir();
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const tmpPath  = path.join(tmpDir, `aura_ai_${Date.now()}_${safeName}`);
+      fs.writeFileSync(tmpPath, content, 'utf8');
+
+      // Сохраняем в файловую базу пользователя (TTL 5 ответов)
+      const files = aiUserFiles.get(username) || [];
+      const fileId = `file_${Date.now()}`;
+      files.push({ id: fileId, name: safeName, path: tmpPath, content, ttl: AI_FILE_TTL, created: new Date().toISOString() });
+      aiUserFiles.set(username, files);
+
+      return `FILE_CREATED:${fileId}:${safeName}:${content.length} байт`;
+    }
+
+    // ── Анализ кода ───────────────────────────────────────────────────────
+    if (name === 'analyze_code') {
+      // Используем Mistral для анализа — возвращаем промпт для второго вызова
+      return `CODE_ANALYSIS_REQUESTED:${args.action}:${args.code.slice(0, 500)}`;
+    }
+
+    return 'Инструмент не найден: ' + name;
+  } catch (e) {
+    console.error(`[AI Tool ${name}]:`, e.message);
+    return `Ошибка ${name}: ${e.message}`;
+  }
+}
+
+// ── /api/ai-chat — основной эндпоинт ─────────────────────────────────────────
+app.post('/api/ai-chat', async (req, res) => {
+  const { username, message, imageData, imageType, fileName, fileContent } = req.body;
+  if (!username) return res.status(400).json({ error: 'Нет username' });
+  if (!message?.trim() && !imageData && !fileContent) return res.status(400).json({ error: 'Нет сообщения' });
+
+  const session = aiGetSession(username);
+  const { history } = session;
+  session.msgCount++;
+
+  // Тикаем файлы (уменьшаем TTL)
+  aiTickFiles(username);
+  const currentFiles = aiUserFiles.get(username) || [];
+
+  // Строим контент сообщения (мультимодальный)
+  let userContent;
+  if (imageData) {
+    // Изображение от пользователя
+    userContent = [
+      { type: 'text', text: message?.trim() || 'Проанализируй это изображение' },
+      { type: 'image_url', image_url: { url: `data:${imageType || 'image/jpeg'};base64,${imageData}` } }
+    ];
+  } else if (fileContent) {
+    // Текстовый файл
+    const preview = fileContent.slice(0, 8000);
+    userContent = `📎 Файл: ${fileName || 'file.txt'}\n\`\`\`\n${preview}\n\`\`\`\n\n${message?.trim() || 'Проанализируй этот файл'}`;
+  } else {
+    userContent = message.trim();
+  }
+
+  // Добавляем контекст файлов в базе если есть
+  let contextNote = '';
+  if (currentFiles.length) {
+    contextNote = `\n\n[В базе есть файлы: ${currentFiles.map(f => f.name + ' (ещё ' + f.ttl + ' отв.)').join(', ')}]`;
+  }
+
+  history.push({ role: 'user', content: Array.isArray(userContent) ? userContent : userContent + contextNote });
   while (history.length > AI_MAX_HISTORY) history.shift();
 
   try {
-    const resp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
-      model:       'mistral-small-latest',
+    // Первый запрос — с инструментами
+    const model = imageData ? 'pixtral-12b-2409' : 'mistral-small-latest'; // pixtral для изображений
+    const resp1 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+      model,
       messages:    [{ role: 'system', content: AI_SYSTEM }, ...history],
-      max_tokens:  512,
+      tools:       imageData ? undefined : AI_TOOLS, // инструменты только для текста
+      tool_choice: imageData ? undefined : 'auto',
+      max_tokens:  2048,
       temperature: 0.7,
     }, {
-      headers: {
-        'Authorization': `Bearer ${MISTRAL_API_KEY}`,
-        'Content-Type':  'application/json',
-      },
-      timeout: 30000,
+      headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+      timeout: 45000,
     });
 
-    const reply = resp.data.choices?.[0]?.message?.content || 'Нет ответа';
-    history.push({ role: 'assistant', content: reply });
+    const msg1 = resp1.data.choices?.[0]?.message;
+    let toolsUsed = [];
+    let createdFiles = [];
 
-    res.json({ success: true, reply });
+    if (msg1?.tool_calls?.length) {
+      history.push(msg1);
+      const toolResults = [];
+
+      for (const tc of msg1.tool_calls) {
+        const toolName = tc.function?.name;
+        let args = {};
+        try { args = JSON.parse(tc.function?.arguments || '{}'); } catch {}
+        console.log(`[AI Tool] ${toolName}:`, toolName !== 'create_file' ? args : { filename: args.filename });
+        const result = await executeTool(toolName, args, username);
+
+        // Обрабатываем созданный файл
+        if (result.startsWith('FILE_CREATED:')) {
+          const [, fileId, fileName2] = result.split(':');
+          const fileObj = (aiUserFiles.get(username) || []).find(f => f.id === fileId);
+          if (fileObj) createdFiles.push({ id: fileId, name: fileName2, content: fileObj.content });
+          toolResults.push({ role: 'tool', tool_call_id: tc.id, content: `Файл "${fileName2}" создан и будет отправлен пользователю.` });
+        } else {
+          toolResults.push({ role: 'tool', tool_call_id: tc.id, content: result });
+        }
+        toolsUsed.push(toolName);
+      }
+
+      toolResults.forEach(tr => history.push(tr));
+
+      // Второй запрос — финальный ответ
+      const resp2 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+        model: 'mistral-small-latest',
+        messages: [{ role: 'system', content: AI_SYSTEM }, ...history],
+        max_tokens: 2048,
+        temperature: 0.7,
+      }, {
+        headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+        timeout: 30000,
+      });
+
+      const reply = resp2.data.choices?.[0]?.message?.content || 'Готово';
+      history.push({ role: 'assistant', content: reply });
+      res.json({ success: true, reply, toolsUsed, createdFiles });
+    } else {
+      const reply = msg1?.content || 'Нет ответа';
+      history.push({ role: 'assistant', content: reply });
+      res.json({ success: true, reply, toolsUsed: [], createdFiles });
+    }
   } catch (err) {
     const msg = err.response?.data?.message || err.message;
     console.error('[AI] Ошибка:', msg);
-    // Убираем незавершённое сообщение пользователя из истории при ошибке
     history.pop();
     res.status(500).json({ error: 'Ошибка AI: ' + msg });
   }
 });
 
-// Сбросить историю AI-чата
+// ── Скачать файл из базы AI ───────────────────────────────────────────────────
+app.get('/api/ai-file/:username/:fileId', (req, res) => {
+  const files = aiUserFiles.get(req.params.username) || [];
+  const file  = files.find(f => f.id === req.params.fileId);
+  if (!file) return res.status(404).send('Файл не найден или истёк срок хранения');
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.name)}"`);
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(file.content);
+});
+
+// ── Список файлов в базе пользователя ────────────────────────────────────────
+app.get('/api/ai-files/:username', (req, res) => {
+  const files = (aiUserFiles.get(req.params.username) || []).map(f => ({
+    id: f.id, name: f.name, ttl: f.ttl, size: f.content?.length || 0
+  }));
+  res.json({ files });
+});
+
+// ── Сбросить историю AI-чата ──────────────────────────────────────────────────
 app.post('/api/ai-clear', (req, res) => {
   const { username } = req.body;
-  if (username) aiConversations.delete(username);
+  if (username) { aiConversations.delete(username); aiUserFiles.delete(username); }
   res.json({ success: true });
 });
 
@@ -1029,11 +1356,16 @@ io.on('connection', (socket) => {
     if (userData?.friendRequests?.length) {
       socket.emit('friend-requests-sync', { requests: userData.friendRequests });
     }
-    // Resume active call — if someone is still ringing this user
+    // Resume active call — если кто-то ещё звонит этому пользователю
     const active = activeCalls.get(username);
-    if (active && Date.now() - active.startTime < 60000) { // call rings for max 60s
+    if (active && Date.now() - active.startTime < 90000) { // 90 секунд
       socket.emit('call-invite', { from: active.from, isVid: active.isVid, resumed: true });
       console.log(`[Call] Resumed ring for ${username} from ${active.from}`);
+      // Уведомляем звонящего что адресат вернулся онлайн
+      const callerSid = userSockets.get(active.from);
+      if (callerSid) {
+        io.to(callerSid).emit('call-callee-online', { to: username });
+      }
     }
 
     // Deliver missed calls as one batch
