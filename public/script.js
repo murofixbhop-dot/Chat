@@ -2034,8 +2034,6 @@ function _showGroupCallUI(groupName, members) {
 }
 
 function _showOutgoingUI(target, isVid) {
-
-function _showOutgoingUI(target, isVid) {
   setAvatar(callAva, target, userAvatars[target]);
   callNm.textContent = target;
   callSt.textContent = isVid ? 'Видеозвонок…' : 'Звоним…';
@@ -3211,3 +3209,7 @@ setInterval(() => { if (currentUser) socket.emit('ping'); }, 5000);
 // ══════════════════════════════════════════════
 // ONLINE BADGE  ← УДОБСТВО
 // ══════════════════════════════════════════════
+socket.on('online-count', count => {
+  if (onlineCount) onlineCount.textContent = count;
+  if (onlinePill) onlinePill.style.display = count > 0 ? '' : 'none';
+});
