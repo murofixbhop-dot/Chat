@@ -389,6 +389,70 @@ app.get('/api/ice-servers', async (req, res) => {
 
 app.use(express.json());
 
+// ════════════════════════════════════════════════════════════════════════════
+//  AI ЧАТ — Mistral API с памятью разговора для каждого юзера
+// ════════════════════════════════════════════════════════════════════════════
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
+const aiConversations = new Map(); // username -> [{role, content}, ...]
+const AI_MAX_HISTORY  = 40;        // макс сообщений в памяти
+
+const AI_SYSTEM = `Ты — Aura AI, умный и дружелюбный ассистент встроенный в мессенджер Aura.
+Отвечай коротко и по делу. Поддерживай разговор естественно.
+Если спрашивают про мессенджер — помогай с его функциями.
+Отвечай на том же языке что пишет пользователь.`;
+
+app.post('/api/ai-chat', async (req, res) => {
+  const { username, message } = req.body;
+  if (!username || !message?.trim()) {
+    return res.status(400).json({ error: 'Нет данных' });
+  }
+
+  // Получаем или создаём историю разговора
+  if (!aiConversations.has(username)) {
+    aiConversations.set(username, []);
+  }
+  const history = aiConversations.get(username);
+
+  // Добавляем сообщение пользователя
+  history.push({ role: 'user', content: message.trim() });
+
+  // Обрезаем если слишком длинная история
+  while (history.length > AI_MAX_HISTORY) history.shift();
+
+  try {
+    const resp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+      model:       'mistral-small-latest',
+      messages:    [{ role: 'system', content: AI_SYSTEM }, ...history],
+      max_tokens:  512,
+      temperature: 0.7,
+    }, {
+      headers: {
+        'Authorization': `Bearer ${MISTRAL_API_KEY}`,
+        'Content-Type':  'application/json',
+      },
+      timeout: 30000,
+    });
+
+    const reply = resp.data.choices?.[0]?.message?.content || 'Нет ответа';
+    history.push({ role: 'assistant', content: reply });
+
+    res.json({ success: true, reply });
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message;
+    console.error('[AI] Ошибка:', msg);
+    // Убираем незавершённое сообщение пользователя из истории при ошибке
+    history.pop();
+    res.status(500).json({ error: 'Ошибка AI: ' + msg });
+  }
+});
+
+// Сбросить историю AI-чата
+app.post('/api/ai-clear', (req, res) => {
+  const { username } = req.body;
+  if (username) aiConversations.delete(username);
+  res.json({ success: true });
+});
+
 // Хэш пароля (простой SHA-256 без внешних зависимостей)
 function hashPassword(password) {
   return crypto.createHash('sha256').update(password + 'aura_salt_2026').digest('hex');
@@ -817,7 +881,40 @@ app.post('/api/update-group', async (req, res) => {
   res.json({ success: true });
 });
 
-// ========== ХРАНЕНИЕ ИСТОРИИ ==========
+// Удалить группу (только создатель)
+app.post('/api/delete-group', async (req, res) => {
+  const { username, groupId } = req.body;
+  if (!username || !groupId) return res.status(400).json({ error: 'Нет данных' });
+
+  let members = [];
+  let isCreator = false;
+
+  // Удаляем группу у всех участников
+  for (const [uname, userData] of users.entries()) {
+    if (!userData.groups) continue;
+    const idx = userData.groups.findIndex(g => g.id === groupId);
+    if (idx === -1) continue;
+    if (userData.groups[idx].creator === username) isCreator = true;
+    if (uname === username && userData.groups[idx].creator !== username) {
+      return res.status(403).json({ error: 'Только создатель может удалить группу' });
+    }
+    if (members.length === 0) members = userData.groups[idx].members || [];
+    userData.groups.splice(idx, 1);
+    users.set(uname, userData);
+  }
+
+  if (!isCreator) return res.status(403).json({ error: 'Только создатель может удалить группу' });
+
+  await saveUsers();
+
+  // Оповещаем всех участников
+  members.forEach(m => {
+    const sid = userSockets.get(m);
+    if (sid) io.to(sid).emit('group-deleted', { groupId });
+  });
+
+  res.json({ success: true });
+});
 const HISTORY_FILE = 'history.json';
 const MAX_HISTORY = 2000;
 let messageHistory = [];
