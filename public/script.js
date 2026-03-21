@@ -2393,6 +2393,141 @@ const _aiToolLabels = {
 };
 
 // Добавляет коллапсируемый лог инструментов (как на скрине)
+// ── AI задаёт вопрос пользователю ───────────────────────────────────────────
+function _aiShowQuestion(askData) {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+  const welcome = msgs.querySelector('.ai-welcome');
+  if (welcome) welcome.remove();
+
+  const { question, options = [], allow_custom = false } = askData;
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:4px';
+
+  // Аватар AI
+  const ava = document.createElement('div');
+  ava.style.cssText = 'width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px';
+  ava.innerHTML = '<i class="ti ti-robot" style="font-size:14px;color:#fff"></i>';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'flex:1;background:var(--surface3);border-radius:16px 16px 16px 4px;padding:12px 14px;max-width:85%';
+
+  // Вопрос
+  const qEl = document.createElement('div');
+  qEl.style.cssText = 'font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:10px';
+  qEl.innerHTML = esc(question).replace(/\n/g,'<br>');
+  card.appendChild(qEl);
+
+  // Кнопки вариантов
+  if (options.length) {
+    const btnWrap = document.createElement('div');
+    btnWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+    options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.style.cssText = `
+        padding:8px 14px;border-radius:10px;border:1.5px solid var(--accent);
+        background:transparent;color:var(--accent);font-size:13px;font-weight:500;
+        cursor:pointer;text-align:left;transition:all .15s;font-family:inherit;
+      `;
+      btn.textContent = opt;
+      btn.onmouseover = () => { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; };
+      btn.onmouseout  = () => { btn.style.background = 'transparent'; btn.style.color = 'var(--accent)'; };
+      btn.onclick = () => {
+        // Убираем все кнопки и показываем выбор
+        card.querySelectorAll('button').forEach(b => b.disabled = true);
+        btn.style.background = 'var(--accent)';
+        btn.style.color = '#fff';
+        btn.style.opacity = '1';
+        card.querySelectorAll('button:not(:last-child)').forEach(b => {
+          if (b !== btn) { b.style.opacity = '0.35'; }
+        });
+        // Убираем поле ввода если есть
+        const customInput = card.querySelector('.ai-custom-input');
+        if (customInput) customInput.style.display = 'none';
+        // Отправляем как сообщение пользователя
+        setTimeout(() => _aiSendOption(opt), 200);
+      };
+      btnWrap.appendChild(btn);
+    });
+    card.appendChild(btnWrap);
+  }
+
+  // Поле свободного ввода
+  if (allow_custom || !options.length) {
+    const customWrap = document.createElement('div');
+    customWrap.className = 'ai-custom-input';
+    customWrap.style.cssText = `display:flex;gap:6px;margin-top:${options.length?'8px':'0'}`;
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = 'Ваш ответ…';
+    inp.style.cssText = 'flex:1;padding:8px 12px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;outline:none;font-family:inherit';
+    inp.onfocus = () => inp.style.borderColor = 'var(--accent)';
+    inp.onblur  = () => inp.style.borderColor = 'var(--border)';
+    inp.onkeydown = (e) => { if (e.key === 'Enter') sendCustom(); };
+    const sendBtn2 = document.createElement('button');
+    sendBtn2.style.cssText = 'width:36px;height:36px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+    sendBtn2.innerHTML = '<i class="ti ti-send" style="font-size:14px"></i>';
+    const sendCustom = () => {
+      const val = inp.value.trim();
+      if (!val) return;
+      inp.disabled = true; sendBtn2.disabled = true;
+      _aiSendOption(val);
+    };
+    sendBtn2.onclick = sendCustom;
+    customWrap.appendChild(inp);
+    customWrap.appendChild(sendBtn2);
+    card.appendChild(customWrap);
+    setTimeout(() => inp.focus(), 80);
+  }
+
+  wrap.appendChild(ava);
+  wrap.appendChild(card);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// Отправить выбранный вариант как сообщение пользователя
+async function _aiSendOption(text) {
+  const msgs = $('aiMessages');
+
+  // Показываем как сообщение пользователя
+  _aiAddMessage('user', text);
+
+  const sendBtn = $('aiSendBtn');
+  if (sendBtn) sendBtn.disabled = true;
+  const typing = _aiAddTyping();
+
+  try {
+    const r = await fetch('/api/ai-chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, message: text })
+    });
+    const d = await r.json();
+    if (typing) typing.remove();
+
+    if (d.success) {
+      if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
+      if (d.toolsUsed?.length) _aiAddToolLog(d.toolsUsed);
+      if (d.askUser) { _aiShowQuestion(d.askUser); return; }
+      if (d.reply) _aiAddMessage('assistant', d.reply);
+      if (d.createdFiles?.length) {
+        d.createdFiles.forEach(f => _aiAddFileCard(f));
+        if (_aiFilePanelOpen) aiRenderFilePanel();
+        else aiRefreshFileBadge();
+      }
+    } else {
+      _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка'));
+    }
+  } catch {
+    if (typing) typing.remove();
+    _aiAddMessage('assistant', '⚠️ Нет соединения.');
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    $('aiInput')?.focus();
+  }
+}
+
 function _aiAddToolLog(tools) {
   const msgs = $('aiMessages');
   if (!msgs || !tools?.length) return;
@@ -2478,11 +2613,15 @@ async function aiSend() {
       if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
       // Коллапсируемый лог инструментов
       if (d.toolsUsed?.length) _aiAddToolLog(d.toolsUsed);
-      _aiAddMessage('assistant', d.reply);
+      // Вопрос от AI пользователю
+      if (d.askUser) {
+        _aiShowQuestion(d.askUser);
+        return; // не добавляем пустой ответ
+      }
+      if (d.reply) _aiAddMessage('assistant', d.reply);
       // Показываем карточки созданных файлов
       if (d.createdFiles?.length) {
         d.createdFiles.forEach(f => _aiAddFileCard(f));
-        // Обновляем панель файлов если открыта
         if (_aiFilePanelOpen) aiRenderFilePanel();
         else aiRefreshFileBadge();
       }
