@@ -101,8 +101,35 @@ let currentRoom    = null;
 let friends        = [];
 let groups         = [];
 let friendRequests = [];
-let userAvatars    = {};
-let userNicknames  = {}; // username -> nickname (кэш отображаемых имён)
+// Аватарки и ники — загружаем из localStorage для мгновенной отрисовки
+let userAvatars   = {};
+let userNicknames = {};
+try {
+  const cached = JSON.parse(localStorage.getItem('aura_avatars') || '{}');
+  const cachedN = JSON.parse(localStorage.getItem('aura_nicknames') || '{}');
+  userAvatars   = cached  || {};
+  userNicknames = cachedN || {};
+} catch(e) { userAvatars = {}; userNicknames = {}; }
+
+function _saveAvatarCache() {
+  try {
+    localStorage.setItem('aura_avatars',   JSON.stringify(userAvatars));
+    localStorage.setItem('aura_nicknames', JSON.stringify(userNicknames));
+  } catch(e) {} // если localStorage переполнен — молча пропускаем
+}
+
+function _setAvatar(username, avatarUrl, nickname) {
+  let changed = false;
+  if (avatarUrl !== undefined && userAvatars[username] !== avatarUrl) {
+    userAvatars[username] = avatarUrl;
+    changed = true;
+  }
+  if (nickname !== undefined && userNicknames[username] !== nickname) {
+    userNicknames[username] = nickname;
+    changed = true;
+  }
+  if (changed) _saveAvatarCache();
+}
 let selectedFiles  = [];
 
 // Recording state
@@ -579,6 +606,8 @@ if (savedUser && savedPass) {
       // Password changed or account deleted — show login
       localStorage.removeItem('aura_user');
       localStorage.removeItem('aura_pass');
+      localStorage.removeItem('aura_last_room');
+      // НЕ удаляем aura_avatars/nicknames — они полезны для любого пользователя на этом устройстве
       showLogin();
     }
   })
@@ -745,7 +774,7 @@ function renderFriends(filter = '') {
 
 function renderGroups() {
   const ul = groupsList;
-  const newKey = groups.map(g => g.id + g.name).join('|') + '|' + (currentRoom || '');
+  const newKey = groups.map(g => g.id + g.name + (g.avatar || '')).join('|') + '|' + (currentRoom || '');
   if (ul._lastKey === newKey) return;
   ul._lastKey = newKey;
 
@@ -764,17 +793,31 @@ function renderGroups() {
       li = document.createElement('li');
       li.dataset.group = g.id;
       li.className = 'chat-item' + (isActive ? ' active' : '');
-      li.innerHTML = `
-        <div class="ci-ava" style="border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2))">
-          <i class="ti ti-users"></i>
-        </div>
-        <div class="ci-body">
-          <span class="ci-name">${esc(g.name)}</span>
-          <span class="ci-sub">${(g.members||[]).length} участников</span>
-        </div>`;
+      const avaEl = document.createElement('div');
+      avaEl.className = 'ci-ava';
+      avaEl.style.borderRadius = '12px';
+      avaEl.dataset.groupAva = g.id;
+      if (g.avatar) {
+        setAvatar(avaEl, `group:${g.id}`, g.avatar);
+      } else {
+        avaEl.innerHTML = '<i class="ti ti-users"></i>';
+      }
+      li.innerHTML = `<div class="ci-body">
+        <span class="ci-name">${esc(g.name)}</span>
+        <span class="ci-sub">${(g.members||[]).length} участников</span>
+      </div>`;
+      li.prepend(avaEl);
       li.onclick = () => { gotoRoom(`group:${g.id}`); closeSidebarMobile(); };
     } else {
       li.classList.toggle('active', isActive);
+      // Обновляем аватарку если изменилась
+      const avaEl = li.querySelector('[data-group-ava]');
+      if (avaEl) {
+        if (g.avatar) setAvatar(avaEl, `group:${g.id}`, g.avatar);
+        else { avaEl.style.backgroundImage = ''; avaEl.innerHTML = '<i class="ti ti-users"></i>'; }
+      }
+      const nameEl = li.querySelector('.ci-name');
+      if (nameEl) nameEl.textContent = g.name;
     }
     const at = ul.children[idx];
     if (at !== li) ul.insertBefore(li, at || null);
@@ -885,10 +928,22 @@ function gotoRoom(room) {
     const g = groups.find(g => g.id === room.replace('group:', ''));
     roomName.textContent = g?.name || 'Группа';
     roomSub.textContent  = g ? `${(g.members||[]).length} участников` : 'Группа';
-    roomAvatar.innerHTML = '<i class="ti ti-users" style="font-size:14px"></i>';
+    // Показываем аватарку группы если есть
+    if (g?.avatar) {
+      setAvatar(roomAvatar, `group:${g.id}`, g.avatar);
+    } else {
+      roomAvatar.innerHTML = '<i class="ti ti-users" style="font-size:14px"></i>';
+      roomAvatar.style.backgroundImage = '';
+      roomAvatar.style.background = 'linear-gradient(135deg,var(--accent),var(--accent2))';
+    }
     roomAvatar.style.borderRadius = '12px';
     if (onlinePill) onlinePill.style.display = 'none';
-    hdrRight.innerHTML = callBtnsHtml;
+    // Кнопка редактирования группы для создателя
+    const isCreator = g?.creator === currentUser;
+    const editBtn = isCreator
+      ? `<button class="icon-btn" title="Редактировать группу" onclick="openGroupEdit('${g.id}')"><i class="ti ti-settings"></i></button>`
+      : '';
+    hdrRight.innerHTML = editBtn + callBtnsHtml;
   }
 
   socket.emit('join-room', room);
@@ -1735,29 +1790,42 @@ socket.on('friends-updated', ({ friends: nf }) => {
 
 // New group created — update groups list
 socket.on('group-created', () => {
-  loadUserData(); // reload to get updated groups
+  loadUserData();
+});
+
+// Обновление группы (название/аватарка)
+socket.on('group-updated', ({ groupId, name, avatar }) => {
+  // Обновляем в локальном массиве
+  const g = groups.find(g => g.id === groupId);
+  if (g) {
+    if (name   !== undefined) g.name   = name;
+    if (avatar !== undefined) g.avatar = avatar;
+  }
+  // Если открыта эта группа — обновляем заголовок
+  if (currentRoom === `group:${groupId}`) {
+    if (roomName && name)     roomName.textContent = name;
+    if (roomAvatar && avatar) setAvatar(roomAvatar, `group:${groupId}`, avatar);
+    else if (roomAvatar && name) roomAvatar.innerHTML = name.charAt(0).toUpperCase();
+  }
+  // Сбрасываем кэш рендера сайдбара
+  if (groupsList) groupsList._lastKey = '';
+  renderGroups();
 });
 
 socket.on('avatar-updated', ({ username, avatar }) => {
-  userAvatars[username] = avatar;
-  // Update ALL visible avatars for this user in messages
-  document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => {
-    setAvatar(el, username, avatar);
-  });
-  // Update sidebar friend list avatars
-  document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => {
-    setAvatar(el, username, avatar);
-  });
-  // Update room header avatar
-  if (currentRoom.includes(username)) setAvatar(roomAvatar, username, avatar);
-  // Update settings avatar
+  _setAvatar(username, avatar, undefined); // сохраняем в кэш
+  const applyAll = (sel) => document.querySelectorAll(sel).forEach(el => setAvatar(el, username, avatar));
+  applyAll(`.msg-ava[data-user="${username}"]`);
+  applyAll(`.ci-ava[data-user="${username}"]`);
+  if (currentRoom && currentRoom.includes(username)) setAvatar(roomAvatar, username, avatar);
   const settingsAva = document.getElementById('settingsAvatar');
   if (settingsAva && username === currentUser) setAvatar(settingsAva, username, avatar);
 });
 
-// Fetch avatar + nickname for a user we don't have cached
+// Fetch avatar + nickname — если уже есть в кэше (localStorage), не делаем запрос
 async function fetchUserAvatar(username) {
-  if (userAvatars[username] && userNicknames[username]) return;
+  // Оба уже есть в кэше → ничего не делаем
+  if (userAvatars[username] !== undefined && userNicknames[username] !== undefined) return;
   try {
     const r = await fetch('/api/get-avatar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1766,27 +1834,27 @@ async function fetchUserAvatar(username) {
     if (!r.ok) return;
     const d = await r.json();
 
-    if (d.avatar) {
-      userAvatars[username] = d.avatar;
-      document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, d.avatar));
-      document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, d.avatar));
-      const other = currentRoom?.startsWith('private:')
-        ? currentRoom.split(':').slice(1).find(p => p !== currentUser)
-        : null;
-      if (other === username) setAvatar(roomAvatar, username, d.avatar);
-    }
+    const newAvatar   = d.avatar   ?? null;
+    const newNickname = d.nickname ?? username;
 
-    if (d.nickname && d.nickname !== username) {
-      userNicknames[username] = d.nickname;
-      // Update sender names in visible messages
+    // Сравниваем с кэшем — обновляем только если изменилось
+    const avatarChanged   = userAvatars[username]   !== newAvatar;
+    const nicknameChanged = userNicknames[username] !== newNickname;
+
+    if (avatarChanged) {
+      _setAvatar(username, newAvatar, undefined);
+      document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, newAvatar));
+      document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, newAvatar));
+      const other = currentRoom?.startsWith('private:')
+        ? currentRoom.split(':').slice(1).find(p => p !== currentUser) : null;
+      if (other === username) setAvatar(roomAvatar, username, newAvatar);
+    }
+    if (nicknameChanged) {
+      _setAvatar(username, undefined, newNickname);
       document.querySelectorAll(`.msg-sender`).forEach(el => {
         const row = el.closest('.msg-row');
-        if (row) {
-          const ava = row.querySelector(`.msg-ava[data-user="${username}"]`);
-          if (ava) el.textContent = d.nickname;
-        }
+        if (row && row.querySelector(`.msg-ava[data-user="${username}"]`)) el.textContent = newNickname;
       });
-      // Update sidebar items
       if (friendsList) friendsList._lastKey = '';
     }
   } catch {}
@@ -1841,6 +1909,104 @@ async function createGroup() {
     closeGroupModal();
     loadUserData();
   } else toast('Ошибка создания группы', 'error');
+}
+
+// ── Редактирование группы (название + аватарка) ─────────────────────────
+function openGroupEdit(groupId) {
+  const g = groups.find(g => g.id === groupId);
+  if (!g || g.creator !== currentUser) { toast('Только создатель может редактировать группу', 'warning'); return; }
+
+  const ov  = $('dialogOverlay');
+  const box = $('dialogBox');
+  if (!ov || !box) return;
+
+  box.innerHTML = `
+    <div class="dlg-ico info"><i class="ti ti-users"></i></div>
+    <h3>Редактировать группу</h3>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:16px">
+      <div class="ava-rel" style="cursor:pointer" onclick="document.getElementById('grpAvaInput').click()">
+        <div class="avatar lg" id="grpEditAva" style="border-radius:16px"></div>
+        <div class="ava-cam"><i class="ti ti-camera"></i></div>
+      </div>
+      <input type="file" id="grpAvaInput" accept="image/*" style="display:none"/>
+      <span class="sub-text">Нажмите для смены фото</span>
+    </div>
+    <div class="field-wrap" style="margin-bottom:14px">
+      <i class="ti ti-users field-ico"></i>
+      <input id="grpEditName" class="field" type="text" value="${esc(g.name)}" placeholder="Название группы…" maxlength="40"/>
+    </div>
+    <div id="grpEditErr" class="login-err"></div>
+    <div class="dlg-btns">
+      <button class="btn-secondary" id="grpEditCancel">Отмена</button>
+      <button class="btn-primary" id="grpEditSave"><i class="ti ti-check"></i> Сохранить</button>
+    </div>`;
+
+  // Показываем текущую аватарку
+  const avaEl = box.querySelector('#grpEditAva');
+  setAvatar(avaEl, `group:${groupId}`, g.avatar);
+
+  ov.classList.add('open');
+
+  // Выбор новой аватарки
+  let newAvatarUrl = undefined;
+  const avaInput = box.querySelector('#grpAvaInput');
+  avaInput.addEventListener('change', async () => {
+    const file = avaInput.files[0];
+    if (!file) return;
+    const saveBtn = box.querySelector('#grpEditSave');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await fetch('/upload', { method: 'POST', body: fd });
+      const d = await r.json();
+      if (d.url) {
+        newAvatarUrl = d.url;
+        setAvatar(avaEl, `group:${groupId}`, newAvatarUrl);
+        toast('Фото загружено', 'success');
+      }
+    } catch { toast('Ошибка загрузки фото', 'error'); }
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<i class="ti ti-check"></i> Сохранить';
+  });
+
+  box.querySelector('#grpEditCancel').onclick = () => ov.classList.remove('open');
+  ov.onclick = e => { if (e.target === ov) ov.classList.remove('open'); };
+
+  box.querySelector('#grpEditSave').onclick = async () => {
+    const newName = box.querySelector('#grpEditName').value.trim();
+    const errEl = box.querySelector('#grpEditErr');
+    if (!newName) { errEl.textContent = 'Введите название'; return; }
+
+    const saveBtn = box.querySelector('#grpEditSave');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>';
+
+    const body = { username: currentUser, groupId };
+    if (newName !== g.name) body.name = newName;
+    if (newAvatarUrl !== undefined) body.avatar = newAvatarUrl;
+
+    try {
+      const r = await fetch('/api/update-group', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (d.success) {
+        ov.classList.remove('open');
+        toast('Группа обновлена', 'success');
+      } else {
+        errEl.textContent = d.error || 'Ошибка';
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="ti ti-check"></i> Сохранить';
+      }
+    } catch {
+      errEl.textContent = 'Нет соединения';
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<i class="ti ti-check"></i> Сохранить';
+    }
+  };
 }
 
 // ══════════════════════════════════════════════
@@ -3327,7 +3493,7 @@ function _vcExpand(id) {
   wrap.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1), box-shadow .35s';
   wrap.style.width  = target + 'px';
   wrap.style.height = target + 'px';
-  wrap.style.borderRadius = '50%';
+  wrap.style.borderRadius = '18px';
   wrap.style.boxShadow = '0 16px 48px rgba(0,0,0,.5)';
   wrap.style.zIndex = '100';
   wrap.style.position = 'relative';
@@ -3336,7 +3502,7 @@ function _vcExpand(id) {
   v.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1)';
   v.style.width  = target + 'px';
   v.style.height = target + 'px';
-  v.style.borderRadius = '50%';
+  v.style.borderRadius = '18px';
 
   // Прячем overlay (иконку play)
   const ov = document.getElementById(id + '_ov');
