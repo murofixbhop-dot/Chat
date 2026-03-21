@@ -1674,3 +1674,8 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
+
+/* Отключаем анимацию для загружаемой истории */
+.msg-row.no-anim {
+  animation: none !important;
+}
