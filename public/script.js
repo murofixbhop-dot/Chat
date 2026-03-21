@@ -2394,105 +2394,189 @@ const _aiToolLabels = {
 
 // Добавляет коллапсируемый лог инструментов (как на скрине)
 // ── AI задаёт вопрос пользователю ───────────────────────────────────────────
+// ── AI вопросы над баром ввода (с мультиселектом и цепочкой) ──────────────
+let _aiQuestionQueue   = [];  // очередь вопросов
+let _aiQuestionAnswers = {};  // ответы на вопросы { index: value }
+let _aiQuestionIdx     = 0;   // текущий вопрос
+
 function _aiShowQuestion(askData) {
-  const msgs = $('aiMessages');
-  if (!msgs) return;
-  const welcome = msgs.querySelector('.ai-welcome');
-  if (welcome) welcome.remove();
-
-  const { question, options = [], allow_custom = false } = askData;
-
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:4px';
-
-  // Аватар AI
-  const ava = document.createElement('div');
-  ava.style.cssText = 'width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px';
-  ava.innerHTML = '<i class="ti ti-robot" style="font-size:14px;color:#fff"></i>';
-
-  const card = document.createElement('div');
-  card.style.cssText = 'flex:1;background:var(--surface3);border-radius:16px 16px 16px 4px;padding:12px 14px;max-width:85%';
-
-  // Вопрос
-  const qEl = document.createElement('div');
-  qEl.style.cssText = 'font-size:13.5px;line-height:1.5;color:var(--text);margin-bottom:10px';
-  qEl.innerHTML = esc(question).replace(/\n/g,'<br>');
-  card.appendChild(qEl);
-
-  // Кнопки вариантов
-  if (options.length) {
-    const btnWrap = document.createElement('div');
-    btnWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px';
-    options.forEach(opt => {
-      const btn = document.createElement('button');
-      btn.style.cssText = `
-        padding:8px 14px;border-radius:10px;border:1.5px solid var(--accent);
-        background:transparent;color:var(--accent);font-size:13px;font-weight:500;
-        cursor:pointer;text-align:left;transition:all .15s;font-family:inherit;
-      `;
-      btn.textContent = opt;
-      btn.onmouseover = () => { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; };
-      btn.onmouseout  = () => { btn.style.background = 'transparent'; btn.style.color = 'var(--accent)'; };
-      btn.onclick = () => {
-        // Убираем все кнопки и показываем выбор
-        card.querySelectorAll('button').forEach(b => b.disabled = true);
-        btn.style.background = 'var(--accent)';
-        btn.style.color = '#fff';
-        btn.style.opacity = '1';
-        card.querySelectorAll('button:not(:last-child)').forEach(b => {
-          if (b !== btn) { b.style.opacity = '0.35'; }
-        });
-        // Убираем поле ввода если есть
-        const customInput = card.querySelector('.ai-custom-input');
-        if (customInput) customInput.style.display = 'none';
-        // Отправляем как сообщение пользователя
-        setTimeout(() => _aiSendOption(opt), 200);
-      };
-      btnWrap.appendChild(btn);
-    });
-    card.appendChild(btnWrap);
+  // Поддержка обоих форматов
+  let questions = askData.questions;
+  if (!questions && askData.question) {
+    questions = [{ question: askData.question, options: askData.options || [], allow_custom: askData.allow_custom, required: true }];
   }
-
-  // Поле свободного ввода
-  if (allow_custom || !options.length) {
-    const customWrap = document.createElement('div');
-    customWrap.className = 'ai-custom-input';
-    customWrap.style.cssText = `display:flex;gap:6px;margin-top:${options.length?'8px':'0'}`;
-    const inp = document.createElement('input');
-    inp.type = 'text';
-    inp.placeholder = 'Ваш ответ…';
-    inp.style.cssText = 'flex:1;padding:8px 12px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;outline:none;font-family:inherit';
-    inp.onfocus = () => inp.style.borderColor = 'var(--accent)';
-    inp.onblur  = () => inp.style.borderColor = 'var(--border)';
-    inp.onkeydown = (e) => { if (e.key === 'Enter') sendCustom(); };
-    const sendBtn2 = document.createElement('button');
-    sendBtn2.style.cssText = 'width:36px;height:36px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0';
-    sendBtn2.innerHTML = '<i class="ti ti-send" style="font-size:14px"></i>';
-    const sendCustom = () => {
-      const val = inp.value.trim();
-      if (!val) return;
-      inp.disabled = true; sendBtn2.disabled = true;
-      _aiSendOption(val);
-    };
-    sendBtn2.onclick = sendCustom;
-    customWrap.appendChild(inp);
-    customWrap.appendChild(sendBtn2);
-    card.appendChild(customWrap);
-    setTimeout(() => inp.focus(), 80);
-  }
-
-  wrap.appendChild(ava);
-  wrap.appendChild(card);
-  msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiQuestionQueue   = questions || [];
+  _aiQuestionAnswers = {};
+  _aiQuestionIdx     = 0;
+  _aiRenderQuestionBar();
 }
 
-// Отправить выбранный вариант как сообщение пользователя
-async function _aiSendOption(text) {
-  const msgs = $('aiMessages');
+function _aiRenderQuestionBar() {
+  // Убираем старый бар если есть
+  document.getElementById('aiQuestionBar')?.remove();
 
-  // Показываем как сообщение пользователя
-  _aiAddMessage('user', text);
+  if (_aiQuestionIdx >= _aiQuestionQueue.length) {
+    // Все вопросы отвечены — отправляем итог
+    _aiSubmitAnswers();
+    return;
+  }
+
+  const q      = _aiQuestionQueue[_aiQuestionIdx];
+  const total  = _aiQuestionQueue.length;
+  const isLast = _aiQuestionIdx === total - 1;
+  const multi  = q.multi_select === true;
+  const canSkip = q.required === false;
+
+  // Бар над полем ввода
+  const modal = $('aiChatModal')?.querySelector('.modal-card');
+  if (!modal) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'aiQuestionBar';
+  bar.style.cssText = `
+    padding:12px 16px;background:var(--surface);border-top:1px solid var(--border);
+    flex-shrink:0;animation:fadeUp .2s cubic-bezier(.16,1,.3,1);`;
+
+  // Заголовок: прогресс + текст вопроса
+  const progress = total > 1
+    ? `<span style="font-size:10px;color:var(--text3);background:var(--surface3);padding:2px 8px;border-radius:99px;margin-right:6px">${_aiQuestionIdx+1}/${total}</span>`
+    : '';
+  const qText = document.createElement('div');
+  qText.style.cssText = 'font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:4px';
+  qText.innerHTML = `${progress}${esc(q.question)}`;
+  if (multi) qText.innerHTML += `<span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:4px">(можно выбрать несколько)</span>`;
+  bar.appendChild(qText);
+
+  // Выбранные варианты (для мультиселекта)
+  const selected = new Set();
+
+  // Кнопки вариантов
+  if (q.options?.length) {
+    const btnGrid = document.createElement('div');
+    btnGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px';
+
+    q.options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.style.cssText = `padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);
+        background:var(--surface3);color:var(--text);font-size:12px;font-weight:500;
+        cursor:pointer;transition:all .15s;font-family:inherit;`;
+      btn.textContent = opt;
+
+      const setActive = (active) => {
+        btn.style.background = active ? 'var(--accent)' : 'var(--surface3)';
+        btn.style.color      = active ? '#fff'          : 'var(--text)';
+        btn.style.borderColor= active ? 'var(--accent)' : 'var(--border)';
+      };
+
+      btn.onclick = () => {
+        if (multi) {
+          if (selected.has(opt)) { selected.delete(opt); setActive(false); }
+          else                   { selected.add(opt);    setActive(true);  }
+        } else {
+          // Одиночный — сразу переходим
+          _aiQuestionAnswers[_aiQuestionIdx] = opt;
+          _aiQuestionIdx++;
+          _aiRenderQuestionBar();
+        }
+      };
+      btnGrid.appendChild(btn);
+    });
+    bar.appendChild(btnGrid);
+  }
+
+  // Свободный ввод
+  let customInput = null;
+  if (q.allow_custom || !q.options?.length) {
+    const inputWrap = document.createElement('div');
+    inputWrap.style.cssText = 'display:flex;gap:6px;margin-bottom:6px';
+    customInput = document.createElement('input');
+    customInput.type = 'text';
+    customInput.placeholder = q.options?.length ? 'Или введите свой вариант…' : 'Ваш ответ…';
+    customInput.style.cssText = `flex:1;padding:7px 12px;background:var(--surface2);
+      border:1.5px solid var(--border);border-radius:10px;color:var(--text);
+      font-size:13px;outline:none;font-family:inherit;`;
+    customInput.onfocus = () => customInput.style.borderColor = 'var(--accent)';
+    customInput.onblur  = () => customInput.style.borderColor = 'var(--border)';
+    customInput.onkeydown = (e) => { if (e.key === 'Enter') confirmQ(); };
+    inputWrap.appendChild(customInput);
+    bar.appendChild(inputWrap);
+    setTimeout(() => customInput.focus(), 80);
+  }
+
+  // Кнопки действий
+  const actWrap = document.createElement('div');
+  actWrap.style.cssText = 'display:flex;gap:6px;justify-content:flex-end';
+
+  // Пропустить
+  if (canSkip || !q.options?.length || q.allow_custom) {
+    const skipBtn = document.createElement('button');
+    skipBtn.style.cssText = `padding:6px 14px;border-radius:10px;background:var(--surface3);
+      border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;`;
+    skipBtn.textContent = 'Пропустить';
+    skipBtn.onclick = () => {
+      _aiQuestionAnswers[_aiQuestionIdx] = null;
+      _aiQuestionIdx++;
+      _aiRenderQuestionBar();
+    };
+    actWrap.appendChild(skipBtn);
+  }
+
+  // Подтвердить (для мультиселекта или свободного ввода)
+  const needConfirm = multi || q.allow_custom || !q.options?.length;
+  if (needConfirm) {
+    const confirmBtn = document.createElement('button');
+    confirmBtn.style.cssText = `padding:6px 16px;border-radius:10px;background:var(--accent);
+      border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;`;
+    confirmBtn.textContent = isLast ? 'Готово' : 'Далее';
+
+    const confirmQ = () => {
+      let answer = [];
+      if (multi) answer = [...selected];
+      const custom = customInput?.value?.trim();
+      if (custom) answer.push(custom);
+      if (!answer.length && !canSkip) {
+        customInput && (customInput.style.borderColor = 'var(--danger)');
+        return;
+      }
+      _aiQuestionAnswers[_aiQuestionIdx] = answer.length === 1 ? answer[0] : answer.length > 1 ? answer : null;
+      _aiQuestionIdx++;
+      _aiRenderQuestionBar();
+    };
+
+    confirmBtn.onclick = confirmQ;
+    // Expose для Enter в input
+    if (customInput) customInput.onkeydown = (e) => { if (e.key === 'Enter') confirmQ(); };
+    actWrap.appendChild(confirmBtn);
+  }
+
+  if (actWrap.children.length) bar.appendChild(actWrap);
+
+  // Вставляем перед полем ввода
+  const inputZone = modal.querySelector('.input-box')?.parentElement;
+  if (inputZone) modal.insertBefore(bar, inputZone);
+  else modal.appendChild(bar);
+}
+
+async function _aiSubmitAnswers() {
+  document.getElementById('aiQuestionBar')?.remove();
+
+  // Собираем все ответы в сообщение
+  const answered = _aiQuestionQueue
+    .map((q, i) => {
+      const ans = _aiQuestionAnswers[i];
+      if (ans === null || ans === undefined) return null;
+      const ansStr = Array.isArray(ans) ? ans.join(', ') : ans;
+      return `${q.question}: ${ansStr}`;
+    })
+    .filter(Boolean);
+
+  if (!answered.length) {
+    // Всё пропущено — ничего не отправляем
+    return;
+  }
+
+  const summaryMsg = answered.join('\n');
+  _aiAddMessage('user', summaryMsg);
 
   const sendBtn = $('aiSendBtn');
   if (sendBtn) sendBtn.disabled = true;
@@ -2501,11 +2585,10 @@ async function _aiSendOption(text) {
   try {
     const r = await fetch('/api/ai-chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, message: text })
+      body: JSON.stringify({ username: currentUser, message: summaryMsg })
     });
     const d = await r.json();
     if (typing) typing.remove();
-
     if (d.success) {
       if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
       if (d.toolsUsed?.length) _aiAddToolLog(d.toolsUsed);
@@ -2516,6 +2599,38 @@ async function _aiSendOption(text) {
         if (_aiFilePanelOpen) aiRenderFilePanel();
         else aiRefreshFileBadge();
       }
+    } else {
+      _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка'));
+    }
+  } catch {
+    if (typing) typing.remove();
+    _aiAddMessage('assistant', '⚠️ Нет соединения.');
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    $('aiInput')?.focus();
+  }
+}
+
+// Старая функция — теперь просто алиас
+async function _aiSendOption(text) {
+  document.getElementById('aiQuestionBar')?.remove();
+  _aiAddMessage('user', text);
+  const sendBtn = $('aiSendBtn');
+  if (sendBtn) sendBtn.disabled = true;
+  const typing = _aiAddTyping();
+  try {
+    const r = await fetch('/api/ai-chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser, message: text })
+    });
+    const d = await r.json();
+    if (typing) typing.remove();
+    if (d.success) {
+      if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
+      if (d.toolsUsed?.length) _aiAddToolLog(d.toolsUsed);
+      if (d.askUser) { _aiShowQuestion(d.askUser); return; }
+      if (d.reply) _aiAddMessage('assistant', d.reply);
+      if (d.createdFiles?.length) { d.createdFiles.forEach(f => _aiAddFileCard(f)); aiRefreshFileBadge(); }
     } else {
       _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка'));
     }
