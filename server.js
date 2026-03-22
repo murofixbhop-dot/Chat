@@ -703,6 +703,30 @@ const AI_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'news_search',
+      description: 'Поиск свежих новостей на любую тему через NewsData.io',
+      parameters: { type:'object', properties: { query:{ type:'string' }, language:{ type:'string', description:'ru, en' } }, required:['query'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'image_generate',
+      description: 'Генерирует изображение по текстовому описанию (только если пользователь активировал HACK:enable-media или явно попросил). Возвращает URL изображения.',
+      parameters: { type:'object', properties: { prompt:{ type:'string', description:'Описание изображения на английском' }, style:{ type:'string', description:'realistic, anime, digital-art, watercolor, oil-painting' } }, required:['prompt'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_presentation',
+      description: 'Создаёт HTML презентацию или анимацию. Возвращает файл с превью.',
+      parameters: { type:'object', properties: { title:{ type:'string' }, slides:{ type:'array', items:{ type:'object', properties:{ title:{type:'string'}, content:{type:'string'}, bg:{type:'string',description:'background color or gradient'} } } }, animation_style:{ type:'string', description:'fade, slide, zoom, flip' } }, required:['title','slides'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'ask_user',
       description: 'Задаёт пользователю уточняющий вопрос с вариантами ответов. Поддерживает мультиселект (несколько вариантов) и последовательность вопросов. Используй когда нужно уточнить детали перед выполнением.',
       parameters: {
@@ -1268,6 +1292,115 @@ img{border-radius:10px}p{margin:16px 0 0;color:#6366f1;font-size:14px;word-break
       if (!result) result = '✅ Проверка завершена';
       aiSseEmit(username, 'log', { text: 'Проверка кода завершена', type: 'check' });
       return result;
+    }
+
+    // ── Новости ──────────────────────────────────────────────────────────
+    if (name === 'news_search') {
+      aiSseEmit(username, 'log', { text: `Новости: ${args.query}`, type: 'search' });
+      const lang = args.language || 'ru';
+      try {
+        // NewsData.io free tier (без ключа - базовый поиск)
+        const r = await axios.get(
+          `https://newsdata.io/api/1/news?q=${encodeURIComponent(args.query)}&language=${lang}&size=5`,
+          { timeout: 8000, headers: { 'X-ACCESS-KEY': process.env.NEWSDATA_KEY || '' } }
+        );
+        const articles = r.data?.results || [];
+        if (!articles.length) {
+          // Fallback: Wikipedia news
+          return await executeTool('wiki_search', { query: args.query + ' 2025' }, username);
+        }
+        let result = `Новости по "${args.query}":
+`;
+        articles.slice(0,4).forEach(a => {
+          result += `• **${a.title}** (${a.source_id || 'новости'})
+  ${(a.description||'').slice(0,120)}
+`;
+        });
+        aiSseEmit(username, 'log', { text: `Найдено ${articles.length} новостей`, type: 'result' });
+        return result;
+      } catch {
+        // Fallback to DuckDuckGo news
+        return await executeTool('web_search', { query: args.query + ' новости 2025' }, username);
+      }
+    }
+
+    // ── Генерация изображений (Pollinations.ai — бесплатно, без ключа) ────
+    if (name === 'image_generate') {
+      const prompt   = args.prompt || '';
+      const style    = args.style  || 'realistic';
+      aiSseEmit(username, 'log', { text: `Генерирую изображение: ${prompt.slice(0,50)}...`, type: 'process' });
+      const encodedPrompt = encodeURIComponent(`${prompt}, ${style}, high quality`);
+      const imgUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true`;
+      // Создаём HTML файл с изображением для превью
+      const html = `<!DOCTYPE html><html><head><title>Generated Image</title>
+<style>body{margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh}
+img{max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.8)}</style></head>
+<body><img src="${imgUrl}" alt="${prompt}" onload="this.style.opacity=1" style="opacity:0;transition:opacity .5s"/></body></html>`;
+      const { fileId, safe } = aiSaveFile(username, 'generated_image.html', html, `AI изображение: ${prompt.slice(0,40)}`);
+      aiSseEmit(username, 'log', { text: 'Изображение сгенерировано', type: 'result' });
+      return `FILE_CREATED:${fileId}:${safe}:Сгенерированное изображение:${html.length}
+URL: ${imgUrl}`;
+    }
+
+    // ── Создание презентации ──────────────────────────────────────────────
+    if (name === 'create_presentation') {
+      const { title, slides = [], animation_style = 'slide' } = args;
+      aiSseEmit(username, 'log', { text: `Создаю презентацию: ${title}`, type: 'write' });
+      const animations = {
+        fade:  'fadeIn .6s ease',
+        slide: 'slideInRight .5s cubic-bezier(.16,1,.3,1)',
+        zoom:  'scaleIn .5s cubic-bezier(.16,1,.3,1)',
+        flip:  'flipIn .6s ease',
+      };
+      const anim = animations[animation_style] || animations.slide;
+      const slideColors = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444'];
+      const slidesHtml = slides.map((slide, i) => {
+        const bg = slide.bg || `linear-gradient(135deg, ${slideColors[i%slideColors.length]}, ${slideColors[(i+1)%slideColors.length]})`;
+        return `<div class="slide" id="slide${i}" style="display:${i===0?'flex':'none'};background:${bg}">
+          <div class="content">
+            <h2>${esc(slide.title||'')}</h2>
+            <p>${esc(slide.content||'').replace(/\n/g,'<br>')}</p>
+          </div>
+          <div class="slide-num">${i+1}/${slides.length}</div>
+        </div>`;
+      }).join('');
+      const html = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
+<title>${esc(title)}</title>
+<style>
+@keyframes slideInRight{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;height:100vh;overflow:hidden;background:#000}
+.slide{width:100vw;height:100vh;flex-direction:column;align-items:center;justify-content:center;padding:40px;animation:${anim};cursor:pointer}
+.content{text-align:center;color:#fff;max-width:800px}
+h2{font-size:clamp(24px,5vw,56px);font-weight:800;margin-bottom:24px;text-shadow:0 2px 20px rgba(0,0,0,.3)}
+p{font-size:clamp(14px,2.5vw,24px);opacity:.9;line-height:1.6}
+.slide-num{position:fixed;bottom:20px;right:24px;color:rgba(255,255,255,.5);font-size:13px}
+.progress{position:fixed;top:0;left:0;height:3px;background:rgba(255,255,255,.5);transition:width .3s}
+.nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px}
+.nav button{padding:8px 20px;border-radius:99px;border:2px solid rgba(255,255,255,.4);background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:13px;backdrop-filter:blur(8px)}
+.nav button:hover{background:rgba(255,255,255,.25)}
+.title-bar{position:fixed;top:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.6);font-size:13px;background:rgba(0,0,0,.3);padding:4px 14px;border-radius:99px;backdrop-filter:blur(8px)}
+</style></head><body>
+${slidesHtml}
+<div class="progress" id="prog"></div>
+<div class="title-bar">${esc(title)}</div>
+<div class="nav">
+  <button onclick="prev()">← Назад</button>
+  <button onclick="next()">Далее →</button>
+</div>
+<script>
+let cur=0;const total=${slides.length};
+function show(n){document.querySelectorAll('.slide').forEach((s,i)=>s.style.display=i===n?'flex':'none');cur=n;document.getElementById('prog').style.width=((n+1)/total*100)+'%';}
+function next(){if(cur<total-1)show(cur+1);}
+function prev(){if(cur>0)show(cur-1);}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')next();if(e.key==='ArrowLeft')prev();});
+document.querySelectorAll('.slide').forEach(s=>s.onclick=next);
+</script></body></html>`;
+      const { fileId, safe } = aiSaveFile(username, `${title.replace(/\s+/g,'_')}.html`, html, `Презентация: ${title}`);
+      aiSseEmit(username, 'log', { text: `Презентация готова (${slides.length} слайдов)`, type: 'result' });
+      return `FILE_CREATED:${fileId}:${safe}:Презентация "${title}" (${slides.length} слайдов):${html.length}`;
     }
 
     // ── Вопрос пользователю ───────────────────────────────────────────────
