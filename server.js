@@ -194,6 +194,20 @@ async function getBucketId(bucketName, auth) {
   if (!bucket) throw new Error(`Бакет "${bucketName}" не найден`);
   return bucket.bucketId;
 }
+// Делаем бакет публичным для чтения (allPublic = скачивание без токена)
+async function b2SetBucketPublic(bucketId, bucketName) {
+  try {
+    await axios.post(
+      b2Auth.apiUrl + '/b2api/v2/b2_update_bucket',
+      { accountId: b2Auth.accountId, bucketId, bucketType: 'allPublic' },
+      { headers: { Authorization: b2Auth.authorizationToken }, timeout: 10000 }
+    );
+    console.log('[B2] "' + bucketName + '" → публичный');
+  } catch(e) {
+    console.warn('[B2] Не удалось сделать "' + bucketName + '" публичным:', e.response?.status, e.response?.data?.message || e.message);
+  }
+}
+
 // Кэш download-токенов по имени бакета { bucketName -> { token, expires } }
 const b2DownloadTokens = new Map();
 
@@ -298,12 +312,11 @@ async function storageUpload(fileName, buffer, contentType) {
 async function storageDownload(fileName) {
   if (USE_SB) return sbDownload(fileName);
   if (USE_R2) return r2Download(fileName);
-  // B2 — определяем правильный бакет и получаем download-токен
   if (!b2Auth) await reAuthB2();
-  const { bucketId, bucketName } = b2GetBucketForFile(fileName);
-  const token = await getB2DownloadToken(bucketId, bucketName);
-  const url = `${b2Auth.downloadUrl}/file/${bucketName}/${encodeURIComponent(fileName)}`;
-  return { url, token };
+  const { bucketName } = b2GetBucketForFile(fileName);
+  const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + encodeURIComponent(fileName);
+  // Используем мастер-токен для приватного бакета
+  return { url, token: b2Auth.authorizationToken };
 }
 
 async function initStorage() {
@@ -323,12 +336,14 @@ async function initStorage() {
     b2Auth     = await authorizeB2();
     b2BucketId = await getBucketId(B2_BUCKET_NAME);
     B2_BUCKET_NAME_ACTIVE = B2_BUCKET_NAME;
+    await b2SetBucketPublic(b2BucketId, B2_BUCKET_NAME);
     console.log(`✅ B2 бакет 1: "${B2_BUCKET_NAME}" (видео, квадраты)`);
     // Получаем download-токен для бакета 1
     await getB2DownloadToken(b2BucketId, B2_BUCKET_NAME);
     if (USE_B2_DUAL) {
       try {
         b2BucketId2 = await getBucketId(B2_BUCKET_NAME2);
+        await b2SetBucketPublic(b2BucketId2, B2_BUCKET_NAME2);
         console.log(`✅ B2 бакет 2: "${B2_BUCKET_NAME2}" (фото, аудио, файлы)`);
         await getB2DownloadToken(b2BucketId2, B2_BUCKET_NAME2);
       } catch(e) {
@@ -491,11 +506,16 @@ async function sendVerifyEmail(to, code) {
 
 async function loadUsers() {
   try {
-    const dl = await storageDownload(USERS_FILE);
-    const reqHeaders = dl.authHeader ? { Authorization: dl.authHeader, ...dl.extraHeaders } : (dl.token ? { Authorization: dl.token } : {});
-    console.log('[B2 load] users URL:', dl.url.slice(0, 80) + '...');
-    console.log('[B2 load] token length:', dl.token ? dl.token.length : 0);
-    const response = await axios.get(dl.url, { timeout: 10000, headers: reqHeaders });
+    if (!b2Auth) await reAuthB2();
+    const { bucketName } = b2GetBucketForFile(USERS_FILE);
+    const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + USERS_FILE;
+    console.log('[B2 load] users URL:', url);
+    console.log('[B2 load] token:', b2Auth.authorizationToken.slice(0,20) + '...');
+    // Скачиваем с мастер-токеном напрямую
+    const response = await axios.get(url, {
+      timeout: 15000,
+      headers: { Authorization: b2Auth.authorizationToken }
+    });
     if (response.data && typeof response.data === 'object') {
       users = new Map(Object.entries(response.data));
       console.log(`👥 Загружено ${users.size} пользователей`);
@@ -3641,9 +3661,13 @@ app.post('/api/delete-message', async (req, res) => {
 
 async function loadHistory() {
   try {
-    const dl = await storageDownload(HISTORY_FILE);
-    const reqHeaders = dl.authHeader ? { Authorization: dl.authHeader, ...dl.extraHeaders } : (dl.token ? { Authorization: dl.token } : {});
-    const response = await axios.get(dl.url, { timeout: 10000, headers: reqHeaders });
+    if (!b2Auth) await reAuthB2();
+    const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
+    const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + HISTORY_FILE;
+    const response = await axios.get(url, {
+      timeout: 15000,
+      headers: { Authorization: b2Auth.authorizationToken }
+    });
     if (response.data && Array.isArray(response.data)) {
       messageHistory = response.data.slice(-MAX_HISTORY);
       console.log(`📁 Загружено ${messageHistory.length} сообщений`);
