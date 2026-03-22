@@ -22,8 +22,51 @@
   <title>Aura · Messenger</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <!-- Tabler Icons: primary CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.14.0/dist/tabler-icons.min.css" crossorigin="anonymous"/>
-  <link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@latest/tabler-icons.min.css" media="print" onload="this.media='all'" crossorigin="anonymous"/>
+  <!-- Tabler Icons: fallback CDN (загружается если первый не сработал) -->
+  <link rel="stylesheet" id="tablerFallback" href="" crossorigin="anonymous"/>
+  <script>
+  // Проверяем загрузку иконок и подключаем запасной CDN
+  (function() {
+    function checkIcons() {
+      var test = document.createElement('i');
+      test.className = 'ti ti-home';
+      test.style.cssText = 'position:absolute;visibility:hidden;font-size:16px';
+      document.body.appendChild(test);
+      var w = test.getBoundingClientRect().width;
+      document.body.removeChild(test);
+      // Если иконка имеет ширину > 3px — шрифт загружен
+      if (w < 3) {
+        console.log('[Icons] CDN1 не загрузился, пробуем запасной...');
+        var fb = document.getElementById('tablerFallback');
+        if (fb && !fb.href) {
+          fb.href = 'https://unpkg.com/@tabler/icons-webfont@3.14.0/dist/tabler-icons.min.css';
+          // Третий fallback через 2с
+          setTimeout(function() {
+            var w2 = 0;
+            var t2 = document.createElement('i');
+            t2.className = 'ti ti-home';
+            t2.style.cssText = 'position:absolute;visibility:hidden;font-size:16px';
+            document.body.appendChild(t2);
+            w2 = t2.getBoundingClientRect().width;
+            document.body.removeChild(t2);
+            if (w2 < 3) {
+              var l3 = document.createElement('link');
+              l3.rel = 'stylesheet';
+              l3.href = 'https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.14.0/tabler-icons.min.css';
+              document.head.appendChild(l3);
+              console.log('[Icons] CDN2 не загрузился, пробуем CDN3...');
+            }
+          }, 2000);
+        }
+      }
+    }
+    // Проверяем после полной загрузки страницы
+    if (document.readyState === 'complete') { setTimeout(checkIcons, 500); }
+    else { window.addEventListener('load', function(){ setTimeout(checkIcons, 500); }); }
+  })();
+  </script>
   <link rel="stylesheet" href="style.css"/>
 <script>
 // Предотвращаем прыжок страницы при фокусе на input (iOS)
@@ -89,12 +132,13 @@
 
 <!-- CIRCLE RECORD -->
 <div id="circleOverlay" class="circle-overlay">
-  <div class="circle-card">
-    <div class="circle-preview-wrap">
+  <div class="circle-card square-card">
+    <div class="square-preview-wrap">
       <video id="circlePreview" autoplay muted playsinline></video>
-      <svg class="circle-svg" viewBox="0 0 220 220">
-        <circle class="c-bg" cx="110" cy="110" r="100"/>
-        <circle class="c-fg" id="cFg" cx="110" cy="110" r="100"/>
+      <!-- Прогресс-рамка (квадратная SVG анимация) -->
+      <svg class="square-progress-svg" viewBox="0 0 220 220" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
+        <rect class="sq-bg" x="4" y="4" width="212" height="212" rx="20" ry="20"/>
+        <rect class="sq-fg" id="cFg" x="4" y="4" width="212" height="212" rx="20" ry="20"/>
       </svg>
       <div class="circle-badge"><span class="rec-dot"></span>REC</div>
     </div>
