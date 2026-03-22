@@ -2267,7 +2267,6 @@ function toggleConsole() {
   if (_consoleOpen) {
     setTimeout(() => $('consoleInput')?.focus(), 80);
     _consolePrint('Aura Dev Console v1.0', '#6366f1');
-    _consolePrint('Команды: Sudo HACK delete-groups · Sudo HACK enable-media · Sudo HACK status · Sudo HACK clear', '#888');
     _consolePrint('─'.repeat(60), '#333');
   }
 }
@@ -2342,13 +2341,7 @@ function _hackRefreshGroupList() {
   renderGroups();
 }
 
-// Клавиша Ъ или } открывает консоль (только когда НЕ в поле ввода)
-document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.key === 'Ъ' || e.key === 'ъ' || e.key === '}' || e.key === '{') {
-    toggleConsole();
-  }
-});
+// Консоль открывается только через Настройки → Аккаунт
 
 
 
@@ -2526,10 +2519,13 @@ function _aiAddFileCard(file) {
   if (previewable) {
     const previewBtn = document.createElement('button');
     previewBtn.title = 'Превью';
-    previewBtn.style.cssText = 'padding:6px 10px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:12px;cursor:pointer;flex-shrink:0';
+    previewBtn.style.cssText = 'padding:6px 10px;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;flex-shrink:0;margin-right:4px';
     previewBtn.innerHTML = '<i class="ti ti-eye"></i>';
-    previewBtn.onclick = () => _aiPreviewFile(file.id);
-    card.querySelector('[style*="display:flex;align-items:center;gap:10px"]')?.appendChild(previewBtn);
+    previewBtn.onclick = () => _aiPreviewFile(file.id, file.name);
+    // Вставляем перед кнопкой скачать
+    const dlBtn = card.querySelector('a[download]');
+    if (dlBtn) card.insertBefore(previewBtn, dlBtn);
+    else card.appendChild(previewBtn);
   }
 
   msgs.appendChild(card);
@@ -2537,10 +2533,17 @@ function _aiAddFileCard(file) {
 }
 
 // ── HTML/JS/CSS Preview ──────────────────────────────────────────────────────
-async function _aiPreviewFile(fileId) {
-  // Собираем все связанные файлы (HTML+CSS+JS)
+async function _aiPreviewFile(fileId, mainName) {
+  // Загружаем файл с сервера (актуальное содержимое)
+  let mainContent = '';
+  try {
+    const r = await fetch('/api/ai-file/' + encodeURIComponent(currentUser) + '/' + fileId);
+    mainContent = await r.text();
+  } catch(e) {
+    toast('Ошибка загрузки файла', 'error'); return;
+  }
   const allFiles = _aiLastCreatedFiles;
-  const mainFile = allFiles.find(f => f.id === fileId);
+  const mainFile = allFiles.find(f => f.id === fileId) || { id: fileId, name: mainName || 'file', content: mainContent };
   if (!mainFile) return;
 
   const ext = mainFile.name.split('.').pop().toLowerCase();
@@ -2587,7 +2590,16 @@ async function _aiPreviewFile(fileId) {
   document.body.appendChild(modal);
 
   const iframe = modal.querySelector('#aiPreviewFrame');
-  iframe.srcdoc = html;
+  // Используем blob URL для надёжного рендера
+  try {
+    const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    iframe.src = blobUrl;
+    // Освобождаем через 60с
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch(e) {
+    iframe.srcdoc = html;
+  }
 }
 
 async function _aiDownloadZip() {
@@ -2956,6 +2968,17 @@ function _aiConnectSse() {
     } catch {}
   });
 
+  // Медиа (изображение/видео) от AI
+  _aiSse.addEventListener('media', (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      document.getElementById('aiTyping')?.remove();
+      if (d.type === 'image') {
+        _aiAddMediaMessage(d.base64, d.prompt || '');
+      }
+    } catch(err) { console.error('SSE media err', err); }
+  });
+
   _aiSse.addEventListener('done', () => {
     if (_aiStreamBubble) {
       // Убираем курсор
@@ -2967,6 +2990,61 @@ function _aiConnectSse() {
   });
 
   _aiSse.onerror = () => {};
+}
+
+// Показывает изображение от AI прямо в чате
+function _aiAddMediaMessage(base64url, prompt) {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+  const welcome = msgs.querySelector('.ai-welcome');
+  if (welcome) welcome.remove();
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:8px';
+
+  const ava = document.createElement('div');
+  ava.style.cssText = 'width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px';
+  ava.innerHTML = '<i class="ti ti-robot" style="font-size:14px;color:#fff"></i>';
+
+  const bubble = document.createElement('div');
+  bubble.style.cssText = 'max-width:85%;';
+
+  // Изображение с кнопками
+  const imgWrap = document.createElement('div');
+  imgWrap.style.cssText = 'position:relative;display:inline-block;border-radius:14px;overflow:hidden;background:var(--surface2)';
+
+  const img = document.createElement('img');
+  img.src = base64url;
+  img.alt = prompt;
+  img.style.cssText = 'max-width:360px;max-height:280px;display:block;border-radius:14px;cursor:pointer;transition:filter .2s';
+  img.onclick = () => viewMedia(base64url, 'image');
+  img.onmouseover = () => img.style.filter = 'brightness(.85)';
+  img.onmouseout  = () => img.style.filter = '';
+
+  // Кнопка скачать
+  const dl = document.createElement('a');
+  dl.href = base64url;
+  dl.download = 'ai_image.jpg';
+  dl.style.cssText = 'position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;padding:5px 10px;border-radius:8px;font-size:12px;text-decoration:none;backdrop-filter:blur(4px)';
+  dl.innerHTML = '<i class="ti ti-download"></i>';
+
+  imgWrap.appendChild(img);
+  imgWrap.appendChild(dl);
+
+  if (prompt) {
+    const cap = document.createElement('div');
+    cap.style.cssText = 'font-size:11px;color:var(--text3);margin-top:4px;padding:0 2px';
+    cap.textContent = prompt;
+    bubble.appendChild(imgWrap);
+    bubble.appendChild(cap);
+  } else {
+    bubble.appendChild(imgWrap);
+  }
+
+  wrap.appendChild(ava);
+  wrap.appendChild(bubble);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 function _aiCreateStreamBubble() {
