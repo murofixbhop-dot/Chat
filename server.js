@@ -768,6 +768,46 @@ const AI_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'random',
+      description: 'Генерирует случайные данные: числа, UUID, пароли, имена, цвета, кости',
+      parameters: { type:'object', properties:{ type:{type:'string',description:'number, uuid, password, name, color, dice, coin, shuffle'}, min:{type:'number'}, max:{type:'number'}, count:{type:'number'}, length:{type:'number'} }, required:['type'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'date_calc',
+      description: 'Вычисляет разницу между датами, добавляет/вычитает дни, находит день недели, праздники',
+      parameters: { type:'object', properties:{ action:{type:'string',description:'diff, add, weekday, next_holiday, age, countdown'}, date1:{type:'string'}, date2:{type:'string'}, days:{type:'number'} }, required:['action'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'text_analyze',
+      description: 'Анализирует текст: подсчёт слов/символов, читаемость, частые слова, язык, тональность',
+      parameters: { type:'object', properties:{ text:{type:'string'}, action:{type:'string',description:'stats, frequency, readability, sentiment, language'} }, required:['text','action'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'math_advanced',
+      description: 'Продвинутая математика: матрицы, статистика, геометрия, теория чисел, комбинаторика',
+      parameters: { type:'object', properties:{ operation:{type:'string',description:'prime, fibonacci, factorial, gcd, lcm, sqrt, log, sin, cos, tan, matrix_det, statistics'}, values:{type:'array',items:{type:'number'}}, n:{type:'number'} }, required:['operation'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ip_info',
+      description: 'Информация об IP адресе: страна, провайдер, координаты, тип',
+      parameters: { type:'object', properties:{ ip:{type:'string',description:'IP адрес или "my" для своего'} }, required:['ip'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'ask_user',
       description: 'Задаёт пользователю уточняющий вопрос с вариантами ответов. Поддерживает мультиселект (несколько вариантов) и последовательность вопросов. Используй когда нужно уточнить детали перед выполнением.',
       parameters: {
@@ -1537,6 +1577,217 @@ document.querySelectorAll('.slide').forEach(s=>s.onclick=next);
       return `FILE_CREATED:${fileId}:${safe}:Презентация "${title}" (${slides.length} слайдов):${html.length}`;
     }
 
+    // ── Случайные данные ─────────────────────────────────────────────────
+    if (name === 'random') {
+      const { type, min=1, max=100, count=1, length=16 } = args;
+      const crypto = require('crypto');
+      switch(type) {
+        case 'number': {
+          const nums = Array.from({length:count}, () => Math.floor(Math.random()*(max-min+1))+min);
+          return `🎲 Случайн${count>1?'ые числа':'ое число'}: **${nums.join(', ')}**`;
+        }
+        case 'uuid':    return `🔑 UUID: \`${crypto.randomUUID()}\``;
+        case 'password': {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+          const pwd = Array.from({length}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+          return `🔐 Пароль (${length} симв): \`${pwd}\``;
+        }
+        case 'color': {
+          const hex = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0');
+          return `🎨 Цвет: \`${hex}\` (RGB: ${parseInt(hex.slice(1,3),16)}, ${parseInt(hex.slice(3,5),16)}, ${parseInt(hex.slice(5,7),16)})`;
+        }
+        case 'dice':  return `🎲 Кубик d${max||6}: **${Math.floor(Math.random()*(max||6))+1}**`;
+        case 'coin':  return `🪙 Монета: **${Math.random()>0.5?'Орёл':'Решка'}**`;
+        case 'name': {
+          const names = ['Александр','Дмитрий','Михаил','Иван','Андрей','Алексей','Елена','Наталья','Анна','Мария','Ольга','Татьяна'];
+          const surns = ['Иванов','Смирнов','Кузнецов','Попов','Соколов','Лебедев','Козлов','Новиков','Морозов','Петров'];
+          return `👤 Имя: **${names[Math.floor(Math.random()*names.length)]} ${surns[Math.floor(Math.random()*surns.length)]}**`;
+        }
+        default: return `Неизвестный тип: ${type}`;
+      }
+    }
+
+    // ── Вычисления с датами ──────────────────────────────────────────────
+    if (name === 'date_calc') {
+      const { action, date1, date2, days } = args;
+      const d1 = date1 ? new Date(date1) : new Date();
+      switch(action) {
+        case 'diff': {
+          const d2 = new Date(date2 || Date.now());
+          const ms = Math.abs(d2 - d1);
+          const totalDays = Math.floor(ms / 86400000);
+          const years = Math.floor(totalDays / 365);
+          const months = Math.floor((totalDays % 365) / 30);
+          const remDays = totalDays % 30;
+          return `📅 Разница: **${years > 0 ? years + ' лет ' : ''}${months > 0 ? months + ' мес ' : ''}${remDays} дн** (всего ${totalDays} дней)`;
+        }
+        case 'add': {
+          const result = new Date(d1.getTime() + (days||0) * 86400000);
+          return `📅 ${d1.toLocaleDateString('ru-RU')} + ${days} дней = **${result.toLocaleDateString('ru-RU')}**`;
+        }
+        case 'weekday': {
+          const days_ru = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+          return `📅 ${d1.toLocaleDateString('ru-RU')} — **${days_ru[d1.getDay()]}**`;
+        }
+        case 'age': {
+          const now = new Date();
+          const years = now.getFullYear() - d1.getFullYear() - (now < new Date(now.getFullYear(), d1.getMonth(), d1.getDate()) ? 1 : 0);
+          return `🎂 Возраст: **${years} лет** (${Math.floor((now-d1)/86400000)} дней)`;
+        }
+        case 'countdown': {
+          const target = new Date(date2 || date1);
+          const ms2 = target - Date.now();
+          if (ms2 < 0) return `📅 Дата ${target.toLocaleDateString('ru-RU')} уже прошла`;
+          const d = Math.floor(ms2/86400000), h = Math.floor(ms2%86400000/3600000), m = Math.floor(ms2%3600000/60000);
+          return `⏳ До ${target.toLocaleDateString('ru-RU')}: **${d} дн ${h} ч ${m} мин**`;
+        }
+        default: return new Date().toLocaleString('ru-RU');
+      }
+    }
+
+    // ── Анализ текста ────────────────────────────────────────────────────
+    if (name === 'text_analyze') {
+      const { text, action } = args;
+      switch(action) {
+        case 'stats': {
+          const words   = text.trim().split(/\s+/).filter(Boolean);
+          const sents   = text.split(/[.!?]+/).filter(Boolean);
+          const paras   = text.split(/\n\n+/).filter(Boolean);
+          return `📊 Статистика текста:
+• Символов: **${text.length}** (без пробелов: **${text.replace(/\s/g,'').length}**)
+• Слов: **${words.length}**
+• Предложений: **${sents.length}**
+• Абзацев: **${paras.length}**
+• Среднее слов в предложении: **${(words.length/Math.max(sents.length,1)).toFixed(1)}**`;
+        }
+        case 'frequency': {
+          const words = text.toLowerCase().replace(/[^а-яёa-z\s]/gi,'').split(/\s+/).filter(w => w.length > 2);
+          const freq  = {};
+          words.forEach(w => freq[w] = (freq[w]||0) + 1);
+          const top = Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0,10);
+          const lines = top.map(([w,c]) => '• **' + w + '**: ' + c);
+          return '📊 Топ-10 слов:\n' + lines.join('\n');
+        }
+        case 'sentiment': {
+          const pos = (text.match(/хорошо|отлично|замечательно|супер|прекрасно|люблю|нравится|здорово|great|good|love|excellent|amazing|wonderful|happy/gi)||[]).length;
+          const neg = (text.match(/плохо|ужасно|ненавижу|провал|проблема|ошибка|bad|terrible|hate|fail|problem|error|awful|horrible/gi)||[]).length;
+          const tone = pos > neg ? '😊 Позитивный' : neg > pos ? '😔 Негативный' : '😐 Нейтральный';
+          return `🎭 Тональность: **${tone}**
+• Позитивных маркеров: ${pos}
+• Негативных маркеров: ${neg}`;
+        }
+        default: return `Текст: ${text.length} символов`;
+      }
+    }
+
+    // ── Продвинутая математика ────────────────────────────────────────────
+    if (name === 'math_advanced') {
+      const { operation, values = [], n = 10 } = args;
+      switch(operation) {
+        case 'prime': {
+          const isPrime = num => { if(num<2) return false; for(let i=2;i<=Math.sqrt(num);i++) if(num%i===0) return false; return true; };
+          const primes = []; for(let i=2; primes.length<n; i++) if(isPrime(i)) primes.push(i);
+          return `Простые числа (первые ${n}): **${primes.join(', ')}**`;
+        }
+        case 'fibonacci': {
+          const fib = [0,1]; while(fib.length < n) fib.push(fib[fib.length-1]+fib[fib.length-2]);
+          return `Числа Фибоначчи (${n}): **${fib.join(', ')}**`;
+        }
+        case 'factorial': {
+          const num = n || values[0] || 10;
+          let result = 1n; for(let i=2n; i<=BigInt(num); i++) result *= i;
+          return `${num}! = **${result}**`;
+        }
+        case 'gcd': {
+          const gcd = (a,b) => b ? gcd(b,a%b) : a;
+          const result = values.reduce(gcd);
+          return `НОД(${values.join(', ')}) = **${result}**`;
+        }
+        case 'statistics': {
+          if (!values.length) return 'Нужны числа';
+          const sorted = [...values].sort((a,b)=>a-b);
+          const mean   = values.reduce((a,b)=>a+b,0)/values.length;
+          const median = sorted.length%2 ? sorted[Math.floor(sorted.length/2)] : (sorted[sorted.length/2-1]+sorted[sorted.length/2])/2;
+          const variance = values.reduce((a,b)=>a+(b-mean)**2,0)/values.length;
+          return `📊 Статистика [${values.join(', ')}]:
+• Сумма: **${values.reduce((a,b)=>a+b,0)}**
+• Среднее: **${mean.toFixed(4)}**
+• Медиана: **${median}**
+• Мин/Макс: **${sorted[0]}** / **${sorted[sorted.length-1]}**
+• Ст. откл: **${Math.sqrt(variance).toFixed(4)}**`;
+        }
+        default: return `Операция ${operation} не поддерживается`;
+      }
+    }
+
+    // ── IP информация ─────────────────────────────────────────────────────
+    if (name === 'ip_info') {
+      const ip = args.ip === 'my' ? '' : args.ip;
+      try {
+        const r = await axios.get(`https://ipapi.co/${ip}/json/`, { timeout: 6000 });
+        const d = r.data;
+        if (d.error) return `IP не найден: ${d.reason}`;
+        return `🌍 IP: **${d.ip}**
+• Страна: **${d.country_name}** ${d.country_code}
+• Город: ${d.city}, ${d.region}
+• Провайдер: ${d.org}
+• Координаты: ${d.latitude}, ${d.longitude}
+• Тип: ${d.type || 'Неизвестно'}`;
+      } catch(e) { return `Ошибка: ${e.message}`; }
+    }
+
+    // ── Случайные данные ─────────────────────────────────────────────────
+    if (name === 'random') {
+      const { type, min=1, max=100, count=1, length=16 } = args;
+      const crypto = require('crypto');
+      const t = type.toLowerCase();
+      if (t === 'number') { const nums = Array.from({length:count}, () => Math.floor(Math.random()*(max-min+1))+min); return `Случайн${count>1?'ые числа':'ое число'}: **${nums.join(', ')}**`; }
+      if (t === 'uuid') return `UUID: \`${crypto.randomUUID()}\``;
+      if (t === 'password') { const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'; const pwd=Array.from({length},()=>chars[Math.floor(Math.random()*chars.length)]).join(''); return `Пароль (${length} симв): \`${pwd}\``; }
+      if (t === 'color') { const hex='#'+Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'); return `Цвет: \`${hex}\``; }
+      if (t === 'dice') return `Кубик d${max||6}: **${Math.floor(Math.random()*(max||6))+1}**`;
+      if (t === 'coin') return `Монета: **${Math.random()>0.5?'Орёл':'Решка'}**`;
+      return `Тип ${type} не поддерживается`;
+    }
+    // ── Вычисления с датами ──────────────────────────────────────────────
+    if (name === 'date_calc') {
+      const { action, date1, date2, days } = args;
+      const d1 = date1 ? new Date(date1) : new Date();
+      if (action === 'diff') { const d2=new Date(date2||Date.now()); const td=Math.floor(Math.abs(d2-d1)/86400000); return `Разница: **${Math.floor(td/365)} лет ${Math.floor(td%365/30)} мес ${td%30} дн** (${td} дней)`; }
+      if (action === 'add') { const r=new Date(d1.getTime()+(days||0)*86400000); return `${d1.toLocaleDateString('ru-RU')} + ${days} дней = **${r.toLocaleDateString('ru-RU')}**`; }
+      if (action === 'weekday') { const dn=['вс','пн','вт','ср','чт','пт','сб']; return `${d1.toLocaleDateString('ru-RU')} — **${dn[d1.getDay()]}**`; }
+      if (action === 'age') { const now=new Date(); const y=now.getFullYear()-d1.getFullYear()-((now<new Date(now.getFullYear(),d1.getMonth(),d1.getDate()))?1:0); return `Возраст: **${y} лет**`; }
+      if (action === 'countdown') { const ms=new Date(date2||date1)-Date.now(); if(ms<0) return 'Дата уже прошла'; const d=Math.floor(ms/86400000),h=Math.floor(ms%86400000/3600000),m=Math.floor(ms%3600000/60000); return `До ${new Date(date2||date1).toLocaleDateString('ru-RU')}: **${d}д ${h}ч ${m}м**`; }
+      return new Date().toLocaleString('ru-RU');
+    }
+    // ── Анализ текста ────────────────────────────────────────────────────
+    if (name === 'text_analyze') {
+      const { text, action } = args;
+      if (action === 'stats') { const w=text.trim().split(/\s+/).filter(Boolean); const s=text.split(/[.!?]+/).filter(Boolean); return `Символов: **${text.length}**, Слов: **${w.length}**, Предложений: **${s.length}**, Средн. слов/предл: **${(w.length/Math.max(s.length,1)).toFixed(1)}**`; }
+      if (action === 'frequency') { const w=text.toLowerCase().replace(/[^а-яёa-z\s]/gi,'').split(/\s+/).filter(x=>x.length>2); const f={}; w.forEach(x=>f[x]=(f[x]||0)+1); const top=Object.entries(f).sort((a,b)=>b[1]-a[1]).slice(0,8); return `Топ слов:\n${top.map(([w,c])=>`• **${w}**: ${c}`).join('\n')}`; }
+      if (action === 'sentiment') { const p=(text.match(/хорошо|отлично|замечательно|люблю|нравится|great|good|love|excellent|amazing/gi)||[]).length; const n=(text.match(/плохо|ужасно|ненавижу|bad|terrible|hate|fail|awful/gi)||[]).length; return `Тональность: **${p>n?'😊 Позитивный':n>p?'😔 Негативный':'😐 Нейтральный'}** (+ ${p}, - ${n})`; }
+      return `Текст: ${text.length} символов`;
+    }
+    // ── Продвинутая математика ────────────────────────────────────────────
+    if (name === 'math_advanced') {
+      const { operation, values=[], n=10 } = args;
+      if (operation === 'prime') { const ip=x=>{if(x<2)return false;for(let i=2;i<=Math.sqrt(x);i++)if(x%i===0)return false;return true;}; const p=[];for(let i=2;p.length<n;i++)if(ip(i))p.push(i); return `Простые числа (${n}): **${p.join(', ')}**`; }
+      if (operation === 'fibonacci') { const f=[0,1];while(f.length<n)f.push(f[f.length-1]+f[f.length-2]); return `Числа Фибоначчи: **${f.join(', ')}**`; }
+      if (operation === 'factorial') { const num=n||values[0]||10; let r=1n; for(let i=2n;i<=BigInt(Math.min(num,20));i++)r*=i; return `${Math.min(num,20)}! = **${r}**`; }
+      if (operation === 'gcd') { const gcd=(a,b)=>b?gcd(b,a%b):a; return `НОД(${values.join(',')}) = **${values.reduce(gcd)}**`; }
+      if (operation === 'statistics' && values.length) { const s=[...values].sort((a,b)=>a-b); const m=values.reduce((a,b)=>a+b)/values.length; const med=s.length%2?s[Math.floor(s.length/2)]:(s[s.length/2-1]+s[s.length/2])/2; const std=Math.sqrt(values.reduce((a,b)=>a+(b-m)**2,0)/values.length); return `Среднее: **${m.toFixed(3)}**, Медиана: **${med}**, Мин: **${s[0]}**, Макс: **${s[s.length-1]}**, Ст.откл: **${std.toFixed(3)}**`; }
+      return `Операция ${operation} не поддерживается`;
+    }
+    // ── IP информация ─────────────────────────────────────────────────────
+    if (name === 'ip_info') {
+      try {
+        const ip = args.ip === 'my' ? '' : (args.ip || '');
+        const r = await axios.get(`https://ipapi.co/${ip}/json/`, { timeout: 6000 });
+        const d = r.data;
+        if (d.error) return `IP не найден: ${d.reason}`;
+        return `IP: **${d.ip}** · Страна: **${d.country_name}** · Город: ${d.city} · Провайдер: ${d.org}`;
+      } catch(e) { return `Ошибка: ${e.message}`; }
+    }
     // ── Вопрос пользователю ───────────────────────────────────────────────
     if (name === 'ask_user') {
       // Поддерживаем оба формата: { questions: [...] } и старый { question, options }
@@ -1931,7 +2182,7 @@ img{max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba
   });
 });
 
-// ── Прямая генерация видео (d-id / stability / free) ─────────────────────────
+// ── Генерация видео (canvas-анимация из 6 сгенерированных кадров) ──────────────
 app.post('/api/generate-video', async (req, res) => {
   const { username, prompt, style } = req.body;
   if (!username || !prompt) return res.status(400).json({ error: 'Нет данных' });
@@ -1939,108 +2190,62 @@ app.post('/api/generate-video', async (req, res) => {
   const limitErr = checkDailyLimit(username, 'video');
   if (limitErr) return res.json({ error: limitErr });
 
-  aiSseEmit(username, 'log', { text: 'Генерирую видео... (это займёт ~30с)', type: 'process' });
+  aiSseEmit(username, 'log', { text: `Создаю видео: ${prompt.slice(0,50)}... (~60с)`, type: 'process' });
 
-  // Пробуем Pollinations video (если доступен) или создаём анимированный HTML
-  try {
-    // Сначала генерируем 3 кадра и делаем CSS анимацию
-    const frames = [];
-    const prompts = [
-      prompt + ', frame 1, cinematic',
-      prompt + ', frame 2, slight movement',
-      prompt + ', frame 3, cinematic ending',
-    ];
+  const frames = [];
+  const seeds  = [42, 137, 271, 314, 500, 777];
+  const styleTag = ', cinematic, 8k, high quality, smooth';
 
-    for (let i = 0; i < prompts.length; i++) {
-      aiSseEmit(username, 'log', { text: `Кадр ${i+1}/3...`, type: 'fetch' });
-      try {
-        const r = await axios.get(
-          `https://image.pollinations.ai/prompt/${encodeURIComponent(prompts[i])}?width=720&height=480&nologo=true&model=flux&seed=${Date.now()+i}`,
-          { responseType: 'arraybuffer', timeout: 40000 }
-        );
-        if (r.data?.byteLength > 5000) {
-          frames.push('data:image/jpeg;base64,' + Buffer.from(r.data).toString('base64'));
-        }
-      } catch(e) { console.log('[video] frame', i, 'failed'); }
-    }
-
-    if (frames.length === 0) {
-      return res.json({ error: 'Не удалось сгенерировать видео. Попробуй позже.' });
-    }
-
-    // Создаём HTML "видео" — CSS анимация между кадрами
-    const frameSrcs = frames.map((f, i) => `"${f}"`).join(',');
-    const html = `<!DOCTYPE html><html><head><title>${prompt.slice(0,40)}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif}
-.viewer{position:relative;width:720px;max-width:95vw}
-.frame{width:100%;border-radius:12px;display:none;box-shadow:0 8px 40px rgba(0,0,0,.8)}
-.frame.active{display:block;animation:crossfade 1s ease}
-@keyframes crossfade{from{opacity:0}to{opacity:1}}
-.controls{display:flex;align-items:center;gap:12px;margin-top:14px;width:100%}
-.btn{padding:8px 20px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:14px}
-.btn:hover{background:#4f46e5}
-.progress{flex:1;height:4px;background:#333;border-radius:99px;overflow:hidden}
-.progress-fill{height:100%;background:#6366f1;transition:width .5s}
-.info{color:#888;font-size:12px;text-align:center;margin-top:8px}
-</style></head>
-<body>
-<div class="viewer">
-${frames.map((f,i) => `<img class="frame${i===0?' active':''}" src="${f}" data-idx="${i}">`).join('')}
-<div class="controls">
-  <button class="btn" id="playBtn" onclick="togglePlay()">▶ Играть</button>
-  <div class="progress"><div class="progress-fill" id="prog" style="width:0%"></div></div>
-  <span style="color:#888;font-size:12px" id="frameNum">1/${frames.length}</span>
-</div>
-<div class="info">${prompt.slice(0,80)} · ${frames.length} кадров</div>
-</div>
-<script>
-const frames=${frameSrcs.split(',').length};
-const imgs=document.querySelectorAll('.frame');
-let cur=0,playing=false,timer=null;
-function show(n){imgs.forEach((el,i)=>{el.classList.toggle('active',i===n)});cur=n;
-document.getElementById('prog').style.width=((n+1)/imgs.length*100)+'%';
-document.getElementById('frameNum').textContent=(n+1)+'/'+imgs.length;}
-function next(){show((cur+1)%imgs.length);}
-function togglePlay(){
-  if(playing){clearInterval(timer);timer=null;playing=false;document.getElementById('playBtn').textContent='▶ Играть';}
-  else{playing=true;document.getElementById('playBtn').textContent='⏸ Пауза';timer=setInterval(next,800);}
-}
-// Автоплей
-setTimeout(togglePlay,300);
-</script>
-</body></html>`;
-
-    const { fileId, safe } = aiSaveFile(username, 'ai_video.html', html, 'AI видео: ' + prompt.slice(0,40));
-
-    // Отправляем первый кадр как превью в чат
-    if (frames[0]) {
-      aiSseEmit(username, 'media', {
-        type:     'video_preview',
-        base64:   frames[0],
-        fileId,
-        filename: safe,
-        prompt,
-        frameCount: frames.length,
-      });
-    }
-
-    aiSseEmit(username, 'log', { text: `✅ Видео готово (${frames.length} кадров)`, type: 'result' });
-
-    const lim = aiDailyLimits.get(username);
-    res.json({
-      success: true,
-      fileId,
-      frameCount: frames.length,
-      remaining: DAILY_VIDEO_LIMIT - (lim?.videos || 0),
-    });
-  } catch(e) {
-    console.error('[generate-video]', e.message);
-    res.json({ error: 'Ошибка генерации видео: ' + e.message });
+  for (let i = 0; i < seeds.length; i++) {
+    aiSseEmit(username, 'log', { text: `Кадр ${i+1}/${seeds.length}...`, type: 'fetch' });
+    try {
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleTag + `, moment ${i+1} of 6, slight camera movement`)}?width=768&height=432&nologo=true&model=flux&seed=${seeds[i]}`;
+      const r = await axios.get(url, { responseType: 'arraybuffer', timeout: 45000 });
+      if (r.data?.byteLength > 5000) {
+        frames.push('data:image/jpeg;base64,' + Buffer.from(r.data).toString('base64'));
+      }
+    } catch(e) { console.log('[video] frame', i, 'failed:', e.message); }
   }
-});
 
+  if (frames.length < 2) {
+    return res.json({ error: 'Не удалось сгенерировать видео. Попробуй позже.' });
+  }
+
+  aiSseEmit(username, 'log', { text: `Собираю видео из ${frames.length} кадров...`, type: 'process' });
+
+  const framesJson = JSON.stringify(frames);
+  const html = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
+<title>${prompt.slice(0,50)}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#fff}canvas{max-width:95vw;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.8)}.ui{width:100%;max-width:768px;padding:12px 0;display:flex;flex-direction:column;gap:10px}.pb{display:flex;align-items:center;gap:10px}.pbg{flex:1;height:4px;background:rgba(255,255,255,.2);border-radius:99px;cursor:pointer}.pf{height:100%;background:#6366f1;border-radius:99px;transition:width .1s}.ctrls{display:flex;gap:8px;align-items:center}.btn{padding:7px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:13px}.btn:hover{background:rgba(255,255,255,.2)}.btn.p{background:#6366f1;border-color:#6366f1}.tc{font-size:12px;color:rgba(255,255,255,.5);font-variant-numeric:tabular-nums;min-width:52px}.ttl{font-size:12px;color:rgba(255,255,255,.35);text-align:center}</style></head>
+<body><canvas id="c"></canvas>
+<div class="ui">
+<div class="pb"><span class="tc" id="tc">0:00</span><div class="pbg" id="pb" onclick="seek(event)"><div class="pf" id="pf" style="width:0%"></div></div><span class="tc" id="td">0:00</span></div>
+<div class="ctrls"><button class="btn p" id="pb2" onclick="tog()">▶</button><button class="btn" onclick="rst()">⏮</button><button class="btn" onclick="spd()">1x</button><a id="dl" class="btn" download="frame.jpg" style="text-decoration:none;margin-left:auto">⬇</a></div>
+<div class="ttl">${prompt.slice(0,80)}</div></div>
+<script>
+const F=${framesJson};
+let fps=24,play=false,cur=0,last=null;
+const c=document.getElementById('c'),x=c.getContext('2d');
+const imgs=F.map(s=>{const i=new Image();i.src=s;return i;});
+imgs[0].onload=()=>{c.width=imgs[0].naturalWidth||768;c.height=imgs[0].naturalHeight||432;draw(0);document.getElementById('td').textContent=fmt(F.length/fps);};
+function fmt(s){return Math.floor(s/60)+':'+(Math.floor(s%60)).toString().padStart(2,'0');}
+function draw(f){const i=Math.min(Math.floor(f),F.length-1),n=Math.min(i+1,F.length-1),t=f-Math.floor(f);if(imgs[i].complete&&imgs[n].complete){x.drawImage(imgs[i],0,0,c.width,c.height);if(t>0){x.globalAlpha=t;x.drawImage(imgs[n],0,0,c.width,c.height);x.globalAlpha=1;}}else if(imgs[i].complete)x.drawImage(imgs[i],0,0,c.width,c.height);document.getElementById('dl').href=c.toDataURL('image/jpeg',.9);}
+function frame(ts){if(!play)return;if(!last)last=ts;cur+=(ts-last)/1000*fps;last=ts;if(cur>=F.length)cur=0;const p=cur/F.length*100;document.getElementById('pf').style.width=p+'%';document.getElementById('tc').textContent=fmt(cur/fps);draw(cur);requestAnimationFrame(frame);}
+function tog(){play=!play;document.getElementById('pb2').textContent=play?'⏸':'▶';if(play){last=null;requestAnimationFrame(frame);}}
+function rst(){cur=0;draw(0);}
+let si=1;function spd(){si=(si+1)%3;fps=[12,24,30][si];document.querySelector('.ctrls .btn:nth-child(3)').textContent=['.5x','1x','1.25x'][si];}
+function seek(e){const r=document.getElementById('pb').getBoundingClientRect();cur=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*F.length;draw(cur);}
+setTimeout(tog,400);
+</script></body></html>`;
+
+  const { fileId, safe } = aiSaveFile(username, 'ai_video.html', html, 'AI видео: ' + prompt.slice(0,40));
+  if (frames[0]) {
+    aiSseEmit(username, 'media', { type:'video_preview', base64:frames[0], fileId, filename:safe, prompt, frameCount:frames.length });
+  }
+  aiSseEmit(username, 'log', { text: `✅ Видео готово (${frames.length} кадров)`, type: 'result' });
+  const lim = aiDailyLimits.get(username);
+  res.json({ success:true, fileId, frameCount:frames.length, remaining: DAILY_VIDEO_LIMIT-(lim?.videos||0) });
+});
 
 
 app.get('/api/ai-files/:username', (req, res) => {
