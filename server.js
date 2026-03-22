@@ -41,26 +41,64 @@ async function getBucketId(bucketName) {
 }
 
 async function getUploadUrl() {
-  const response = await axios.post(
-    `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
-    { bucketId: b2BucketId },
-    { headers: { Authorization: b2Auth.authorizationToken } }
-  );
-  return response.data;
+  if (!b2Auth) await reAuthB2();
+  try {
+    const response = await axios.post(
+      `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
+      { bucketId: b2BucketId },
+      { headers: { Authorization: b2Auth.authorizationToken } }
+    );
+    return response.data;
+  } catch(e) {
+    if (e.response?.status === 401 || e.response?.status === 403) {
+      await reAuthB2();
+      const response2 = await axios.post(
+        `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
+        { bucketId: b2BucketId },
+        { headers: { Authorization: b2Auth.authorizationToken } }
+      );
+      return response2.data;
+    }
+    throw e;
+  }
+}
+
+async function reAuthB2() {
+  try {
+    console.log('[B2] Переавторизация...');
+    b2Auth = await authorizeB2();
+    b2BucketId = await getBucketId(B2_BUCKET_NAME);
+    console.log('[B2] Переавторизация успешна');
+  } catch(e) {
+    console.error('[B2] Ошибка переавторизации:', e.message);
+  }
 }
 
 async function getDownloadUrl(fileName) {
-  const response = await axios.post(
-    `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
-    {
-      bucketId: b2BucketId,
-      fileNamePrefix: fileName,
-      validDurationInSeconds: 604800
-    },
-    { headers: { Authorization: b2Auth.authorizationToken } }
-  );
-  const token = response.data.authorizationToken;
-  return `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}?Authorization=${token}`;
+  // Если токен устарел — переавторизуемся
+  if (!b2Auth) await reAuthB2();
+  try {
+    const response = await axios.post(
+      `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
+      { bucketId: b2BucketId, fileNamePrefix: fileName, validDurationInSeconds: 604800 },
+      { headers: { Authorization: b2Auth.authorizationToken } }
+    );
+    const token = response.data.authorizationToken;
+    return `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}?Authorization=${token}`;
+  } catch(e) {
+    if (e.response?.status === 401 || e.response?.status === 403) {
+      // Токен истёк — переавторизуемся и пробуем снова
+      await reAuthB2();
+      const response2 = await axios.post(
+        `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
+        { bucketId: b2BucketId, fileNamePrefix: fileName, validDurationInSeconds: 604800 },
+        { headers: { Authorization: b2Auth.authorizationToken } }
+      );
+      const token2 = response2.data.authorizationToken;
+      return `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}?Authorization=${token2}`;
+    }
+    throw e;
+  }
 }
 
 function calculateSHA1(buffer) {
@@ -274,7 +312,12 @@ app.get('/api/dl', async (req, res) => {
   fileName = decodeURIComponent(fileName);
 
   if (!b2Auth || !b2BucketId) {
-    return res.status(503).send('B2 не инициализирован');
+    // Пробуем переавторизоваться
+    try {
+      await reAuthB2();
+    } catch(e) {
+      return res.status(503).send('B2 недоступен. Попробуй позже.');
+    }
   }
 
   try {
@@ -3422,7 +3465,20 @@ async function saveHistory() {
     await loadHistory();
   } catch (err) {
     console.error('❌ Ошибка подключения к B2:', err.message);
-    process.exit(1);
+    console.log('⚠️  Сервер запускается без B2 — данные будут в памяти до переподключения');
+    // НЕ вызываем process.exit — сервер работает, просто без persistence
+    // Пробуем переподключиться через 30 секунд
+    setTimeout(async () => {
+      try {
+        b2Auth = await authorizeB2();
+        b2BucketId = await getBucketId(B2_BUCKET_NAME);
+        await loadUsers();
+        await loadHistory();
+        console.log('✅ B2 переподключён успешно');
+      } catch(e2) {
+        console.error('[B2] Повторная попытка не удалась:', e2.message);
+      }
+    }, 30000);
   }
 })();
 
@@ -3650,6 +3706,12 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
+// ── Периодическая переавторизация B2 (токен живёт 24ч — обновляем каждые 20ч) ──
+setInterval(async () => {
+  console.log('[B2] Плановая переавторизация...');
+  await reAuthB2();
+}, 20 * 60 * 60 * 1000); // 20 часов
+
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
 });
