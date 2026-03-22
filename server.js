@@ -2695,7 +2695,7 @@ function hashPassword(password) {
 
 // Вход/регистрация с паролем
 app.post('/api/login', async (req, res) => {
-  const { username, password, email } = req.body;
+  const { username, password, email, mode } = req.body; // mode: 'login' | 'register'
   if (!username || username.trim() === '') {
     return res.status(400).json({ error: 'Имя не может быть пустым' });
   }
@@ -2730,6 +2730,11 @@ app.post('/api/login', async (req, res) => {
       }
     });
   } else {
+    // Пользователь не существует
+    if (mode === 'login') {
+      // Режим входа — не создаём аккаунт
+      return res.status(401).json({ error: 'Пользователь не найден. Перейдите на вкладку Регистрация.' });
+    }
     // Новая регистрация
     const newUser = {
       nickname:      cleanName,
@@ -3393,6 +3398,14 @@ io.on('connection', (socket) => {
     }
   }
   socket.on('call-invite', data => {
+    // Проверяем — не занят ли получатель уже звонком
+    if (!data.resumed && activeCalls.has(data.from)) {
+      // Caller is already in another call — send busy back
+      const callerSid = userSockets.get(data.from);
+      if (callerSid) io.to(callerSid).emit('call-busy', { from: data.to });
+      return;
+    }
+    // Проверяем — занят ли адресат
     if (!data.resumed) {
       // Store as active ring so reconnecting user gets notified
       activeCalls.set(data.to, { from: data.from, isVid: data.isVid, startTime: Date.now() });
