@@ -406,24 +406,43 @@ app.get('/api/ice-servers', async (req, res) => {
     } catch(e) { console.log('[ICE] Metered недоступен:', e.message); }
   }
 
-  // Fallback: расширенный статичный список (UDP + TCP + TLS)
+  // Fallback: максимально расширенный список серверов (UDP + TCP + TLS)
   res.json([
+    // ── STUN ──────────────────────────────────────────────────────────────
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:stun.relay.metered.ca:80' },
-    // openrelay — все транспорты
-    { urls: 'turn:openrelay.metered.ca:80',              username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443',             username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    // ── openrelay (все порты и транспорты) ────────────────────────────────
+    { urls: 'turn:openrelay.metered.ca:80',                username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
     { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turns:openrelay.metered.ca:443',            username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:3478',            username: 'openrelayproject', credential: 'openrelayproject' },
-    // freeturn
-    { urls: 'turn:freeturn.net:3478',                    username: 'free', credential: 'free' },
-    { urls: 'turn:freeturn.net:5349?transport=tcp',      username: 'free', credential: 'free' },
-    { urls: 'turns:freeturn.tel:5349',                   username: 'free', credential: 'free' },
-    // numb
-    { urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh' },
+    { urls: 'turn:openrelay.metered.ca:3478',              username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443',              username: 'openrelayproject', credential: 'openrelayproject' },
+    // ── freeturn (UDP + TCP + TLS) ────────────────────────────────────────
+    { urls: 'turn:freeturn.net:3478',                      username: 'free', credential: 'free' },
+    { urls: 'turn:freeturn.net:5349?transport=tcp',        username: 'free', credential: 'free' },
+    { urls: 'turns:freeturn.tel:5349',                     username: 'free', credential: 'free' },
+    // ── numb.viagenie.ca ─────────────────────────────────────────────────
+    { urls: 'turn:numb.viagenie.ca',                       username: 'webrtc@live.com', credential: 'muazkh' },
+    { urls: 'turn:numb.viagenie.ca?transport=tcp',         username: 'webrtc@live.com', credential: 'muazkh' },
+    // ── expressrturn (бесплатный, надёжный) ───────────────────────────────
+    { urls: 'turn:turn.anyfirewall.com:443?transport=tcp', username: 'webrtc', credential: 'webrtc' },
+    // ── icetest.info ──────────────────────────────────────────────────────
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+    { urls: 'stun:stun.sipgate.net:3478' },
+    { urls: 'stun:stun.nextcloud.com:443' },
+    { urls: 'stun:stun.sip.us' },
+    { urls: 'stun:stun.voip.blackberry.com:3478' },
+    { urls: 'stun:stun.antisip.com:3478' },
+    { urls: 'stun:stun.bluesip.net:3478' },
+    { urls: 'stun:stun.dus.net:3478' },
+    { urls: 'stun:stun.epygi.com:3478' },
+    { urls: 'stun:stun.sip2sip.info:3478' },
   ]);
 });
 
@@ -3385,15 +3404,23 @@ io.on('connection', (socket) => {
   socket.on('call-answer',       data => relayTo('call-answer',       data));
   socket.on('call-ice',          data => relayTo('call-ice',          data));
   socket.on('call-end', data => {
-    // Clear active call
+    // Очищаем активный звонок
     activeCalls.delete(data.to);
     activeCalls.delete(data.from);
-    relayTo('call-end', data);
+    // Отправляем сигнал завершения ОБЕИМ сторонам
+    const toId   = userSockets.get(data.to);
+    const fromId = userSockets.get(data.from);
+    if (toId)   io.to(toId).emit('call-end', data);
+    if (fromId) io.to(fromId).emit('call-end', data);
   });
   socket.on('call-decline', data => {
     activeCalls.delete(data.to);
     activeCalls.delete(data.from);
-    relayTo('call-decline', data);
+    // Уведомляем обе стороны об отклонении
+    const toId   = userSockets.get(data.to);
+    const fromId = userSockets.get(data.from);
+    if (toId)   io.to(toId).emit('call-decline', data);
+    if (fromId) io.to(fromId).emit('call-decline', data);
   });
   socket.on('call-answer-ready', data => {
     // Callee answered — clear active call
