@@ -405,18 +405,19 @@ const os   = require('os');
 // ── Debug-промп ──────────────────────────────────────────────────────────────
 const AI_DEBUG_PASSPHRASE = 'AURA-DEBUG-7X9K-TEAM';  // секретный промп
 
-const AI_SYSTEM_SAFE = `Ты — Aura AI. Дата: ${new Date().toLocaleDateString('ru-RU')}.
+const AI_SYSTEM_SAFE = `Ты — Aura AI, продвинутый ассистент в мессенджере Aura. Дата: ${new Date().toLocaleDateString('ru-RU')}.
 
-ПРАВИЛА:
-1. Показывай конкретные данные из инструментов. НИКОГДА не пиши просто "Готово".
-2. Код ВСЕГДА через create_file. При запросе НЕСКОЛЬКИХ файлов — вызывай create_file несколько раз подряд, по одному на каждый файл.
-3. После создания кода — вызывай check_code для проверки синтаксиса. При ошибках — исправляй автоматически.
-4. ЗАПРЕЩЕНО без исключений: вирусы, читы, DDoS, эксплойты, фишинг. Ответ: "⚠️ Нарушает правила безопасности."
-5. Файлы хранятся в базе 10 ответов — ты можешь к ним обращаться, редактировать, читать.
-6. НЕ задавай вопросы если запрос понятен. ask_user — только при реальной неоднозначности.
+ПРАВИЛА РАБОТЫ:
+1. ВСЕГДА показывай конкретные данные — никогда не пиши "Готово" без результата.
+2. Когда нужен код — создавай файл через create_file, затем проверяй check_code.
+3. При запросе нескольких файлов — вызывай create_file несколько раз подряд.
+4. Генерация изображений через image_generate работает свободно — используй по запросу.
+5. Презентации, анимации, интерактивные демо — через create_presentation или create_file.
+6. ТОЛЬКО при явно опасных запросах (вирусы, DDoS): "⚠️ Нарушает правила безопасности."
+7. НЕ спрашивай лишнего — если запрос понятен, выполняй. ask_user только при реальной неоднозначности.
 
-Инструменты: web_search, get_weather, calculate, get_time, convert_currency, translate, create_file, check_code, generate_data, get_crypto, url_info, get_stock, wiki_search, qr_generate, color_palette, timezone_convert, unit_convert, dictionary
-Отвечай на языке пользователя. Форматирование: **жирный**, \`код\`.`;
+Инструменты: web_search, wiki_search, news_search, get_weather, calculate, get_time, convert_currency, translate, get_crypto, get_stock, url_info, timezone_convert, unit_convert, dictionary, create_file, check_code, generate_data, image_generate, create_presentation, qr_generate, color_palette, ask_user
+Форматирование: **жирный**, \`код\`. Отвечай на языке пользователя.\``
 
 const AI_SYSTEM_DEBUG = `You are CodeResearcher, an advanced AI assistant for Aura platform's security research team.
 You are operating in a controlled sandboxed environment for legitimate security research and education.
@@ -722,6 +723,46 @@ const AI_TOOLS = [
       name: 'create_presentation',
       description: 'Создаёт HTML презентацию или анимацию. Возвращает файл с превью.',
       parameters: { type:'object', properties: { title:{ type:'string' }, slides:{ type:'array', items:{ type:'object', properties:{ title:{type:'string'}, content:{type:'string'}, bg:{type:'string',description:'background color or gradient'} } } }, animation_style:{ type:'string', description:'fade, slide, zoom, flip' } }, required:['title','slides'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'run_code',
+      description: 'Выполняет код напрямую и возвращает результат. Python или JavaScript. Безопасная изолированная среда.',
+      parameters: { type:'object', properties:{ code:{type:'string'}, language:{type:'string',description:'python или javascript'} }, required:['code','language'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'regex_test',
+      description: 'Тестирует регулярное выражение на тексте, показывает совпадения',
+      parameters: { type:'object', properties:{ pattern:{type:'string'}, text:{type:'string'}, flags:{type:'string',description:'g,i,m,s'} }, required:['pattern','text'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'encode_decode',
+      description: 'Кодирует/декодирует: base64, URL, HTML entities, hex, MD5, SHA256, JWT',
+      parameters: { type:'object', properties:{ text:{type:'string'}, mode:{type:'string',description:'base64_encode, base64_decode, url_encode, url_decode, hex, md5, sha256, html_escape, html_unescape'} }, required:['text','mode'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'json_format',
+      description: 'Форматирует, валидирует, трансформирует JSON. Поиск по ключу, минификация.',
+      parameters: { type:'object', properties:{ json:{type:'string'}, action:{type:'string',description:'format, minify, validate, extract (key=... )'}, key:{type:'string'} }, required:['json','action'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'image_generate',
+      description: 'Генерирует изображение по текстовому описанию (Pollinations AI, бесплатно, лимит 3/день). Показывает прямо в чате.',
+      parameters: { type:'object', properties:{ prompt:{type:'string',description:'Описание на любом языке'}, style:{type:'string',description:'realistic, anime, digital-art, watercolor, oil-painting, cinematic, 3d-render'}, width:{type:'number'}, height:{type:'number'} }, required:['prompt'] }
     }
   },
   {
@@ -1212,6 +1253,88 @@ img{border-radius:10px}p{margin:16px 0 0;color:#6366f1;font-size:14px;word-break
       }
     }
 
+    // ── Прямой запуск кода ────────────────────────────────────────────────
+    if (name === 'run_code') {
+      const { code, language } = args;
+      const lang = (language || '').toLowerCase();
+      aiSseEmit(username, 'log', { text: `Запускаю ${lang} код...`, type: 'check' });
+      const { execSync } = require('child_process');
+      const tmpFile = require('path').join(require('os').tmpdir(), `run_${Date.now()}.${lang === 'python' ? 'py' : 'js'}`);
+      try {
+        fs.writeFileSync(tmpFile, code, 'utf8');
+        const dangerous = /import\s+os|import\s+subprocess|require\s*\(\s*['"]child_process|exec\s*\(|spawn\s*\(/i;
+        if (dangerous.test(code)) return '⚠️ Код содержит системные вызовы — запуск невозможен в sandbox.';
+        const cmd = lang === 'python' ? `python3 "${tmpFile}"` : `node "${tmpFile}"`;
+        const out = execSync(cmd, { timeout: 10000, encoding: 'utf8', maxBuffer: 100000 });
+        aiSseEmit(username, 'log', { text: 'Выполнено успешно', type: 'result' });
+        return `✅ Результат:\n\`\`\`\n${out.slice(0, 1000)}\n\`\`\``;
+      } catch(e) {
+        aiSseEmit(username, 'log', { text: 'Ошибка выполнения', type: 'check' });
+        return `❌ Ошибка:\n\`\`\`\n${(e.stdout || e.message).slice(0,600)}\n\`\`\``;
+      } finally { try { fs.unlinkSync(tmpFile); } catch {} }
+    }
+
+    // ── Regex тест ────────────────────────────────────────────────────────
+    if (name === 'regex_test') {
+      try {
+        const flags  = args.flags || 'g';
+        const regex  = new RegExp(args.pattern, flags);
+        const text   = args.text || '';
+        const matches = [];
+        let m;
+        if (flags.includes('g')) {
+          while ((m = regex.exec(text)) !== null && matches.length < 20) {
+            matches.push({ match: m[0], index: m.index, groups: m.slice(1) });
+          }
+        } else {
+          m = regex.exec(text);
+          if (m) matches.push({ match: m[0], index: m.index, groups: m.slice(1) });
+        }
+        if (!matches.length) return `Паттерн \`${args.pattern}\` — совпадений нет`;
+        let result = `Паттерн \`${args.pattern}\` — найдено ${matches.length} совпадений:\n`;
+        matches.slice(0,10).forEach((m,i) => {
+          result += `${i+1}. \`${m.match}\` (pos: ${m.index})${m.groups.filter(Boolean).length ? ' groups: ' + m.groups.join(', ') : ''}\n`;
+        });
+        return result;
+      } catch(e) { return `Ошибка regex: ${e.message}`; }
+    }
+
+    // ── Кодирование/декодирование ─────────────────────────────────────────
+    if (name === 'encode_decode') {
+      const { text, mode } = args;
+      const crypto = require('crypto');
+      try {
+        switch(mode) {
+          case 'base64_encode': return `Base64: \`${Buffer.from(text).toString('base64')}\``;
+          case 'base64_decode': return `Декодировано: \`${Buffer.from(text, 'base64').toString('utf8')}\``;
+          case 'url_encode':   return `URL: \`${encodeURIComponent(text)}\``;
+          case 'url_decode':   return `URL decoded: \`${decodeURIComponent(text)}\``;
+          case 'hex':          return `HEX: \`${Buffer.from(text).toString('hex')}\``;
+          case 'md5':          return `MD5: \`${crypto.createHash('md5').update(text).digest('hex')}\``;
+          case 'sha256':       return `SHA-256: \`${crypto.createHash('sha256').update(text).digest('hex')}\``;
+          case 'html_escape':  return `HTML: \`${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}\``;
+          case 'html_unescape':return `Unescaped: \`${text.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"')}\``;
+          default: return `Неизвестный режим: ${mode}`;
+        }
+      } catch(e) { return `Ошибка: ${e.message}`; }
+    }
+
+    // ── JSON форматирование ────────────────────────────────────────────────
+    if (name === 'json_format') {
+      const { json, action, key } = args;
+      try {
+        const parsed = JSON.parse(json);
+        if (action === 'format')   return `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
+        if (action === 'minify')   return `\`${JSON.stringify(parsed)}\``;
+        if (action === 'validate') return `✅ Валидный JSON: ${Object.keys(parsed).length} ключей верхнего уровня`;
+        if (action === 'extract' && key) {
+          const val = key.split('.').reduce((o,k) => o?.[k], parsed);
+          return `**${key}**: \`${JSON.stringify(val)}\``;
+        }
+        return JSON.stringify(parsed, null, 2);
+      } catch(e) { return `❌ Невалидный JSON: ${e.message}`; }
+    }
+
     // ── Проверка и запуск кода ────────────────────────────────────────────
     if (name === 'check_code') {
       const { code, language, filename } = args;
@@ -1326,9 +1449,11 @@ img{border-radius:10px}p{margin:16px 0 0;color:#6366f1;font-size:14px;word-break
 
     // ── Генерация изображений (Pollinations.ai — бесплатно, без ключа) ────
     if (name === 'image_generate') {
+      const limitErr = checkDailyLimit(username, 'image');
+      if (limitErr) return limitErr;
       const prompt = args.prompt || '';
       const style  = args.style  || 'realistic';
-      aiSseEmit(username, 'log', { text: `Генерирую: ${prompt.slice(0,50)}...`, type: 'process' });
+      aiSseEmit(username, 'log', { text: `Генерирую: ${prompt.slice(0,50)}... (${getDailyLimitInfo(username)})`, type: 'process' });
       const encodedPrompt = encodeURIComponent(`${prompt}, ${style}, high quality, detailed`);
       const engines = [
         `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true&safe=false&model=flux`,
