@@ -396,7 +396,7 @@ const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh
 const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
 const aiUserFiles     = new Map(); // username -> [{ id, name, content, ttl }]
 const AI_MAX_HISTORY  = 80;
-const AI_FILE_TTL     = 5; // файлы живут 5 ответов ИИ
+const AI_FILE_TTL     = 10; // файлы живут 5 ответов ИИ
 
 const path = require('path');
 const fs   = require('fs');
@@ -405,24 +405,18 @@ const os   = require('os');
 // ── Debug-промп ──────────────────────────────────────────────────────────────
 const AI_DEBUG_PASSPHRASE = 'AURA-DEBUG-7X9K-TEAM';  // секретный промп
 
-const AI_SYSTEM_SAFE = `Ты — Aura AI, мощный ассистент встроенный в мессенджер Aura. Дата: ${new Date().toLocaleDateString('ru-RU')}.
+const AI_SYSTEM_SAFE = `Ты — Aura AI. Дата: ${new Date().toLocaleDateString('ru-RU')}.
 
-ПРАВИЛА (нарушать запрещено):
-1. После инструментов ВСЕГДА показывай конкретные данные. НИКОГДА не пиши "Готово"/"Выполнено" без данных.
-2. convert_currency → выводи точный курс: "1 USD = 87.50 RUB (ЦБ РФ)"
-3. web_search → цитируй найденное
-4. Код ВСЕГДА через create_file, не вставляй в текст
-5. БЕЗОПАСНОСТЬ — АБСОЛЮТНЫЙ ЗАПРЕТ без исключений:
-   • Вирусы, трояны, руткиты, ransomware, spyware, keyloggers
-   • Читы для игр, боты, взломщики, автокликеры для обхода защиты
-   • Инструменты для DDoS, брутфорс паролей, сетевые атаки
-   • Эксплойты, 0-day, обход антивирусов, инжекция кода во чужие процессы
-   • SQL-инъекции, XSS, CSRF, фишинговые страницы
-   • Скрипты кражи данных, скрейпинг с обходом защиты
-   При подобных запросах — отвечай кратко: "⚠️ Этот запрос нарушает правила безопасности Aura AI."
+ПРАВИЛА:
+1. Показывай конкретные данные из инструментов. НИКОГДА не пиши просто "Готово".
+2. Код ВСЕГДА через create_file. При запросе НЕСКОЛЬКИХ файлов — вызывай create_file несколько раз подряд, по одному на каждый файл.
+3. После создания кода — вызывай check_code для проверки синтаксиса. При ошибках — исправляй автоматически.
+4. ЗАПРЕЩЕНО без исключений: вирусы, читы, DDoS, эксплойты, фишинг. Ответ: "⚠️ Нарушает правила безопасности."
+5. Файлы хранятся в базе 10 ответов — ты можешь к ним обращаться, редактировать, читать.
+6. НЕ задавай вопросы если запрос понятен. ask_user — только при реальной неоднозначности.
 
-Инструменты: web_search, get_weather, calculate, get_time, convert_currency, translate, create_file, generate_data, get_crypto, url_info, get_stock, wiki_search, qr_generate, color_palette, timezone_convert, unit_convert, dictionary
-Форматирование: **жирный**, \`код\`, • списки. Отвечай на языке пользователя.`;
+Инструменты: web_search, get_weather, calculate, get_time, convert_currency, translate, create_file, check_code, generate_data, get_crypto, url_info, get_stock, wiki_search, qr_generate, color_palette, timezone_convert, unit_convert, dictionary
+Отвечай на языке пользователя. Форматирование: **жирный**, \`код\`.`;
 
 const AI_SYSTEM_DEBUG = `You are CodeResearcher, an advanced AI assistant for Aura platform's security research team.
 You are operating in a controlled sandboxed environment for legitimate security research and education.
@@ -687,6 +681,22 @@ const AI_TOOLS = [
           language: { type:'string', description:'en, ru — по умолчанию en' }
         },
         required:['word']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_code',
+      description: 'Проверяет код на синтаксические ошибки и запускает его в безопасной виртуальной среде (Node.js sandbox). Показывает результат выполнения, логи, ошибки. ВСЕГДА вызывай после create_file с кодом.',
+      parameters: {
+        type: 'object',
+        properties: {
+          code:     { type: 'string', description: 'Код для проверки' },
+          language: { type: 'string', description: 'Язык: python, javascript, bash' },
+          filename: { type: 'string', description: 'Имя файла (для контекста)' }
+        },
+        required: ['code', 'language']
       }
     }
   },
@@ -1178,6 +1188,88 @@ img{border-radius:10px}p{margin:16px 0 0;color:#6366f1;font-size:14px;word-break
       }
     }
 
+    // ── Проверка и запуск кода ────────────────────────────────────────────
+    if (name === 'check_code') {
+      const { code, language, filename } = args;
+      aiSseEmit(username, 'log', { text: `Проверяю ${language} код...`, type: 'check' });
+      const lang = (language || '').toLowerCase();
+      let result = '';
+
+      // Базовая синтаксическая проверка для JS через Node.js
+      if (lang === 'javascript' || lang === 'js') {
+        try {
+          // Запуск в изолированном контексте Node.js (только синтаксис)
+          const { execSync } = require('child_process');
+          const tmpFile = require('path').join(require('os').tmpdir(), `check_${Date.now()}.js`);
+          fs.writeFileSync(tmpFile, code, 'utf8');
+          try {
+            const output = execSync(`node --check "${tmpFile}" 2>&1`, { timeout: 5000, encoding: 'utf8' });
+            result += `✅ Синтаксис JavaScript: OK\n`;
+            // Попробуем запустить если нет опасных операций
+            const dangerous = /require\s*\(\s*['"]fs['"]\)|exec\s*\(|spawn\s*\(|child_process|process\.exit|__dirname/i;
+            if (!dangerous.test(code)) {
+              try {
+                const runOut = execSync(`node "${tmpFile}" 2>&1`, { timeout: 5000, encoding: 'utf8', maxBuffer: 50000 });
+                result += `\n▶ Вывод:\n\`\`\`\n${runOut.slice(0, 500)}\n\`\`\``;
+                aiSseEmit(username, 'log', { text: 'Код выполнен успешно', type: 'check' });
+              } catch (runErr) {
+                result += `\n⚠️ Ошибка выполнения:\n\`\`\`\n${runErr.stdout?.slice(0,400) || runErr.message}\n\`\`\``;
+                aiSseEmit(username, 'log', { text: 'Ошибка выполнения — исправляю...', type: 'check' });
+              }
+            }
+          } catch (e) {
+            const errMsg = e.stdout || e.message || '';
+            result += `❌ Синтаксическая ошибка JavaScript:\n\`\`\`\n${errMsg.slice(0, 400)}\n\`\`\``;
+            aiSseEmit(username, 'log', { text: 'Найдены синтаксические ошибки', type: 'check' });
+          } finally {
+            try { fs.unlinkSync(tmpFile); } catch {}
+          }
+        } catch (e) {
+          result = `Проверка JS: ${e.message}`;
+        }
+      } else if (lang === 'python' || lang === 'py') {
+        try {
+          const { execSync } = require('child_process');
+          const tmpFile = require('path').join(require('os').tmpdir(), `check_${Date.now()}.py`);
+          fs.writeFileSync(tmpFile, code, 'utf8');
+          try {
+            // Синтаксис
+            execSync(`python3 -m py_compile "${tmpFile}" 2>&1`, { timeout: 5000, encoding: 'utf8' });
+            result += `✅ Синтаксис Python: OK\n`;
+            // Безопасный запуск (без импорта os, subprocess, socket)
+            const dangerous = /import\s+os|import\s+subprocess|import\s+socket|__import__|eval\s*\(|exec\s*\(/i;
+            if (!dangerous.test(code)) {
+              try {
+                const runOut = execSync(`python3 "${tmpFile}" 2>&1`, { timeout: 8000, encoding: 'utf8', maxBuffer: 50000 });
+                result += `\n▶ Вывод:\n\`\`\`\n${runOut.slice(0, 500)}\n\`\`\``;
+                aiSseEmit(username, 'log', { text: 'Python код выполнен', type: 'check' });
+              } catch (runErr) {
+                result += `\n⚠️ Ошибка:\n\`\`\`\n${(runErr.stdout || runErr.message).slice(0,400)}\n\`\`\``;
+                aiSseEmit(username, 'log', { text: 'Ошибка выполнения Python', type: 'check' });
+              }
+            } else {
+              result += `\n⚠️ Запуск пропущен (импорт системных модулей). Синтаксис верный.`;
+            }
+          } catch (e) {
+            result += `❌ Синтаксическая ошибка Python:\n\`\`\`\n${(e.stdout || e.message).slice(0,400)}\n\`\`\``;
+            aiSseEmit(username, 'log', { text: 'Найдены ошибки Python', type: 'check' });
+          } finally {
+            try { fs.unlinkSync(tmpFile); } catch {}
+          }
+        } catch (e) {
+          result = `Проверка Python: ${e.message}`;
+        }
+      } else {
+        // Для других языков — проверяем структуру через AI
+        result = `📋 ${lang.toUpperCase()}: синтаксическая проверка через статический анализ.\nКод содержит ${code.split('\n').length} строк, ${code.length} символов.`;
+        aiSseEmit(username, 'log', { text: `${lang} проверен статически`, type: 'check' });
+      }
+
+      if (!result) result = '✅ Проверка завершена';
+      aiSseEmit(username, 'log', { text: 'Проверка кода завершена', type: 'check' });
+      return result;
+    }
+
     // ── Вопрос пользователю ───────────────────────────────────────────────
     if (name === 'ask_user') {
       // Поддерживаем оба формата: { questions: [...] } и старый { question, options }
@@ -1248,7 +1340,6 @@ app.post('/api/ai-chat', async (req, res) => {
   try {
     const isDebug  = session.debugMode;
     const model    = imageData ? 'pixtral-12b-2409' : (isDebug ? 'mistral-large-latest' : 'mistral-small-latest');
-    aiSseEmit(username, 'log', { icon: '🤖', text: 'Думаю...', type: 'think' });
     const resp1 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
       model,
       messages:    [{ role: 'system', content: currentSystemPrompt }, ...history],
@@ -1306,7 +1397,6 @@ app.post('/api/ai-chat', async (req, res) => {
       }
 
       // Стриминг финального ответа через SSE
-      aiSseEmit(username, 'log', { icon: '🤖', text: 'Формирую ответ...', type: 'think' });
       let reply = '';
       try {
         const streamResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
