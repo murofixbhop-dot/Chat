@@ -241,8 +241,15 @@ async function reAuthB2() {
 // Бакет 2 (B2_BUCKET_NAME2) → photos/, audio/, files/ (фото, аудио, файлы)
 function b2GetBucketForFile(fileName) {
   const f = fileName.toLowerCase();
-  const isMedia = f.startsWith('videos/') || f.startsWith('squares/') || f.endsWith('.mp4') || f.endsWith('.webm') && !f.startsWith('audio/');
-  if (USE_B2_DUAL && !isMedia && b2BucketId2) {
+  // Системные файлы ВСЕГДА в бакете 1
+  if (f === 'users.json' || f === 'history.json' || f === 'history_v2.json') {
+    return { bucketId: b2BucketId, bucketName: B2_BUCKET_NAME };
+  }
+  // Видео и квадраты → бакет 1
+  const isVideoBucket1 = f.startsWith('videos/') || f.startsWith('squares/')
+    || (f.endsWith('.mp4') && !f.startsWith('audio/'))
+    || (f.endsWith('.webm') && !f.startsWith('audio/'));
+  if (USE_B2_DUAL && !isVideoBucket1 && b2BucketId2) {
     return { bucketId: b2BucketId2, bucketName: B2_BUCKET_NAME2 };
   }
   return { bucketId: b2BucketId, bucketName: B2_BUCKET_NAME };
@@ -486,6 +493,8 @@ async function loadUsers() {
   try {
     const dl = await storageDownload(USERS_FILE);
     const reqHeaders = dl.authHeader ? { Authorization: dl.authHeader, ...dl.extraHeaders } : (dl.token ? { Authorization: dl.token } : {});
+    console.log('[B2 load] users URL:', dl.url.slice(0, 80) + '...');
+    console.log('[B2 load] token length:', dl.token ? dl.token.length : 0);
     const response = await axios.get(dl.url, { timeout: 10000, headers: reqHeaders });
     if (response.data && typeof response.data === 'object') {
       users = new Map(Object.entries(response.data));
@@ -493,7 +502,12 @@ async function loadUsers() {
     }
   } catch (err) {
     if (err.response?.status === 404) {
-      console.log('📁 users.json не найден, будет создан');
+      console.log('📁 users.json не найден — новый сервер, будет создан при первом входе');
+    } else if (err.response?.status === 403) {
+      console.error('Ошибка загрузки пользователей: 403 Forbidden');
+      console.error('  → URL:', err.config?.url?.slice(0,80));
+      console.error('  → Проверь что App Key имеет доступ к бакету и файл существует');
+      console.error('  → Попробуй: Backblaze → App Keys → убедись что ключ имеет readFiles');
     } else {
       console.error('Ошибка загрузки пользователей:', err.message);
     }
