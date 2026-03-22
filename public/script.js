@@ -810,6 +810,16 @@ function renderGroups() {
       </div>`;
       li.prepend(avaEl);
       li.onclick = () => { gotoRoom(`group:${g.id}`); closeSidebarMobile(); };
+      // HACK:delete-groups — кнопка удаления для всех групп
+      if (HACK?.deleteGroups) {
+        const hackDel = document.createElement('button');
+        hackDel.title = 'HACK: удалить группу';
+        hackDel.style.cssText = 'position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:rgba(239,68,68,.8);border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5';
+        hackDel.innerHTML = '<i class="ti ti-x"></i>';
+        hackDel.onclick = (e) => { e.stopPropagation(); openGroupEdit(g.id); };
+        li.style.position = 'relative';
+        li.appendChild(hackDel);
+      }
     } else {
       li.classList.toggle('active', isActive);
       // Обновляем аватарку если изменилась
@@ -2229,6 +2239,119 @@ function closeAiChat() {
   closeAiFilePanel();
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+//  DEVELOPER CONSOLE  — Ъ/} чтобы открыть, команды: Sudo HACK <cmd>
+//  Сессионные флаги сбрасываются при перезагрузке страницы (sessionStorage)
+// ════════════════════════════════════════════════════════════════════════════
+let _consoleOpen = false;
+
+// Флаги через sessionStorage (сбрасываются при закрытии/перезагрузке)
+function _hackFlag(key, val) {
+  if (val !== undefined) sessionStorage.setItem('hack_' + key, val ? '1' : '');
+  return !!sessionStorage.getItem('hack_' + key);
+}
+
+// Глобальные флаги доступа
+const HACK = {
+  get deleteGroups() { return _hackFlag('delete_groups'); },
+  get mediaGen()     { return _hackFlag('media_gen'); },
+  set deleteGroups(v){ _hackFlag('delete_groups', v); },
+  set mediaGen(v)    { _hackFlag('media_gen', v); },
+};
+
+function toggleConsole() {
+  _consoleOpen = !_consoleOpen;
+  const el = $('devConsole');
+  if (!el) return;
+  el.style.display = _consoleOpen ? 'flex' : 'none';
+  if (_consoleOpen) {
+    setTimeout(() => $('consoleInput')?.focus(), 80);
+    _consolePrint('Aura Dev Console v1.0', '#6366f1');
+    _consolePrint('Команды: Sudo HACK delete-groups · Sudo HACK enable-media · Sudo HACK status · Sudo HACK clear', '#888');
+    _consolePrint('─'.repeat(60), '#333');
+  }
+}
+
+function _consolePrint(msg, color='#ccc') {
+  const out = $('consoleOutput');
+  if (!out) return;
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.innerHTML = `<span style="color:#555">[${new Date().toLocaleTimeString()}]</span> ${esc(msg)}`;
+  out.appendChild(line);
+  out.scrollTop = out.scrollHeight;
+}
+
+function runConsoleCmd() {
+  const inp = $('consoleInput');
+  if (!inp) return;
+  const cmd = inp.value.trim();
+  inp.value = '';
+  _consolePrint('› ' + cmd, '#e8e8f2');
+
+  if (!cmd.startsWith('Sudo HACK ')) {
+    _consolePrint('❌ Неизвестная команда. Начинай с "Sudo HACK"', '#ef4444');
+    return;
+  }
+
+  const action = cmd.slice('Sudo HACK '.length).trim().toLowerCase();
+
+  if (action === 'delete-groups' || action === 'delete_groups') {
+    HACK.deleteGroups = true;
+    _consolePrint('✅ HACK:delete-groups АКТИВИРОВАН', '#22c55e');
+    _consolePrint('   Теперь ты можешь удалять любые группы видимые тебе.', '#888');
+    _consolePrint('   Сброс при перезагрузке страницы.', '#f59e0b');
+    // Обновляем группы в интерфейсе — показываем кнопку удаления везде
+    _hackRefreshGroupList();
+
+  } else if (action === 'enable-media' || action === 'media') {
+    HACK.mediaGen = true;
+    _consolePrint('✅ HACK:enable-media АКТИВИРОВАН', '#22c55e');
+    _consolePrint('   AI теперь может генерировать изображения и видео.', '#888');
+    _consolePrint('   Используй в чате: /img <описание> | /video <описание>', '#6366f1');
+    _consolePrint('   Сброс при перезагрузке страницы.', '#f59e0b');
+    toast('🎨 Генерация медиа активирована', 'success');
+
+  } else if (action === 'status') {
+    _consolePrint('─ Статус флагов ─', '#6366f1');
+    _consolePrint(`delete-groups: ${HACK.deleteGroups ? '✅ АКТИВЕН' : '❌ неактивен'}`, HACK.deleteGroups ? '#22c55e' : '#888');
+    _consolePrint(`enable-media:  ${HACK.mediaGen ? '✅ АКТИВЕН' : '❌ неактивен'}`, HACK.mediaGen ? '#22c55e' : '#888');
+    _consolePrint(`Пользователь:  ${currentUser || 'не авторизован'}`, '#888');
+    _consolePrint(`Групп видимых: ${groups.length}`, '#888');
+
+  } else if (action === 'clear') {
+    $('consoleOutput').innerHTML = '';
+    _consolePrint('Console cleared.', '#555');
+
+  } else if (action === 'help') {
+    _consolePrint('Доступные команды:', '#6366f1');
+    _consolePrint('  Sudo HACK delete-groups  — удалять любые видимые группы', '#ccc');
+    _consolePrint('  Sudo HACK enable-media   — генерация картинок/видео в AI', '#ccc');
+    _consolePrint('  Sudo HACK status         — текущие флаги', '#ccc');
+    _consolePrint('  Sudo HACK clear          — очистить консоль', '#ccc');
+
+  } else {
+    _consolePrint(`❌ Неизвестная команда: "${action}"`, '#ef4444');
+    _consolePrint('   Введи "Sudo HACK help" для списка команд', '#888');
+  }
+}
+
+function _hackRefreshGroupList() {
+  // Перерисовываем список групп — у всех добавляем кнопку удаления
+  if (groupsList) groupsList._lastKey = '';
+  renderGroups();
+}
+
+// Клавиша Ъ или } открывает консоль (только когда НЕ в поле ввода)
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Ъ' || e.key === 'ъ' || e.key === '}' || e.key === '{') {
+    toggleConsole();
+  }
+});
+
+
+
 async function aiRefreshFileBadge() {
   if (!currentUser) return;
   try {
@@ -2357,8 +2480,11 @@ function _aiAddTyping() {
 
 // Трекер созданных файлов в текущем ответе (для ZIP скачивания)
 let _aiLastCreatedFiles = [];
+const _aiShownFileIds = new Set(); // дедупликация карточек
 
 function _aiAddFileCard(file) {
+  if (_aiShownFileIds.has(file.id)) return; // уже показан
+  _aiShownFileIds.add(file.id);
   _aiLastCreatedFiles.push(file);
   const msgs = $('aiMessages');
   if (!msgs) return;
@@ -2393,8 +2519,75 @@ function _aiAddFileCard(file) {
        style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;flex-shrink:0" title="Скачать">
       <i class="ti ti-download"></i>
     </a>`;
+
+  // Кнопка превью для HTML/SVG/CSS+JS наборов
+  const extLower = file.name.split('.').pop().toLowerCase();
+  const previewable = ['html','svg'].includes(extLower) || extLower === 'js' || extLower === 'css';
+  if (previewable) {
+    const previewBtn = document.createElement('button');
+    previewBtn.title = 'Превью';
+    previewBtn.style.cssText = 'padding:6px 10px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:12px;cursor:pointer;flex-shrink:0';
+    previewBtn.innerHTML = '<i class="ti ti-eye"></i>';
+    previewBtn.onclick = () => _aiPreviewFile(file.id);
+    card.querySelector('[style*="display:flex;align-items:center;gap:10px"]')?.appendChild(previewBtn);
+  }
+
   msgs.appendChild(card);
   msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ── HTML/JS/CSS Preview ──────────────────────────────────────────────────────
+async function _aiPreviewFile(fileId) {
+  // Собираем все связанные файлы (HTML+CSS+JS)
+  const allFiles = _aiLastCreatedFiles;
+  const mainFile = allFiles.find(f => f.id === fileId);
+  if (!mainFile) return;
+
+  const ext = mainFile.name.split('.').pop().toLowerCase();
+  let html = '';
+
+  if (ext === 'html') {
+    // Инлайним CSS и JS из других файлов сессии
+    html = mainFile.content;
+    allFiles.forEach(f => {
+      const fext = f.name.split('.').pop().toLowerCase();
+      if (fext === 'css') {
+        html = html.replace(/<link[^>]+href=["'][^"']*\.css["'][^>]*>/gi, `<style>${f.content}</style>`);
+        // Если link не найден - добавляем в head
+        if (!html.includes(f.content)) {
+          html = html.replace('</head>', `<style>${f.content}</style></head>`);
+        }
+      }
+      if (fext === 'js') {
+        html = html.replace(/<script[^>]+src=["'][^"']*\.js["'][^>]*><\/script>/gi, `<script>${f.content}</script>`);
+        if (!html.includes(f.content)) {
+          html = html.replace('</body>', `<script>${f.content}</script></body>`);
+        }
+      }
+    });
+  } else if (ext === 'svg') {
+    html = `<!DOCTYPE html><html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111">${mainFile.content}</body></html>`;
+  } else {
+    // JS/CSS - оборачиваем в HTML
+    html = ext === 'js'
+      ? `<!DOCTYPE html><html><head><title>Preview</title></head><body><script>${mainFile.content}</script></body></html>`
+      : `<!DOCTYPE html><html><head><style>${mainFile.content}</style></head><body><div class="demo">Превью CSS</div></body></html>`;
+  }
+
+  // Открываем в модальном окне
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);display:flex;flex-direction:column;animation:fadeIn .2s ease';
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
+      <span style="font-weight:700;font-size:14px;color:var(--text)"><i class="ti ti-eye" style="color:var(--accent)"></i> Превью: ${esc(mainFile.name)}</span>
+      <span style="font-size:12px;color:var(--text3)">Все связанные файлы подключены автоматически</span>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="margin-left:auto;background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 12px;border-radius:8px;cursor:pointer;font-family:inherit">✕ Закрыть</button>
+    </div>
+    <iframe id="aiPreviewFrame" sandbox="allow-scripts allow-same-origin" style="flex:1;border:none;background:#fff"></iframe>`;
+  document.body.appendChild(modal);
+
+  const iframe = modal.querySelector('#aiPreviewFrame');
+  iframe.srcdoc = html;
 }
 
 async function _aiDownloadZip() {
@@ -2873,7 +3066,20 @@ async function aiSend() {
   _aiUpdateAttachBar();
   _aiResetLiveLog();
   _aiStreamingStarted = false;
-  _aiLastCreatedFiles = []; // сбрасываем трекер файлов
+  _aiLastCreatedFiles = [];
+  _aiShownFileIds.clear();
+
+  // Специальные команды /img и /video
+  if (text.startsWith('/img ') || text.startsWith('/image ')) {
+    if (!HACK.mediaGen) {
+      _aiAddMessage('user', text);
+      _aiAddMessage('assistant', '🔒 Генерация изображений не активирована. Введи в консоли (Ъ): `Sudo HACK enable-media`');
+      if (sendBtn) sendBtn.disabled = false;
+      return;
+    }
+    // Перенаправляем как запрос к AI с явным указанием использовать image_generate
+    inp.value = `Сгенерируй изображение: ${text.replace(/^\/img\s*|\/image\s*/,'')}`;
+  }
   document.getElementById('aiZipBar')?.remove();
 
   const sendBtn = $('aiSendBtn');
