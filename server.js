@@ -53,9 +53,14 @@ const USE_B2_DUAL     = !!(USE_B2 && B2_BUCKET_NAME2); // два бакета
 
 let storageReady = false;
 let b2Auth = null;
-let b2BucketId  = null;  // ID бакета 1 (видео/квадраты)
-let b2BucketId2 = null;  // ID бакета 2 (фото/аудио/файлы)
+let b2BucketId  = null;
+let b2BucketId2 = null;
 let B2_BUCKET_NAME_ACTIVE = B2_BUCKET_NAME;
+// S3-совместимый эндпоинт B2 (работает с accountId/appKey как AWS credentials)
+// Формат: https://s3.{region}.backblazeb2.com
+// region берём из Endpoint бакета: s3.us-east-005.backblazeb2.com
+const B2_S3_REGION = process.env.B2_S3_REGION || 'us-east-005'; // из страницы бакета
+const B2_S3_ENDPOINT = 'https://s3.' + B2_S3_REGION + '.backblazeb2.com';
 
 // ── S3-клиент для R2 (используем axios напрямую с AWS Signature V4) ──────────
 function awsSign(method, url, headers, body, accessKey, secretKey, region, service) {
@@ -127,6 +132,43 @@ async function r2Delete(fileName) {
     const auth = awsSign('DELETE', url, headers, '', R2_ACCESS_KEY, R2_SECRET, 'auto', 's3');
     await axios.delete(url, { headers: { ...headers, Authorization: auth }, timeout: 10000 });
   } catch {}
+}
+
+// ── B2 S3-совместимое скачивание (работает с приватными бакетами без карты) ──
+async function b2S3Download(bucketName, fileName) {
+  const url = B2_S3_ENDPOINT + '/' + bucketName + '/' + encodeURIComponent(fileName);
+  const now = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15) + 'Z';
+  const headers = {
+    'x-amz-date': now,
+    'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    'host': 's3.' + B2_S3_REGION + '.backblazeb2.com',
+  };
+  const auth = awsSign('GET', url, headers, '', B2_ACCOUNT_ID, B2_APP_KEY, B2_S3_REGION, 's3');
+  const r = await axios.get(url, {
+    headers: { ...headers, Authorization: auth },
+    timeout: 15000,
+    responseType: 'text',
+    transformResponse: [d => d],
+  });
+  return r.data;
+}
+
+async function b2S3Upload(bucketName, fileName, buffer, contentType) {
+  const url = B2_S3_ENDPOINT + '/' + bucketName + '/' + encodeURIComponent(fileName);
+  const now = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15) + 'Z';
+  const bodyHash = crypto.createHash('sha256').update(buffer).digest('hex');
+  const headers = {
+    'Content-Type': contentType || 'application/octet-stream',
+    'Content-Length': String(buffer.length),
+    'x-amz-date': now,
+    'x-amz-content-sha256': bodyHash,
+    'host': 's3.' + B2_S3_REGION + '.backblazeb2.com',
+  };
+  const auth = awsSign('PUT', url, headers, buffer, B2_ACCOUNT_ID, B2_APP_KEY, B2_S3_REGION, 's3');
+  await axios.put(url, buffer, {
+    headers: { ...headers, Authorization: auth },
+    maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 60000
+  });
 }
 
 // ── Supabase Storage (БЕЗ КАРТЫ — supabase.com) ──────────────────────────────
@@ -284,35 +326,11 @@ async function storageUpload(fileName, buffer, contentType) {
     await r2Upload(fileName, buffer, contentType);
     return;
   }
-  // B2 upload — выбираем нужный бакет
+  // B2 upload — используем S3 API
   if (!b2Auth) await reAuthB2();
-  const { bucketId, bucketName } = b2GetBucketForFile(fileName);
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const r = await axios.post(
-        `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
-        { bucketId },
-        { headers: { Authorization: b2Auth.authorizationToken } }
-      );
-      const { uploadUrl, authorizationToken } = r.data;
-      const sha1 = crypto.createHash('sha1').update(buffer).digest('hex');
-      await axios.post(uploadUrl, buffer, {
-        headers: {
-          'Authorization': authorizationToken,
-          'X-Bz-File-Name': encodeURIComponent(fileName),
-          'Content-Type': contentType || 'application/octet-stream',
-          'Content-Length': buffer.length,
-          'X-Bz-Content-Sha1': sha1,
-        },
-        maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 60000
-      });
-      console.log(`[B2] Загружено "${fileName}" → бакет "${bucketName}"`);
-      return;
-    } catch(e) {
-      if (e.response?.status === 401) { await reAuthB2(); continue; }
-      throw e;
-    }
-  }
+  const { bucketName } = b2GetBucketForFile(fileName);
+  await b2S3Upload(bucketName, fileName, buffer, contentType);
+  console.log(`[B2] Загружено "${fileName}" → бакет "${bucketName}"`);
 }
 
 async function storageDownload(fileName) {
@@ -321,10 +339,12 @@ async function storageDownload(fileName) {
   if (!b2Auth) await reAuthB2();
   const { bucketName } = b2GetBucketForFile(fileName);
   // API endpoint для приватных бакетов (работает с master token)
-  const { bucketId } = b2GetBucketForFile(fileName);
-  const dlToken = await getB2DownloadToken(bucketId, bucketName);
-  const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + encodeURIComponent(fileName);
-  return { url, token: dlToken };
+  // Используем S3-совместимый URL с подписью
+  const url = B2_S3_ENDPOINT + '/' + bucketName + '/' + encodeURIComponent(fileName);
+  const now = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15) + 'Z';
+  const hdrs = { 'x-amz-date': now, 'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'host': 's3.' + B2_S3_REGION + '.backblazeb2.com' };
+  const authHdr = awsSign('GET', url, hdrs, '', B2_ACCOUNT_ID, B2_APP_KEY, B2_S3_REGION, 's3');
+  return { url, token: null, authHeader: authHdr, extraHeaders: hdrs };
 }
 
 async function initStorage() {
@@ -514,14 +534,9 @@ async function loadUsers() {
   try {
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(USERS_FILE);
-    const { bucketId } = b2GetBucketForFile(USERS_FILE);
-    const dlToken = await getB2DownloadToken(bucketId, bucketName);
-    const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + USERS_FILE;
-    console.log('[B2 load] users URL:', url);
-    const response = await axios.get(url, {
-      timeout: 15000,
-      headers: { Authorization: dlToken }
-    });
+    console.log('[B2 load] users via S3:', B2_S3_ENDPOINT + '/' + bucketName + '/' + USERS_FILE);
+    const text = await b2S3Download(bucketName, USERS_FILE);
+    const response = { data: JSON.parse(text) };
     if (response.data && typeof response.data === 'object') {
       users = new Map(Object.entries(response.data));
       console.log(`👥 Загружено ${users.size} пользователей`);
@@ -550,7 +565,12 @@ async function saveUsers() {
   try {
     const usersObj = Object.fromEntries(users);
     const jsonBuffer = Buffer.from(JSON.stringify(usersObj, null, 2), 'utf-8');
-    await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
+    if (USE_B2) {
+      const { bucketName } = b2GetBucketForFile(USERS_FILE);
+      await b2S3Upload(bucketName, USERS_FILE, jsonBuffer, 'application/json');
+    } else {
+      await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
+    }
     console.log('💾 Пользователи сохранены');
   } catch (err) {
     console.error('Ошибка сохранения пользователей:', err.message);
@@ -3675,13 +3695,8 @@ async function loadHistory() {
   try {
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
-    const { bucketId } = b2GetBucketForFile(HISTORY_FILE);
-    const dlToken = await getB2DownloadToken(bucketId, bucketName);
-    const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + HISTORY_FILE;
-    const response = await axios.get(url, {
-      timeout: 15000,
-      headers: { Authorization: dlToken }
-    });
+    const text = await b2S3Download(bucketName, HISTORY_FILE);
+    const response = { data: JSON.parse(text) };
     if (response.data && Array.isArray(response.data)) {
       messageHistory = response.data.slice(-MAX_HISTORY);
       console.log(`📁 Загружено ${messageHistory.length} сообщений`);
@@ -3695,7 +3710,12 @@ async function loadHistory() {
 async function saveHistory() {
   try {
     const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
-    await storageUpload(HISTORY_FILE, jsonBuffer, 'application/json');
+    if (USE_B2) {
+      const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
+      await b2S3Upload(bucketName, HISTORY_FILE, jsonBuffer, 'application/json');
+    } else {
+      await storageUpload(HISTORY_FILE, jsonBuffer, 'application/json');
+    }
     console.log('💾 История сохранена');
   } catch (err) {
     console.error('Ошибка сохранения истории:', err.message);
