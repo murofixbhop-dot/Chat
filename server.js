@@ -314,8 +314,9 @@ async function storageDownload(fileName) {
   if (USE_R2) return r2Download(fileName);
   if (!b2Auth) await reAuthB2();
   const { bucketName } = b2GetBucketForFile(fileName);
-  const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + encodeURIComponent(fileName);
-  // Используем мастер-токен для приватного бакета
+  // API endpoint для приватных бакетов (работает с master token)
+  const url = b2Auth.downloadUrl + '/b2api/v2/b2_download_file_by_name?bucketName='
+    + encodeURIComponent(bucketName) + '&fileName=' + encodeURIComponent(fileName);
   return { url, token: b2Auth.authorizationToken };
 }
 
@@ -508,10 +509,10 @@ async function loadUsers() {
   try {
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(USERS_FILE);
-    const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + USERS_FILE;
-    console.log('[B2 load] users URL:', url);
-    console.log('[B2 load] token:', b2Auth.authorizationToken.slice(0,20) + '...');
-    // Скачиваем с мастер-токеном напрямую
+    // Используем API endpoint для приватных бакетов
+    const url = b2Auth.apiUrl + '/b2api/v2/b2_download_file_by_name?bucketName=' 
+      + encodeURIComponent(bucketName) + '&fileName=' + encodeURIComponent(USERS_FILE);
+    console.log('[B2 load] users via API:', url.slice(0,80));
     const response = await axios.get(url, {
       timeout: 15000,
       headers: { Authorization: b2Auth.authorizationToken }
@@ -3663,7 +3664,8 @@ async function loadHistory() {
   try {
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
-    const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + HISTORY_FILE;
+    const url = b2Auth.downloadUrl + '/b2api/v2/b2_download_file_by_name?bucketName='
+      + encodeURIComponent(bucketName) + '&fileName=' + encodeURIComponent(HISTORY_FILE);
     const response = await axios.get(url, {
       timeout: 15000,
       headers: { Authorization: b2Auth.authorizationToken }
