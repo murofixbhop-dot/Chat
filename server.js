@@ -134,89 +134,49 @@ async function r2Delete(fileName) {
   } catch {}
 }
 
-// ── B2 S3-совместимое скачивание (работает с приватными бакетами без карты) ──
+// ── B2 скачивание (рабочий метод: fileNamePrefix=файл, токен в URL) ──────────
 async function b2S3Download(bucketName, fileName) {
-  const url = B2_S3_ENDPOINT + '/' + bucketName + '/' + encodeURIComponent(fileName);
-  const now = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15) + 'Z';
-  const headers = {
-    'x-amz-date': now,
-    'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    'host': 's3.' + B2_S3_REGION + '.backblazeb2.com',
-  };
-  const auth = awsSign('GET', url, headers, '', B2_ACCOUNT_ID, B2_APP_KEY, B2_S3_REGION, 's3');
-  const r = await axios.get(url, {
-    headers: { ...headers, Authorization: auth },
-    timeout: 15000,
-    responseType: 'text',
-    transformResponse: [d => d],
-  });
-  return r.data;
+  const bucketId = (bucketName === B2_BUCKET_NAME2 && b2BucketId2) ? b2BucketId2 : b2BucketId;
+  const r = await axios.post(
+    `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
+    { bucketId, fileNamePrefix: fileName, validDurationInSeconds: 604800 },
+    { headers: { Authorization: b2Auth.authorizationToken }, timeout: 10000 }
+  );
+  const token = r.data.authorizationToken;
+  const url = `${b2Auth.downloadUrl}/file/${bucketName}/${fileName}?Authorization=${encodeURIComponent(token)}`;
+  const res = await axios.get(url, { timeout: 15000, responseType: 'text', transformResponse: [d => d] });
+  return res.data;
 }
 
 async function b2S3Upload(bucketName, fileName, buffer, contentType) {
-  const url = B2_S3_ENDPOINT + '/' + bucketName + '/' + encodeURIComponent(fileName);
-  const now = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15) + 'Z';
-  const bodyHash = crypto.createHash('sha256').update(buffer).digest('hex');
-  const headers = {
-    'Content-Type': contentType || 'application/octet-stream',
-    'Content-Length': String(buffer.length),
-    'x-amz-date': now,
-    'x-amz-content-sha256': bodyHash,
-    'host': 's3.' + B2_S3_REGION + '.backblazeb2.com',
-  };
-  const auth = awsSign('PUT', url, headers, buffer, B2_ACCOUNT_ID, B2_APP_KEY, B2_S3_REGION, 's3');
-  await axios.put(url, buffer, {
-    headers: { ...headers, Authorization: auth },
-    maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 60000
-  });
-}
-
-// ── Supabase Storage (БЕЗ КАРТЫ — supabase.com) ──────────────────────────────
-async function sbUpload(fileName, buffer, contentType) {
-  // Создаём бакет если не существует (первый запуск)
-  try {
-    await axios.post(`${SB_URL}/storage/v1/bucket`, {
-      id: SB_BUCKET, name: SB_BUCKET, public: true, allowedMimeTypes: null, fileSizeLimit: null
-    }, { headers: { Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' }, timeout: 5000 });
-  } catch {} // игнорируем — бакет уже существует
-
-  const url = `${SB_URL}/storage/v1/object/${SB_BUCKET}/${encodeURIComponent(fileName)}`;
-  await axios.post(url, buffer, {
-    headers: {
-      Authorization: `Bearer ${SB_KEY}`,
-      'Content-Type': contentType || 'application/octet-stream',
-      'Content-Length': buffer.length,
-    },
-    maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 60000
-  });
-}
-
-async function sbDownload(fileName) {
-  // Supabase public bucket — прямой URL без авторизации
-  const publicUrl = `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${encodeURIComponent(fileName)}`;
-  // Проверяем что бакет публичный (ставим при инициализации)
-  return { url: publicUrl, token: null };
-}
-
-async function sbEnsureBucketPublic() {
-  try {
-    // Создаём публичный бакет
-    await axios.post(`${SB_URL}/storage/v1/bucket`, {
-      id: SB_BUCKET, name: SB_BUCKET, public: true
-    }, { headers: { Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' }, timeout: 8000 });
-    console.log(`[Supabase] Бакет "${SB_BUCKET}" создан`);
-  } catch(e) {
-    if (e.response?.data?.error === 'Duplicate') {
-      // Бакет существует — обновляем на публичный
-      try {
-        await axios.put(`${SB_URL}/storage/v1/bucket/${SB_BUCKET}`, {
-          public: true
-        }, { headers: { Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' }, timeout: 8000 });
-        console.log(`[Supabase] Бакет "${SB_BUCKET}" обновлён (публичный)`);
-      } catch {}
+  const bucketId = (bucketName === B2_BUCKET_NAME2 && b2BucketId2) ? b2BucketId2 : b2BucketId;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await axios.post(
+        `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
+        { bucketId },
+        { headers: { Authorization: b2Auth.authorizationToken } }
+      );
+      const { uploadUrl, authorizationToken } = r.data;
+      const sha1 = crypto.createHash('sha1').update(buffer).digest('hex');
+      await axios.post(uploadUrl, buffer, {
+        headers: {
+          'Authorization': authorizationToken,
+          'X-Bz-File-Name': encodeURIComponent(fileName),
+          'Content-Type': contentType || 'application/octet-stream',
+          'Content-Length': buffer.length,
+          'X-Bz-Content-Sha1': sha1,
+        },
+        maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 60000
+      });
+      return;
+    } catch(e) {
+      if (e.response?.status === 401) { await reAuthB2(); continue; }
+      throw e;
     }
   }
 }
+
 
 // ── B2 операции (запасной провайдер) ─────────────────────────────────────────
 async function authorizeB2() {
@@ -337,14 +297,21 @@ async function storageDownload(fileName) {
   if (USE_SB) return sbDownload(fileName);
   if (USE_R2) return r2Download(fileName);
   if (!b2Auth) await reAuthB2();
-  const { bucketName } = b2GetBucketForFile(fileName);
-  // API endpoint для приватных бакетов (работает с master token)
-  // Используем S3-совместимый URL с подписью
-  const url = B2_S3_ENDPOINT + '/' + bucketName + '/' + encodeURIComponent(fileName);
-  const now = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15) + 'Z';
-  const hdrs = { 'x-amz-date': now, 'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'host': 's3.' + B2_S3_REGION + '.backblazeb2.com' };
-  const authHdr = awsSign('GET', url, hdrs, '', B2_ACCOUNT_ID, B2_APP_KEY, B2_S3_REGION, 's3');
-  return { url, token: null, authHeader: authHdr, extraHeaders: hdrs };
+  const { bucketId, bucketName } = b2GetBucketForFile(fileName);
+  // Рабочий метод: fileNamePrefix = конкретный файл, токен в query-параметре
+  try {
+    const r = await axios.post(
+      `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
+      { bucketId, fileNamePrefix: fileName, validDurationInSeconds: 604800 },
+      { headers: { Authorization: b2Auth.authorizationToken }, timeout: 10000 }
+    );
+    const token = r.data.authorizationToken;
+    const url = `${b2Auth.downloadUrl}/file/${bucketName}/${fileName}?Authorization=${encodeURIComponent(token)}`;
+    return { url, token: null };
+  } catch(e) {
+    const url = `${b2Auth.downloadUrl}/file/${bucketName}/${encodeURIComponent(fileName)}`;
+    return { url, token: b2Auth.authorizationToken };
+  }
 }
 
 async function initStorage() {
