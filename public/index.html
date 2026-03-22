@@ -282,6 +282,7 @@
         <i class="ti ti-circle-check"></i> Email подтверждён
       </div>
       <p class="sub-text" style="margin-top:4px">Используется для восстановления пароля</p>
+      <button class="btn-secondary w-full mt" onclick="doLogout()" style="margin-top:8px"><i class="ti ti-logout"></i> Выйти из аккаунта</button>
       <button class="btn-danger w-full mt" onclick="deleteAccount()"><i class="ti ti-trash"></i> Удалить аккаунт</button>
     </div>
   </div>
@@ -322,7 +323,7 @@
       <div class="sb-hdr-actions">
         <button class="icon-btn" title="Aura AI" onclick="openAiChat()"><i class="ti ti-robot"></i></button>
         <button class="icon-btn" title="Настройки (⌘,)" onclick="openSettings()"><i class="ti ti-settings"></i></button>
-        <button class="icon-btn" title="Новый чат" onclick="openAddFriend()"><i class="ti ti-edit"></i></button>
+        
       </div>
     </div>
 
@@ -372,7 +373,7 @@
         <span class="sb-pname" id="profileNickname">—</span>
         <span class="sb-psub" id="profileUsername"></span>
       </div>
-      <button class="icon-btn" onclick="event.stopPropagation();openSettings()"><i class="ti ti-dots-vertical"></i></button>
+      
     </div>
   </aside>
 
