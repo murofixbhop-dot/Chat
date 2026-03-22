@@ -2390,7 +2390,7 @@ function _aiAddMessage(role, content, attachment) {
   wrap.appendChild(ava);
   wrap.appendChild(bubble);
   msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
   return wrap;
 }
 
@@ -2410,7 +2410,7 @@ function _aiAddTyping() {
       <span style="width:7px;height:7px;border-radius:50%;background:var(--text2);animation:dotBounce .8s ease-in-out .32s infinite"></span>
     </div>`;
   msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
   return wrap;
 }
 
@@ -2472,7 +2472,7 @@ function _aiAddFileCard(file) {
   }
 
   msgs.appendChild(card);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
 }
 
 // ── HTML/JS/CSS Preview ──────────────────────────────────────────────────────
@@ -2886,7 +2886,7 @@ function _aiAddToolLog(tools) {
   });
 
   msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
 }
 
 // ── SSE стриминг ────────────────────────────────────────────────────────────
@@ -2896,7 +2896,9 @@ let _aiStreamContent = '';  // накопленный текст
 let _aiStreamingStarted = false; // флаг — SSE стриминг уже начался
 
 function _aiConnectSse() {
-  if (_aiSse) return;
+  // Переподключаем если соединение закрыто
+  if (_aiSse && _aiSse.readyState !== EventSource.CLOSED) return;
+  if (_aiSse) { _aiSse.close(); _aiSse = null; }
   if (!currentUser) return;
   _aiSse = new EventSource(`/api/ai-stream/${encodeURIComponent(currentUser)}`);
 
@@ -2921,8 +2923,7 @@ function _aiConnectSse() {
       }
       _aiStreamContent += text;
       _aiStreamBubble.innerHTML = _aiRenderMarkdown(_aiStreamContent) + '<span class="ai-cursor">▋</span>';
-      const msgs = $('aiMessages');
-      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      _aiSmartScroll();
     } catch {}
   });
 
@@ -3014,7 +3015,7 @@ function _aiAddMediaMessage(base64url, prompt, fileId) {
   wrap.appendChild(ava);
   wrap.appendChild(bubble);
   msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
 }
 
 // Показывает видео-превью от AI в чате
@@ -3067,7 +3068,7 @@ function _aiAddRealVideoMessage(base64url, prompt, fileId, filename) {
   wrap.appendChild(ava);
   wrap.appendChild(bubble);
   msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
 }
 
 function _aiAddVideoPreviewMessage(base64url, prompt, fileId, filename, frameCount) {
@@ -3132,7 +3133,16 @@ function _aiAddVideoPreviewMessage(base64url, prompt, fileId, filename, frameCou
   wrap.appendChild(ava);
   wrap.appendChild(bubble);
   msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
+}
+
+// Умный скролл: прокручиваем вниз только если пользователь УЖЕ внизу
+function _aiSmartScroll() {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+  const threshold = 80; // px от низа — считаем "внизу"
+  const atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < threshold;
+  _aiSmartScroll();
 }
 
 function _aiCreateStreamBubble() {
@@ -3153,7 +3163,7 @@ function _aiCreateStreamBubble() {
   wrap.appendChild(ava);
   wrap.appendChild(bubble);
   msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
 
   return { wrap, bubble };
 }
@@ -3199,7 +3209,7 @@ function _aiAddLiveLog(d) {
   const summary = document.getElementById('aiLogSummary');
   if (summary) summary.textContent = d.text || 'Работаю...';
 
-  msgs.scrollTop = msgs.scrollHeight;
+  _aiSmartScroll();
 }
 
 function _aiResetLiveLog() {
@@ -3254,6 +3264,11 @@ async function aiSend() {
       .trim() || userMsg;
 
     const endpoint = isVidRequest ? '/api/generate-video' : '/api/generate-image';
+
+    // КРИТИЧНО: подключаем SSE ДО запроса генерации
+    _aiConnectSse();
+    // Даём SSE установить соединение
+    await new Promise(r => setTimeout(r, 300));
 
     try {
       const r = await fetch(endpoint, {
@@ -4926,45 +4941,62 @@ function addCallRecord(icon, label, extra, time) {
 // Двойное:       fullscreen на весь экран
 // Конец видео:   автоматически схлопывается обратно
 
-let _vcExpandedId   = null; // id текущего развёрнутого кружка
-let _vcExpandTimer  = null; // таймер для различения одиночного/двойного тапа
+let _vcExpandedId   = null;
+let _vcExpandTimer  = null;
+let _vcTapCount     = 0;    // счётчик тапов
+let _vcTapTimer     = null; // таймер для double-tap
 
+// ── Одно нажатие: увеличиваем на месте + скроллим к нему
+// ── Двойное нажатие: fullscreen overlay
 function vcTogglePlay(id) {
-  // Предотвращаем прокрутку чата при нажатии на видео
   event?.preventDefault?.();
   event?.stopPropagation?.();
+
+  _vcTapCount++;
+  clearTimeout(_vcTapTimer);
+
+  if (_vcTapCount === 1) {
+    // Ждём 260ms — если второго тапа нет, считаем одиночным
+    _vcTapTimer = setTimeout(() => {
+      _vcTapCount = 0;
+      _vcSingleTap(id);
+    }, 260);
+  } else {
+    // Double-tap → fullscreen
+    _vcTapCount = 0;
+    clearTimeout(_vcTapTimer);
+    _vcOpenFullscreen(id);
+  }
+}
+
+function _vcSingleTap(id) {
   const v    = document.getElementById(id);
   const wrap = document.getElementById(id + '_wrap');
   if (!v || !wrap) return;
 
-  const now = Date.now();
-  const lastTap = wrap._lastTap || 0;
-  const isDouble = (now - lastTap) < 350;
-  wrap._lastTap = now;
+  const isExpanded = wrap.classList.contains('vc-expanded');
 
-  if (isDouble) {
-    // ─── Двойное нажатие → fullscreen ───────────────────────────────────
-    clearTimeout(_vcExpandTimer);
-    _vcOpenFullscreen(id);
+  if (isExpanded) {
+    // Пауза/воспроизведение если уже расширен
+    if (v.paused) v.play().catch(() => {});
+    else v.pause();
+    // Обновляем overlay
+    const ov = document.getElementById(id + '_ov');
+    if (ov) {
+      ov.querySelector('i').className = v.paused ? 'ti ti-player-play vc-play-ico' : 'ti ti-player-pause vc-play-ico';
+      ov.style.opacity = v.paused ? '1' : '0';
+    }
     return;
   }
 
-  // ─── Одиночное нажатие — даём паузу чтобы различить двойное ──────────
-  clearTimeout(_vcExpandTimer);
-  _vcExpandTimer = setTimeout(() => {
-    if (_vcExpandedId === id) {
-      // Уже развёрнут — схлопнуть
-      _vcCollapse(id);
-    } else {
-      // Схлопнуть предыдущий если есть
-      if (_vcExpandedId) _vcCollapse(_vcExpandedId);
-      // Развернуть этот
-      _vcExpand(id);
-    }
-  }, 220);
+  // Collapse any other expanded
+  if (_vcExpandedId && _vcExpandedId !== id) {
+    _vcCollapse(_vcExpandedId);
+  }
+
+  _vcExpand(id);
 }
 
-// ─── Expand в чате ────────────────────────────────────────────────────────
 function _vcExpand(id) {
   const v    = document.getElementById(id);
   const wrap = document.getElementById(id + '_wrap');
@@ -4973,32 +5005,25 @@ function _vcExpand(id) {
 
   _vcExpandedId = id;
 
-  // Вычисляем целевой размер — вписываем в 70% ширины чата, макс 400px
-  const msgs     = document.getElementById('messages');
-  const msgsW    = msgs ? msgs.clientWidth : window.innerWidth;
-  const baseSize = 130; // исходный размер
-  const target   = Math.min(Math.floor(msgsW * 0.7), 400);
-  const scale    = target / baseSize;
+  // Целевой размер — вписываем в ширину чата
+  const msgs  = document.getElementById('messages');
+  const msgsW = msgs ? msgs.clientWidth - 32 : window.innerWidth - 32; // 16px padding each side
+  const target = Math.min(Math.floor(msgsW), window.innerWidth <= 480 ? 260 : 340);
 
-  // Добавляем класс expanded на .msgs чтобы разрешить overflow
-  if (msgs) msgs.classList.add('vc-msgs-expanded');
+  // Плавно увеличиваем wrap — сообщения автоматически раздвинутся вниз
+  wrap.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1), box-shadow .35s, border-radius .35s';
+  wrap.style.width      = target + 'px';
+  wrap.style.height     = target + 'px';
+  wrap.style.boxShadow  = '0 8px 32px rgba(0,0,0,.45)';
+  wrap.style.zIndex     = '10';
+  wrap.classList.add('vc-expanded');
 
-  // Плавно раздвигаем высоту wrap чтобы сообщения отъехали
-  wrap.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1), box-shadow .35s';
-  wrap.style.width  = target + 'px';
-  wrap.style.height = target + 'px';
-  wrap.style.borderRadius = '18px';
-  wrap.style.boxShadow = '0 16px 48px rgba(0,0,0,.5)';
-  wrap.style.zIndex = '100';
-  wrap.style.position = 'relative';
-
-  // Масштабируем видео внутри
+  // Видео внутри
   v.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1)';
   v.style.width  = target + 'px';
   v.style.height = target + 'px';
-  v.style.borderRadius = '18px';
 
-  // Прячем overlay (иконку play)
+  // Прячем иконку play
   const ov = document.getElementById(id + '_ov');
   if (ov) { ov.style.transition = 'opacity .2s'; ov.style.opacity = '0'; }
 
@@ -5006,137 +5031,120 @@ function _vcExpand(id) {
   v.play().catch(() => {});
   v.onended = () => _vcCollapse(id);
 
-  // При клике на развёрнутый — пауза/плей
-  wrap._expandHandler = () => {
-    if (v.paused) v.play().catch(() => {});
-    else          v.pause();
+  // Скроллим чтобы квадрат был виден — после анимации
+  setTimeout(() => {
+    const wrapEl = document.getElementById(id + '_wrap');
+    if (wrapEl && msgs) {
+      const wrapRect = wrapEl.getBoundingClientRect();
+      const msgsRect = msgs.getBoundingClientRect();
+      // Если низ квадрата вылазит за нижний край области — скроллим вниз
+      if (wrapRect.bottom > msgsRect.bottom - 20) {
+        const delta = wrapRect.bottom - msgsRect.bottom + 24;
+        msgs.scrollBy({ top: delta, behavior: 'smooth' });
+      }
+      // Если верх квадрата выше верхнего края — скроллим вверх
+      else if (wrapRect.top < msgsRect.top + 10) {
+        msgs.scrollBy({ top: wrapRect.top - msgsRect.top - 10, behavior: 'smooth' });
+      }
+    }
+  }, 380); // после завершения анимации
+
+  // При клике на расширенный — пауза/плей
+  wrap._expandHandler = (e) => {
+    e.stopPropagation();
+    _vcSingleTap(id);
   };
   wrap.addEventListener('click', wrap._expandHandler);
 }
 
-// ─── Collapse обратно ─────────────────────────────────────────────────────
+// ── Collapse обратно ──────────────────────────────────────────────────────
 function _vcCollapse(id) {
   const v    = document.getElementById(id);
   const wrap = document.getElementById(id + '_wrap');
-  if (!wrap) return;
+  if (!v || !wrap) return;
 
-  _vcExpandedId = null;
+  const origSize = window.innerWidth <= 480 ? '160px' : '180px'; // из CSS
 
-  const msgs = document.getElementById('messages');
-
-  // Возвращаем размеры
   wrap.style.transition = 'width .3s cubic-bezier(.16,1,.3,1), height .3s cubic-bezier(.16,1,.3,1), box-shadow .3s';
-  wrap.style.width  = '';
-  wrap.style.height = '';
-  wrap.style.borderRadius = '';
+  wrap.style.width  = origSize;
+  wrap.style.height = origSize;
   wrap.style.boxShadow = '';
   wrap.style.zIndex = '';
-  wrap.style.position = '';
+  wrap.classList.remove('vc-expanded');
 
-  if (v) {
-    v.style.transition = 'width .3s cubic-bezier(.16,1,.3,1), height .3s cubic-bezier(.16,1,.3,1)';
-    v.style.width  = '';
-    v.style.height = '';
-    v.style.borderRadius = '';
-    v.pause();
-    v.onended = null;
+  v.style.width  = origSize;
+  v.style.height = origSize;
+
+  const ov = document.getElementById(id + '_ov');
+  if (ov) {
+    ov.style.opacity = '1';
+    ov.querySelector('i').className = 'ti ti-player-play vc-play-ico';
   }
 
-  // Восстанавливаем overlay
-  const ov = document.getElementById(id + '_ov');
-  if (ov) { ov.style.opacity = ''; ov.style.transition = ''; }
+  v.pause();
+  v.onended = null;
 
-  // Убираем expandHandler
   if (wrap._expandHandler) {
     wrap.removeEventListener('click', wrap._expandHandler);
     wrap._expandHandler = null;
   }
 
-  setTimeout(() => {
-    if (msgs) msgs.classList.remove('vc-msgs-expanded');
-  }, 320);
+  if (_vcExpandedId === id) _vcExpandedId = null;
 }
 
-// ─── Fullscreen ───────────────────────────────────────────────────────────
+// ── Double-tap → fullscreen overlay ──────────────────────────────────────
 function _vcOpenFullscreen(id) {
   const v = document.getElementById(id);
   if (!v) return;
 
-  // Если уже развёрнут инлайн — схлопываем сначала
+  // Если был расширен — сначала коллапсируем
   if (_vcExpandedId === id) _vcCollapse(id);
 
-  const src = v.src || v.getAttribute('src');
-  if (!src) return;
-
+  const src = v.src || v.currentSrc;
   const overlay = document.createElement('div');
-  overlay.className = 'vc-fullscreen';
-  overlay.dataset.vid = id;
-  overlay.innerHTML = `
-    <div class="vc-fs-bg"></div>
-    <video class="vc-fs-video" src="${src}" playsinline autoplay></video>
-    <div class="vc-fs-ui">
-      <button class="vc-fs-close" onclick="_vcCloseFullscreen('${id}')">
-        <i class="ti ti-x"></i>
-      </button>
-      <div class="vc-fs-timer" id="vc_fs_t_${id}">0:00</div>
-    </div>`;
+  overlay.id = id + '_fso';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;animation:fadeIn .2s ease;touch-action:none;';
+
+  const vSize = Math.min(window.innerWidth * 0.92, window.innerHeight * 0.78, 520);
+  const vid2 = document.createElement('video');
+  vid2.src = src;
+  vid2.controls = true;
+  vid2.autoplay = true;
+  vid2.playsInline = true;
+  vid2.loop = true;
+  vid2.setAttribute('playsinline','');
+  vid2.style.cssText = `width:${vSize}px;height:${vSize}px;object-fit:cover;border-radius:18px;display:block;box-shadow:0 8px 48px rgba(0,0,0,.6);`;
+
+  const hint = document.createElement('div');
+  hint.style.cssText = 'color:rgba(255,255,255,.45);font-size:12px;text-align:center;';
+  hint.textContent = 'Дважды нажмите для закрытия';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.style.cssText = 'background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:9px 28px;border-radius:22px;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);font-family:inherit;';
+  closeBtn.innerHTML = '<i class="ti ti-x"></i> Закрыть';
+  closeBtn.onclick = () => overlay.remove();
+
+  overlay.appendChild(vid2);
+  overlay.appendChild(hint);
+  overlay.appendChild(closeBtn);
+
+  // Закрытие по двойному тапу или клику вне видео
+  let _fsoTaps = 0, _fsoTimer = null;
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target === hint) {
+      _fsoTaps++;
+      clearTimeout(_fsoTimer);
+      _fsoTimer = setTimeout(() => { _fsoTaps = 0; }, 350);
+      if (_fsoTaps >= 2) overlay.remove();
+    }
+  });
 
   document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add('open'));
-
-  const fsV = overlay.querySelector('.vc-fs-video');
-  fsV.currentTime = v.currentTime;
-
-  // Таймер
-  fsV.addEventListener('timeupdate', () => {
-    const el = document.getElementById('vc_fs_t_' + id);
-    if (!el || !isFinite(fsV.duration)) return;
-    const fmt = t => `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
-    el.textContent = fmt(fsV.currentTime) + ' / ' + fmt(fsV.duration);
-  });
-
-  // Пауза/плей по тапу на видео
-  fsV.addEventListener('click', () => {
-    if (fsV.paused) fsV.play().catch(()=>{});
-    else fsV.pause();
-  });
-
-  // Закрытие
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) _vcCloseFullscreen(id);
-  });
-
-  const escH = (e) => {
-    if (e.key === 'Escape') { _vcCloseFullscreen(id); document.removeEventListener('keydown', escH); }
-  };
-  document.addEventListener('keydown', escH);
-  overlay._escH = escH;
-
-  fsV.onended = () => _vcCloseFullscreen(id);
-
-  // Пауза оригинала
-  v.pause();
+  v.pause(); // пауза оригинала
 }
 
 function _vcCloseFullscreen(id) {
-  const overlay = document.querySelector(`.vc-fullscreen[data-vid="${id}"]`);
-  if (!overlay) return;
-
-  const fsV = overlay.querySelector('.vc-fs-video');
-  const v   = document.getElementById(id);
-  if (v && fsV) v.currentTime = fsV.currentTime;
-  if (fsV) fsV.pause();
-
-  if (overlay._escH) document.removeEventListener('keydown', overlay._escH);
-
-  overlay.classList.remove('open');
-  setTimeout(() => overlay.remove(), 280);
-
-  // Обновляем overlay оригинала
-  const ov  = document.getElementById(id + '_ov');
-  const ico = ov?.querySelector('.vc-play-ico');
-  if (ico) ico.className = 'ti ti-player-play vc-play-ico';
-  if (ov)  ov.classList.remove('playing');
+  document.getElementById(id + '_fso')?.remove();
 }
 
 // Оставляем для совместимости (ondblclick="viewMedia" в старом HTML)
