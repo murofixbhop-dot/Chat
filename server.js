@@ -12,81 +12,295 @@ const io = new Server(server);
 
 // PeerJS не нужен — сигналинг через Socket.IO
 
-// ========== НАСТРОЙКА BACKBLAZE B2 ==========
-const B2_ACCOUNT_ID = process.env.B2_ACCOUNT_ID;
-const B2_APP_KEY = process.env.B2_APP_KEY;
-const B2_BUCKET_NAME = process.env.B2_BUCKET_NAME;
+// ========== ХРАНИЛИЩЕ ФАЙЛОВ — мульти-провайдер ==========
+// Провайдеры (по приоритету, первый настроенный используется):
+//
+// 1. Supabase Storage — БЕЗ КАРТЫ, 1 GB бесплатно
+//    Регистрация: supabase.com через GitHub
+//    SUPABASE_URL      = https://xxxx.supabase.co
+//    SUPABASE_KEY      = service_role key (Settings → API)
+//    SUPABASE_BUCKET   = aura-files
+//
+// 2. Cloudflare R2 — нужна карта, 10 GB бесплатно
+//    R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL
+//
+// 3. Backblaze B2 — запасной
+//    B2_ACCOUNT_ID, B2_APP_KEY, B2_BUCKET_NAME
 
+// Supabase
+const SB_URL    = process.env.SUPABASE_URL;
+const SB_KEY    = process.env.SUPABASE_KEY;
+const SB_BUCKET = process.env.SUPABASE_BUCKET || 'aura-files';
+const USE_SB    = !!(SB_URL && SB_KEY);
+
+// Cloudflare R2
+const R2_ENDPOINT  = process.env.R2_ENDPOINT;
+const R2_ACCESS_KEY= process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET    = process.env.R2_SECRET_KEY;
+const R2_BUCKET    = process.env.R2_BUCKET_NAME;
+const R2_PUBLIC    = process.env.R2_PUBLIC_URL;
+const USE_R2       = !!(R2_ENDPOINT && R2_ACCESS_KEY && R2_SECRET && R2_BUCKET);
+
+// Backblaze B2
+// Один аккаунт = один Account ID + App Key
+// Два бакета: основной (видео + квадратики) и запасной (фото + аудио + файлы)
+const B2_ACCOUNT_ID   = process.env.B2_ACCOUNT_ID;
+const B2_APP_KEY      = process.env.B2_APP_KEY;
+const B2_BUCKET_NAME  = process.env.B2_BUCKET_NAME;   // бакет 1: видео, квадратики
+const B2_BUCKET_NAME2 = process.env.B2_BUCKET_NAME2;  // бакет 2: фото, аудио, файлы
+const USE_B2          = !!(B2_ACCOUNT_ID && B2_APP_KEY && B2_BUCKET_NAME);
+const USE_B2_DUAL     = !!(USE_B2 && B2_BUCKET_NAME2); // два бакета
+
+let storageReady = false;
 let b2Auth = null;
-let b2BucketId = null;
+let b2BucketId  = null;  // ID бакета 1 (видео/квадраты)
+let b2BucketId2 = null;  // ID бакета 2 (фото/аудио/файлы)
+let B2_BUCKET_NAME_ACTIVE = B2_BUCKET_NAME;
 
-async function authorizeB2() {
-  const credentials = `${B2_ACCOUNT_ID}:${B2_APP_KEY}`;
-  const base64 = Buffer.from(credentials).toString('base64');
-  const response = await axios.get('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', {
-    headers: { Authorization: `Basic ${base64}` }
-  });
-  return response.data;
+// ── S3-клиент для R2 (используем axios напрямую с AWS Signature V4) ──────────
+function awsSign(method, url, headers, body, accessKey, secretKey, region, service) {
+  const u      = new URL(url);
+  const now    = new Date();
+  const date   = now.toISOString().replace(/[:-]|\.\d{3}/g, '').slice(0,15) + 'Z';
+  const day    = date.slice(0,8);
+  const bodyHash = crypto.createHash('sha256').update(body || '').digest('hex');
+
+  const canonHeaders = Object.entries(headers)
+    .map(([k,v]) => `${k.toLowerCase()}:${v.trim()}`)
+    .sort().join('\n') + '\n';
+  const signedHeaders = Object.keys(headers).map(k=>k.toLowerCase()).sort().join(';');
+
+  const canonReq = [method, u.pathname, u.search.slice(1),
+    canonHeaders, signedHeaders, bodyHash].join('\n');
+
+  const credScope = `${day}/${region}/${service}/aws4_request`;
+  const strToSign = ['AWS4-HMAC-SHA256', date, credScope,
+    crypto.createHash('sha256').update(canonReq).digest('hex')].join('\n');
+
+  const hmac = (key, data) => crypto.createHmac('sha256', key).update(data).digest();
+  const sigKey = hmac(hmac(hmac(hmac('AWS4'+secretKey, day), region), service), 'aws4_request');
+  const sig = hmac(sigKey, strToSign).toString('hex');
+
+  return `AWS4-HMAC-SHA256 Credential=${accessKey}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${sig}`;
 }
 
-async function getBucketId(bucketName) {
-  const response = await axios.post(
-    `${b2Auth.apiUrl}/b2api/v2/b2_list_buckets`,
-    { accountId: B2_ACCOUNT_ID },
-    { headers: { Authorization: b2Auth.authorizationToken } }
+// ── R2 операции ───────────────────────────────────────────────────────────────
+async function r2Upload(fileName, buffer, contentType) {
+  const url = `${R2_ENDPOINT}/${R2_BUCKET}/${encodeURIComponent(fileName)}`;
+  const now  = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15)+'Z';
+  const headers = {
+    'Content-Type':   contentType || 'application/octet-stream',
+    'Content-Length': String(buffer.length),
+    'x-amz-date':     now,
+    'x-amz-content-sha256': crypto.createHash('sha256').update(buffer).digest('hex'),
+    'host': new URL(R2_ENDPOINT).hostname,
+  };
+  const auth = awsSign('PUT', url, headers, buffer, R2_ACCESS_KEY, R2_SECRET, 'auto', 's3');
+  await axios.put(url, buffer, {
+    headers: { ...headers, Authorization: auth },
+    maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 60000
+  });
+}
+
+async function r2Download(fileName) {
+  // Если есть публичный URL — используем его напрямую (не нужен auth)
+  if (R2_PUBLIC) {
+    return { url: `${R2_PUBLIC}/${encodeURIComponent(fileName)}`, token: null };
+  }
+  // Иначе — подписанный URL через aws signature
+  const url = `${R2_ENDPOINT}/${R2_BUCKET}/${encodeURIComponent(fileName)}`;
+  const now  = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15)+'Z';
+  const headers = {
+    'x-amz-date': now,
+    'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    'host': new URL(R2_ENDPOINT).hostname,
+  };
+  const auth = awsSign('GET', url, headers, '', R2_ACCESS_KEY, R2_SECRET, 'auto', 's3');
+  return { url, token: null, authHeader: auth, extraHeaders: headers };
+}
+
+async function r2Delete(fileName) {
+  try {
+    const url = `${R2_ENDPOINT}/${R2_BUCKET}/${encodeURIComponent(fileName)}`;
+    const now  = new Date().toISOString().replace(/[:-]|\.\d{3}/g,'').slice(0,15)+'Z';
+    const headers = { 'x-amz-date': now, 'x-amz-content-sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'host': new URL(R2_ENDPOINT).hostname };
+    const auth = awsSign('DELETE', url, headers, '', R2_ACCESS_KEY, R2_SECRET, 'auto', 's3');
+    await axios.delete(url, { headers: { ...headers, Authorization: auth }, timeout: 10000 });
+  } catch {}
+}
+
+// ── Supabase Storage (БЕЗ КАРТЫ — supabase.com) ──────────────────────────────
+async function sbUpload(fileName, buffer, contentType) {
+  // Создаём бакет если не существует (первый запуск)
+  try {
+    await axios.post(`${SB_URL}/storage/v1/bucket`, {
+      id: SB_BUCKET, name: SB_BUCKET, public: true, allowedMimeTypes: null, fileSizeLimit: null
+    }, { headers: { Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' }, timeout: 5000 });
+  } catch {} // игнорируем — бакет уже существует
+
+  const url = `${SB_URL}/storage/v1/object/${SB_BUCKET}/${encodeURIComponent(fileName)}`;
+  await axios.post(url, buffer, {
+    headers: {
+      Authorization: `Bearer ${SB_KEY}`,
+      'Content-Type': contentType || 'application/octet-stream',
+      'Content-Length': buffer.length,
+    },
+    maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 60000
+  });
+}
+
+async function sbDownload(fileName) {
+  // Supabase public bucket — прямой URL без авторизации
+  const publicUrl = `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${encodeURIComponent(fileName)}`;
+  // Проверяем что бакет публичный (ставим при инициализации)
+  return { url: publicUrl, token: null };
+}
+
+async function sbEnsureBucketPublic() {
+  try {
+    // Создаём публичный бакет
+    await axios.post(`${SB_URL}/storage/v1/bucket`, {
+      id: SB_BUCKET, name: SB_BUCKET, public: true
+    }, { headers: { Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' }, timeout: 8000 });
+    console.log(`[Supabase] Бакет "${SB_BUCKET}" создан`);
+  } catch(e) {
+    if (e.response?.data?.error === 'Duplicate') {
+      // Бакет существует — обновляем на публичный
+      try {
+        await axios.put(`${SB_URL}/storage/v1/bucket/${SB_BUCKET}`, {
+          public: true
+        }, { headers: { Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' }, timeout: 8000 });
+        console.log(`[Supabase] Бакет "${SB_BUCKET}" обновлён (публичный)`);
+      } catch {}
+    }
+  }
+}
+
+// ── B2 операции (запасной провайдер) ─────────────────────────────────────────
+async function authorizeB2() {
+  const base64 = Buffer.from(`${B2_ACCOUNT_ID}:${B2_APP_KEY}`).toString('base64');
+  const r = await axios.get('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', {
+    headers: { Authorization: `Basic ${base64}` }, timeout: 10000
+  });
+  return r.data;
+}
+async function getBucketId(bucketName, auth) {
+  const a = auth || b2Auth;
+  const r = await axios.post(`${a.apiUrl}/b2api/v2/b2_list_buckets`,
+    { accountId: a.accountId },
+    { headers: { Authorization: a.authorizationToken } }
   );
-  const bucket = response.data.buckets.find(b => b.bucketName === bucketName);
+  const bucket = r.data.buckets.find(b => b.bucketName === bucketName);
   if (!bucket) throw new Error(`Бакет "${bucketName}" не найден`);
   return bucket.bucketId;
 }
+async function reAuthB2() {
+  b2Auth     = await authorizeB2();
+  b2BucketId = await getBucketId(B2_BUCKET_NAME);
+  if (USE_B2_DUAL) {
+    try {
+      b2BucketId2 = await getBucketId(B2_BUCKET_NAME2);
+      console.log(`[B2] Бакет 2 "${B2_BUCKET_NAME2}": OK`);
+    } catch(e) {
+      console.warn('[B2] Бакет 2 недоступен:', e.message);
+    }
+  }
+  console.log('[B2] Переавторизация успешна');
+}
 
-async function getUploadUrl() {
+// ── Unified Storage API (работает с R2 и B2) ─────────────────────────────────
+// Определяем бакет по типу файла:
+// Бакет 1 (B2_BUCKET_NAME)  → videos/, squares/ (видео и квадратики)
+// Бакет 2 (B2_BUCKET_NAME2) → photos/, audio/, files/ (фото, аудио, файлы)
+function b2GetBucketForFile(fileName) {
+  const f = fileName.toLowerCase();
+  const isMedia = f.startsWith('videos/') || f.startsWith('squares/') || f.endsWith('.mp4') || f.endsWith('.webm') && !f.startsWith('audio/');
+  if (USE_B2_DUAL && !isMedia && b2BucketId2) {
+    return { bucketId: b2BucketId2, bucketName: B2_BUCKET_NAME2 };
+  }
+  return { bucketId: b2BucketId, bucketName: B2_BUCKET_NAME };
+}
+
+async function storageUpload(fileName, buffer, contentType) {
+  if (USE_SB) {
+    await sbUpload(fileName, buffer, contentType);
+    return;
+  }
+  if (USE_R2) {
+    await r2Upload(fileName, buffer, contentType);
+    return;
+  }
+  // B2 upload — выбираем нужный бакет
   if (!b2Auth) await reAuthB2();
-  try {
-    const response = await axios.post(
-      `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
-      { bucketId: b2BucketId },
-      { headers: { Authorization: b2Auth.authorizationToken } }
-    );
-    return response.data;
-  } catch(e) {
-    if (e.response?.status === 401 || e.response?.status === 403) {
-      await reAuthB2();
-      const response2 = await axios.post(
+  const { bucketId, bucketName } = b2GetBucketForFile(fileName);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await axios.post(
         `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
-        { bucketId: b2BucketId },
+        { bucketId },
         { headers: { Authorization: b2Auth.authorizationToken } }
       );
-      return response2.data;
+      const { uploadUrl, authorizationToken } = r.data;
+      const sha1 = crypto.createHash('sha1').update(buffer).digest('hex');
+      await axios.post(uploadUrl, buffer, {
+        headers: {
+          'Authorization': authorizationToken,
+          'X-Bz-File-Name': encodeURIComponent(fileName),
+          'Content-Type': contentType || 'application/octet-stream',
+          'Content-Length': buffer.length,
+          'X-Bz-Content-Sha1': sha1,
+        },
+        maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 60000
+      });
+      console.log(`[B2] Загружено "${fileName}" → бакет "${bucketName}"`);
+      return;
+    } catch(e) {
+      if (e.response?.status === 401) { await reAuthB2(); continue; }
+      throw e;
     }
-    throw e;
   }
 }
 
-async function reAuthB2() {
-  try {
-    console.log('[B2] Переавторизация...');
-    b2Auth = await authorizeB2();
-    b2BucketId = await getBucketId(B2_BUCKET_NAME);
-    console.log('[B2] Переавторизация успешна');
-  } catch(e) {
-    console.error('[B2] Ошибка переавторизации:', e.message);
-  }
-}
-
-// Возвращает { url, headers } для скачивания файла с B2
-// Использует master authorizationToken напрямую — не нужен b2_get_download_authorization
-async function getDownloadUrl(fileName) {
+async function storageDownload(fileName) {
+  if (USE_SB) return sbDownload(fileName);
+  if (USE_R2) return r2Download(fileName);
+  // B2 — определяем правильный бакет
   if (!b2Auth) await reAuthB2();
-  // Прямой URL с master токеном в заголовке (работает для любого типа бакета)
-  const url = `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${encodeURIComponent(fileName)}`;
+  const { bucketName } = b2GetBucketForFile(fileName);
+  const url = `${b2Auth.downloadUrl}/file/${bucketName}/${encodeURIComponent(fileName)}`;
   return { url, token: b2Auth.authorizationToken };
 }
 
-function calculateSHA1(buffer) {
-  const hash = crypto.createHash('sha1');
-  hash.update(buffer);
-  return hash.digest('hex');
+async function initStorage() {
+  if (USE_SB) {
+    console.log(`✅ Хранилище: Supabase Storage (бакет: ${SB_BUCKET})`);
+    await sbEnsureBucketPublic();
+    storageReady = true;
+    return;
+  }
+  if (USE_R2) {
+    console.log(`✅ Хранилище: Cloudflare R2 (бакет: ${R2_BUCKET})`);
+    storageReady = true;
+    return;
+  }
+  if (USE_B2) {
+    console.log('🔄 Авторизация в Backblaze B2...');
+    b2Auth     = await authorizeB2();
+    b2BucketId = await getBucketId(B2_BUCKET_NAME);
+    B2_BUCKET_NAME_ACTIVE = B2_BUCKET_NAME;
+    console.log(`✅ B2 бакет 1: "${B2_BUCKET_NAME}" (видео, квадраты)`);
+    if (USE_B2_DUAL) {
+      try {
+        b2BucketId2 = await getBucketId(B2_BUCKET_NAME2);
+        console.log(`✅ B2 бакет 2: "${B2_BUCKET_NAME2}" (фото, аудио, файлы)`);
+      } catch(e) {
+        console.warn(`⚠️  B2 бакет 2 недоступен: ${e.message}`);
+      }
+    }
+    storageReady = true;
+    return;
+  }
+  throw new Error('Не настроено ни одно хранилище (R2 или B2)');
 }
 
 // ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ==========
@@ -239,11 +453,9 @@ async function sendVerifyEmail(to, code) {
 
 async function loadUsers() {
   try {
-    const { url, token } = await getDownloadUrl(USERS_FILE);
-    const response = await axios.get(url, {
-      timeout: 10000,
-      headers: { Authorization: token }
-    });
+    const dl = await storageDownload(USERS_FILE);
+    const reqHeaders = dl.authHeader ? { Authorization: dl.authHeader, ...dl.extraHeaders } : (dl.token ? { Authorization: dl.token } : {});
+    const response = await axios.get(dl.url, { timeout: 10000, headers: reqHeaders });
     if (response.data && typeof response.data === 'object') {
       users = new Map(Object.entries(response.data));
       console.log(`👥 Загружено ${users.size} пользователей`);
@@ -261,18 +473,7 @@ async function saveUsers() {
   try {
     const usersObj = Object.fromEntries(users);
     const jsonBuffer = Buffer.from(JSON.stringify(usersObj, null, 2), 'utf-8');
-    const uploadData = await getUploadUrl();
-    const sha1 = calculateSHA1(jsonBuffer);
-
-    await axios.post(uploadData.uploadUrl, jsonBuffer, {
-      headers: {
-        'Authorization': uploadData.authorizationToken,
-        'X-Bz-File-Name': USERS_FILE,
-        'Content-Type': 'application/json',
-        'Content-Length': jsonBuffer.length,
-        'X-Bz-Content-Sha1': sha1
-      }
-    });
+    await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
     console.log('💾 Пользователи сохранены');
   } catch (err) {
     console.error('Ошибка сохранения пользователей:', err.message);
@@ -306,17 +507,11 @@ app.get('/api/dl', async (req, res) => {
   }
 
   try {
-    const { url: freshUrl, token: freshToken } = await getDownloadUrl(fileName);
-
-    // Стримим через сервер — не редиректим
-    const b2Response = await axios.get(freshUrl, {
-      responseType: 'stream',
-      timeout: 30000,
-      headers: {
-        Authorization: freshToken,
-        ...(req.headers.range ? { Range: req.headers.range } : {})
-      }
-    });
+    const dl = await storageDownload(fileName);
+    const dlH = dl.authHeader ? { Authorization: dl.authHeader, ...(dl.extraHeaders||{}) } : dl.token ? { Authorization: dl.token } : {};
+    // Supabase и R2 с публичным URL — редиректим напрямую
+    if (USE_SB || (USE_R2 && R2_PUBLIC)) return res.redirect(302, dl.url);
+    const b2Response = await axios.get(dl.url, { responseType:'stream', timeout:30000, headers: { ...dlH, ...(req.headers.range?{Range:req.headers.range}:{}) } });
 
     // Пробрасываем заголовки от B2
     const ct = b2Response.headers['content-type']  || 'application/octet-stream';
@@ -363,21 +558,15 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     else if (fileType === 'video') prefix = 'videos/';
     else if (fileType === 'audio') prefix = 'audio/';
 
-    const fileName = prefix + Date.now() + '-' + req.file.originalname;
-    const uploadData = await getUploadUrl();
-    const sha1 = calculateSHA1(req.file.buffer);
-    await axios.post(uploadData.uploadUrl, req.file.buffer, {
-      headers: {
-        'Authorization': uploadData.authorizationToken,
-        'X-Bz-File-Name': encodeURIComponent(fileName),
-        'Content-Type': mimeType,
-        'Content-Length': req.file.buffer.length,
-        'X-Bz-Content-Sha1': sha1
-      }
-    });
+    const safeOrig = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = prefix + Date.now() + '-' + safeOrig;
 
-    // Возвращаем прокси URL — клиент скачивает через /api/dl (с авторизацией)
-    const proxyUrl = '/api/dl?f=' + encodeURIComponent(fileName);
+    await storageUpload(fileName, req.file.buffer, mimeType);
+
+    const proxyUrl = (USE_SB)
+      ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${encodeURIComponent(fileName)}`
+      : (USE_R2 && R2_PUBLIC) ? `${R2_PUBLIC}/${encodeURIComponent(fileName)}`
+      : '/api/dl?f=' + encodeURIComponent(fileName);
     res.json({ success: true, url: proxyUrl, type: fileType, name: req.file.originalname });
 
   } catch (error) {
@@ -3407,11 +3596,9 @@ app.post('/api/delete-message', async (req, res) => {
 
 async function loadHistory() {
   try {
-    const { url, token } = await getDownloadUrl(HISTORY_FILE);
-    const response = await axios.get(url, {
-      timeout: 10000,
-      headers: { Authorization: token }
-    });
+    const dl = await storageDownload(HISTORY_FILE);
+    const reqHeaders = dl.authHeader ? { Authorization: dl.authHeader, ...dl.extraHeaders } : (dl.token ? { Authorization: dl.token } : {});
+    const response = await axios.get(dl.url, { timeout: 10000, headers: reqHeaders });
     if (response.data && Array.isArray(response.data)) {
       messageHistory = response.data.slice(-MAX_HISTORY);
       console.log(`📁 Загружено ${messageHistory.length} сообщений`);
@@ -3425,17 +3612,7 @@ async function loadHistory() {
 async function saveHistory() {
   try {
     const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
-    const uploadData = await getUploadUrl();
-    const sha1 = calculateSHA1(jsonBuffer);
-    await axios.post(uploadData.uploadUrl, jsonBuffer, {
-      headers: {
-        'Authorization': uploadData.authorizationToken,
-        'X-Bz-File-Name': HISTORY_FILE,
-        'Content-Type': 'application/json',
-        'Content-Length': jsonBuffer.length,
-        'X-Bz-Content-Sha1': sha1
-      }
-    });
+    await storageUpload(HISTORY_FILE, jsonBuffer, 'application/json');
     console.log('💾 История сохранена');
   } catch (err) {
     console.error('Ошибка сохранения истории:', err.message);
@@ -3445,11 +3622,8 @@ async function saveHistory() {
 // ========== ИНИЦИАЛИЗАЦИЯ B2 ==========
 (async () => {
   try {
-    console.log('🔄 Авторизация в Backblaze B2...');
-    b2Auth = await authorizeB2();
-    console.log('✅ Авторизация успешна');
-    b2BucketId = await getBucketId(B2_BUCKET_NAME);
-    console.log(`✅ ID бакета: ${b2BucketId}`);
+    console.log('🔄 Инициализация хранилища...');
+    await initStorage();
     await loadUsers();
     await loadHistory();
   } catch (err) {
@@ -3459,11 +3633,10 @@ async function saveHistory() {
     // Пробуем переподключиться через 30 секунд
     setTimeout(async () => {
       try {
-        b2Auth = await authorizeB2();
-        b2BucketId = await getBucketId(B2_BUCKET_NAME);
+        await initStorage();
         await loadUsers();
         await loadHistory();
-        console.log('✅ B2 переподключён успешно');
+        console.log('✅ Хранилище переподключено');
       } catch(e2) {
         console.error('[B2] Повторная попытка не удалась:', e2.message);
       }
@@ -3697,8 +3870,23 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 // ── Периодическая переавторизация B2 (токен живёт 24ч — обновляем каждые 20ч) ──
 setInterval(async () => {
-  console.log('[B2] Плановая переавторизация...');
-  await reAuthB2();
+  console.log('[B2] Плановая переавторизация всех слотов...');
+  for (let i = 0; i < b2Slots.length; i++) {
+    const slot = b2Slots[i];
+    if (!slot.accountId) continue;
+    try {
+      slot.auth     = await authorizeB2Slot(slot.accountId, slot.appKey);
+      slot.bucketId = await getBucketId(slot.bucketName, slot.auth);
+      slot.active   = true;
+      console.log(`[B2] Слот [${i}] "${slot.bucketName}" переавторизован`);
+    } catch(e) {
+      console.warn(`[B2] Слот [${i}] не доступен: ${e.message}`);
+      slot.active = false;
+    }
+  }
+  // Обновляем активный слот
+  const firstActive = b2Slots.findIndex(s => s.active);
+  if (firstActive !== -1) setB2Slot(firstActive);
 }, 20 * 60 * 60 * 1000); // 20 часов
 
 server.listen(PORT, () => {
