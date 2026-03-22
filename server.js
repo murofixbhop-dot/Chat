@@ -74,31 +74,13 @@ async function reAuthB2() {
   }
 }
 
+// Возвращает { url, headers } для скачивания файла с B2
+// Использует master authorizationToken напрямую — не нужен b2_get_download_authorization
 async function getDownloadUrl(fileName) {
-  // Если токен устарел — переавторизуемся
   if (!b2Auth) await reAuthB2();
-  try {
-    const response = await axios.post(
-      `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
-      { bucketId: b2BucketId, fileNamePrefix: fileName, validDurationInSeconds: 604800 },
-      { headers: { Authorization: b2Auth.authorizationToken } }
-    );
-    const token = response.data.authorizationToken;
-    return `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}?Authorization=${token}`;
-  } catch(e) {
-    if (e.response?.status === 401 || e.response?.status === 403) {
-      // Токен истёк — переавторизуемся и пробуем снова
-      await reAuthB2();
-      const response2 = await axios.post(
-        `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
-        { bucketId: b2BucketId, fileNamePrefix: fileName, validDurationInSeconds: 604800 },
-        { headers: { Authorization: b2Auth.authorizationToken } }
-      );
-      const token2 = response2.data.authorizationToken;
-      return `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${fileName}?Authorization=${token2}`;
-    }
-    throw e;
-  }
+  // Прямой URL с master токеном в заголовке (работает для любого типа бакета)
+  const url = `${b2Auth.downloadUrl}/file/${B2_BUCKET_NAME}/${encodeURIComponent(fileName)}`;
+  return { url, token: b2Auth.authorizationToken };
 }
 
 function calculateSHA1(buffer) {
@@ -257,8 +239,11 @@ async function sendVerifyEmail(to, code) {
 
 async function loadUsers() {
   try {
-    const url = await getDownloadUrl(USERS_FILE);
-    const response = await axios.get(url, { timeout: 5000 });
+    const { url, token } = await getDownloadUrl(USERS_FILE);
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: { Authorization: token }
+    });
     if (response.data && typeof response.data === 'object') {
       users = new Map(Object.entries(response.data));
       console.log(`👥 Загружено ${users.size} пользователей`);
@@ -321,14 +306,14 @@ app.get('/api/dl', async (req, res) => {
   }
 
   try {
-    const freshUrl = await getDownloadUrl(fileName);
+    const { url: freshUrl, token: freshToken } = await getDownloadUrl(fileName);
 
     // Стримим через сервер — не редиректим
     const b2Response = await axios.get(freshUrl, {
       responseType: 'stream',
       timeout: 30000,
       headers: {
-        // Передаём Range если браузер запросил (для видео seek)
+        Authorization: freshToken,
         ...(req.headers.range ? { Range: req.headers.range } : {})
       }
     });
@@ -391,8 +376,9 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       }
     });
 
-    const fileUrl = await getDownloadUrl(fileName);
-    res.json({ success: true, url: fileUrl, type: fileType, name: req.file.originalname });
+    // Возвращаем прокси URL — клиент скачивает через /api/dl (с авторизацией)
+    const proxyUrl = '/api/dl?f=' + encodeURIComponent(fileName);
+    res.json({ success: true, url: proxyUrl, type: fileType, name: req.file.originalname });
 
   } catch (error) {
     console.error('Ошибка загрузки:', error.response?.data || error.message);
@@ -3421,8 +3407,11 @@ app.post('/api/delete-message', async (req, res) => {
 
 async function loadHistory() {
   try {
-    const url = await getDownloadUrl(HISTORY_FILE);
-    const response = await axios.get(url, { timeout: 5000 });
+    const { url, token } = await getDownloadUrl(HISTORY_FILE);
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: { Authorization: token }
+    });
     if (response.data && Array.isArray(response.data)) {
       messageHistory = response.data.slice(-MAX_HISTORY);
       console.log(`📁 Загружено ${messageHistory.length} сообщений`);
