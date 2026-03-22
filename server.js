@@ -712,7 +712,7 @@ const AI_TOOLS = [
     type: 'function',
     function: {
       name: 'image_generate',
-      description: 'Генерирует изображение по текстовому описанию (только если пользователь активировал HACK:enable-media или явно попросил). Возвращает URL изображения.',
+      description: 'Генерирует изображение по текстовому описанию используя Pollinations AI. Возвращает изображение прямо в чат.',
       parameters: { type:'object', properties: { prompt:{ type:'string', description:'Описание изображения на английском' }, style:{ type:'string', description:'realistic, anime, digital-art, watercolor, oil-painting' } }, required:['prompt'] }
     }
   },
@@ -1326,20 +1326,29 @@ img{border-radius:10px}p{margin:16px 0 0;color:#6366f1;font-size:14px;word-break
 
     // ── Генерация изображений (Pollinations.ai — бесплатно, без ключа) ────
     if (name === 'image_generate') {
-      const prompt   = args.prompt || '';
-      const style    = args.style  || 'realistic';
-      aiSseEmit(username, 'log', { text: `Генерирую изображение: ${prompt.slice(0,50)}...`, type: 'process' });
-      const encodedPrompt = encodeURIComponent(`${prompt}, ${style}, high quality`);
-      const imgUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true`;
-      // Создаём HTML файл с изображением для превью
-      const html = `<!DOCTYPE html><html><head><title>Generated Image</title>
-<style>body{margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh}
-img{max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.8)}</style></head>
-<body><img src="${imgUrl}" alt="${prompt}" onload="this.style.opacity=1" style="opacity:0;transition:opacity .5s"/></body></html>`;
-      const { fileId, safe } = aiSaveFile(username, 'generated_image.html', html, `AI изображение: ${prompt.slice(0,40)}`);
-      aiSseEmit(username, 'log', { text: 'Изображение сгенерировано', type: 'result' });
-      return `FILE_CREATED:${fileId}:${safe}:Сгенерированное изображение:${html.length}
-URL: ${imgUrl}`;
+      const prompt = args.prompt || '';
+      const style  = args.style  || 'realistic';
+      aiSseEmit(username, 'log', { text: `Генерирую: ${prompt.slice(0,50)}...`, type: 'process' });
+      const encodedPrompt = encodeURIComponent(`${prompt}, ${style}, high quality, detailed`);
+      const engines = [
+        `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true&safe=false&model=flux`,
+        `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true`,
+      ];
+      let imgBase64 = null;
+      for (const url of engines) {
+        try {
+          aiSseEmit(username, 'log', { text: 'Загружаю пикселя...', type: 'fetch' });
+          const r = await axios.get(url, { responseType: 'arraybuffer', timeout: 40000 });
+          imgBase64 = Buffer.from(r.data).toString('base64');
+          break;
+        } catch(e) { console.log('[img] failed:', e.message); }
+      }
+      if (!imgBase64) return 'Не удалось сгенерировать изображение — попробуй другой промпт.';
+      aiSseEmit(username, 'media', { type: 'image', base64: 'data:image/jpeg;base64,' + imgBase64, prompt });
+      const html = '<!DOCTYPE html><html><head><title>AI Image</title><style>body{margin:0;background:#0d0d12;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:95vw;max-height:95vh;border-radius:12px}</style></head><body><img src="data:image/jpeg;base64,' + imgBase64 + '"/></body></html>';
+      const { fileId, safe } = aiSaveFile(username, 'ai_image.html', html, 'AI изображение: ' + prompt.slice(0,40));
+      aiSseEmit(username, 'log', { text: 'Изображение готово', type: 'result' });
+      return 'FILE_CREATED:' + fileId + ':' + safe + ':AI изображение:' + html.length;
     }
 
     // ── Создание презентации ──────────────────────────────────────────────
