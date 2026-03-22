@@ -2508,14 +2508,22 @@ async function _aiDownloadZip() {
 }
 
 const _aiToolLabels = {
-  web_search: '🔍 Поиск в интернете', get_weather: '🌤 Погода', calculate: '🔢 Калькулятор',
+  web_search: '🔍 Поиск', get_weather: '🌤 Погода', calculate: '🔢 Калькулятор',
   get_time: '🕐 Время', convert_currency: '💱 Курс валют', translate: '🌐 Перевод',
   create_file: '📄 Создание файла', generate_data: '📊 Генерация данных',
-  get_crypto: '₿ Криптовалюты', url_info: '🔗 Анализ URL',
-  wiki_search: '📖 Wikipedia', get_stock: '📈 Котировки',
-  timezone_convert: '🕐 Часовые пояса', qr_generate: '🔲 QR-код',
-  color_palette: '🎨 Палитра', unit_convert: '📐 Конвертер единиц',
-  dictionary: '📚 Словарь', analyze_archive: '📦 Архив', check_code: '🔬 Проверка кода'
+  get_crypto: '₿ Криптовалюты', url_info: '🔗 URL', wiki_search: '📖 Wikipedia',
+  get_stock: '📈 Котировки', timezone_convert: '🕐 Часовые пояса', qr_generate: '🔲 QR',
+  color_palette: '🎨 Палитра', unit_convert: '📐 Единицы', dictionary: '📚 Словарь',
+  analyze_archive: '📦 Архив', check_code: '🔬 Проверка кода', run_code: '▶ Запуск',
+  news_search: '📰 Новости', image_generate: '🎨 Генерация картинки',
+  create_presentation: '📊 Презентация', regex_test: '🔍 Regex',
+  encode_decode: '🔐 Кодирование', json_format: '{} JSON',
+  random: '🎲 Случайное', date_calc: '📅 Даты', text_analyze: '📊 Анализ текста',
+  math_advanced: '🔢 Математика', ip_info: '🌍 IP',
+  web_scrape: '🕷 Скрейпинг', api_test: '🔌 API тест',
+  markdown_render: '📝 Markdown', schedule_generate: '📅 Расписание',
+  country_info: '🌍 Страна', music_info: '🎵 Музыка',
+  code_convert: '🔄 Конвертер кода', git_explain: '🔀 Git', pdf_to_text: '📄 PDF'
 };
 
 // Добавляет коллапсируемый лог инструментов (как на скрине)
@@ -2860,10 +2868,18 @@ function _aiConnectSse() {
     try {
       const d = JSON.parse(e.data);
       document.getElementById('aiTyping')?.remove();
+      const sendBtn2 = $('aiSendBtn');
+      if (sendBtn2) sendBtn2.disabled = false;
+
       if (d.type === 'image') {
-        _aiAddMediaMessage(d.base64, d.prompt || '');
+        _aiAddMediaMessage(d.base64, d.prompt || '', d.fileId);
+        if (d.remaining !== undefined && d.remaining <= 1) {
+          setTimeout(() => _aiAddMessage('assistant', `_(Осталось изображений сегодня: ${d.remaining})_`), 300);
+        }
       } else if (d.type === 'video_preview') {
         _aiAddVideoPreviewMessage(d.base64, d.prompt || '', d.fileId, d.filename, d.frameCount || 1);
+      } else if (d.type === 'image_error') {
+        _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка генерации'));
       }
     } catch(err) { console.error('SSE media err', err); }
   });
@@ -2882,7 +2898,7 @@ function _aiConnectSse() {
 }
 
 // Показывает изображение от AI прямо в чате
-function _aiAddMediaMessage(base64url, prompt) {
+function _aiAddMediaMessage(base64url, prompt, fileId) {
   const msgs = $('aiMessages');
   if (!msgs) return;
   const welcome = msgs.querySelector('.ai-welcome');
@@ -2912,8 +2928,8 @@ function _aiAddMediaMessage(base64url, prompt) {
 
   // Кнопка скачать
   const dl = document.createElement('a');
-  dl.href = base64url;
-  dl.download = 'ai_image.jpg';
+  dl.href = fileId ? `/api/ai-file/${encodeURIComponent(currentUser)}/${fileId}` : base64url;
+  dl.download = 'ai_image.html';
   dl.style.cssText = 'position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;padding:5px 10px;border-radius:8px;font-size:12px;text-decoration:none;backdrop-filter:blur(4px)';
   dl.innerHTML = '<i class="ti ti-download"></i>';
 
@@ -3128,16 +3144,16 @@ async function aiSend() {
         body: JSON.stringify({ username: currentUser, prompt, style: 'high quality, detailed, cinematic' })
       });
       const d = await r.json();
-      if (typing) typing.remove();
 
       if (d.error) {
+        if (typing) typing.remove();
         _aiAddMessage('assistant', '⚠️ ' + d.error);
+      } else if (d.pending) {
+        // Генерация идёт в фоне — typing останется до SSE события media/done
+        // typing убирается в SSE обработчике
       } else {
+        if (typing) typing.remove();
         if (d.message) _aiAddMessage('assistant', d.message);
-        if (d.createdFiles?.length) d.createdFiles.forEach(f => _aiAddFileCard(f));
-        if (d.remaining !== undefined && d.remaining <= 1) {
-          _aiAddMessage('assistant', `_(Осталось ${d.remaining} генераций сегодня)_`);
-        }
       }
     } catch {
       if (typing) typing.remove();
