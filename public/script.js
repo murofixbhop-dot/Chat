@@ -3100,6 +3100,7 @@ async function aiSend() {
   const isVidRequest = vidKeywords.test(text);
 
   if ((isImgRequest || isVidRequest) && !attach) {
+    const sendBtn = $('aiSendBtn'); // объявляем здесь для перехвата
     inp.value = '';
     autoGrow(inp);
     _aiResetLiveLog();
