@@ -2,7 +2,7 @@
 <html lang="ru" data-theme="dark">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -22,8 +22,29 @@
   <title>Aura · Messenger</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.14.0/dist/tabler-icons.min.css" crossorigin="anonymous"/>
+  <link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@latest/tabler-icons.min.css" media="print" onload="this.media='all'" crossorigin="anonymous"/>
   <link rel="stylesheet" href="style.css"/>
+<script>
+// Предотвращаем прыжок страницы при фокусе на input (iOS)
+(function(){
+  if(!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return;
+  var lastScrollY = 0;
+  document.addEventListener('focusin', function(e){
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'){
+      lastScrollY = window.scrollY;
+      setTimeout(function(){ window.scrollTo(0, lastScrollY); }, 100);
+    }
+  });
+  // Восстанавливаем позицию после скрытия клавиатуры
+  window.addEventListener('resize', function(){
+    if(document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')) return;
+    window.scrollTo(0, lastScrollY);
+  });
+  // Предотвращаем scroll при появлении клавиатуры
+  document.addEventListener('touchstart', function(){}, {passive:true});
+})();
+</script>
 </head>
 <body>
 
