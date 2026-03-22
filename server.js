@@ -315,8 +315,7 @@ async function storageDownload(fileName) {
   if (!b2Auth) await reAuthB2();
   const { bucketName } = b2GetBucketForFile(fileName);
   // API endpoint для приватных бакетов (работает с master token)
-  const url = b2Auth.downloadUrl + '/b2api/v2/b2_download_file_by_name?bucketName='
-    + encodeURIComponent(bucketName) + '&fileName=' + encodeURIComponent(fileName);
+  const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + encodeURIComponent(fileName);
   return { url, token: b2Auth.authorizationToken };
 }
 
@@ -337,14 +336,12 @@ async function initStorage() {
     b2Auth     = await authorizeB2();
     b2BucketId = await getBucketId(B2_BUCKET_NAME);
     B2_BUCKET_NAME_ACTIVE = B2_BUCKET_NAME;
-    await b2SetBucketPublic(b2BucketId, B2_BUCKET_NAME);
     console.log(`✅ B2 бакет 1: "${B2_BUCKET_NAME}" (видео, квадраты)`);
     // Получаем download-токен для бакета 1
     await getB2DownloadToken(b2BucketId, B2_BUCKET_NAME);
     if (USE_B2_DUAL) {
       try {
         b2BucketId2 = await getBucketId(B2_BUCKET_NAME2);
-        await b2SetBucketPublic(b2BucketId2, B2_BUCKET_NAME2);
         console.log(`✅ B2 бакет 2: "${B2_BUCKET_NAME2}" (фото, аудио, файлы)`);
         await getB2DownloadToken(b2BucketId2, B2_BUCKET_NAME2);
       } catch(e) {
@@ -509,10 +506,8 @@ async function loadUsers() {
   try {
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(USERS_FILE);
-    // Используем API endpoint для приватных бакетов
-    const url = b2Auth.apiUrl + '/b2api/v2/b2_download_file_by_name?bucketName=' 
-      + encodeURIComponent(bucketName) + '&fileName=' + encodeURIComponent(USERS_FILE);
-    console.log('[B2 load] users via API:', url.slice(0,80));
+    const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + USERS_FILE;
+    console.log('[B2 load] users URL:', url);
     const response = await axios.get(url, {
       timeout: 15000,
       headers: { Authorization: b2Auth.authorizationToken }
@@ -522,13 +517,19 @@ async function loadUsers() {
       console.log(`👥 Загружено ${users.size} пользователей`);
     }
   } catch (err) {
-    if (err.response?.status === 404) {
-      console.log('📁 users.json не найден — новый сервер, будет создан при первом входе');
-    } else if (err.response?.status === 403) {
-      console.error('Ошибка загрузки пользователей: 403 Forbidden');
-      console.error('  → URL:', err.config?.url?.slice(0,80));
-      console.error('  → Проверь что App Key имеет доступ к бакету и файл существует');
-      console.error('  → Попробуй: Backblaze → App Keys → убедись что ключ имеет readFiles');
+    const status = err.response?.status;
+    if (status === 404) {
+      console.log('📁 users.json не найден — будет создан при первом входе');
+    } else if (status === 403) {
+      // B2 возвращает 403 и когда файл не существует в приватном бакете
+      console.log('📁 users.json: 403 — файл не существует или нет доступа (первый запуск?)');
+      // Создаём пустой файл пользователей
+      try {
+        await saveUsers();
+        console.log('✅ Создан пустой users.json');
+      } catch(e2) {
+        console.error('Не удалось создать users.json:', e2.message);
+      }
     } else {
       console.error('Ошибка загрузки пользователей:', err.message);
     }
@@ -3664,8 +3665,7 @@ async function loadHistory() {
   try {
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
-    const url = b2Auth.downloadUrl + '/b2api/v2/b2_download_file_by_name?bucketName='
-      + encodeURIComponent(bucketName) + '&fileName=' + encodeURIComponent(HISTORY_FILE);
+    const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + HISTORY_FILE;
     const response = await axios.get(url, {
       timeout: 15000,
       headers: { Authorization: b2Auth.authorizationToken }
