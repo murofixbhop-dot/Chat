@@ -1758,3 +1758,127 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
 /* ── AI cursor blink ── */
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 .ai-cursor { animation: blink .7s ease-in-out infinite; font-weight:300; }
+
+/* ── iOS Safari: предотвращаем zoom при фокусе на input ── */
+/* iOS зумирует страницу если font-size < 16px — фиксим только на мобильных */
+@media screen and (max-width: 768px) {
+  input, textarea, select, .field, .msg-ta, #aiInput {
+    font-size: 16px !important;
+  }
+  /* Предотвращаем сдвиг при появлении клавиатуры */
+  .chat-view {
+    /* Не используем fixed height чтобы не прыгало */
+    overflow: hidden;
+  }
+}
+
+/* ── Иконки-fallback: если Tabler не загрузился — показываем текст ── */
+.ti::before {
+  display: inline-block;
+}
+/* Принудительная загрузка иконок */
+@supports not (font-family: 'tabler-icons') {
+  .ti { font-style: normal; }
+}
+
+/* ════════════════════════════════════════════════
+   MOBILE COMPREHENSIVE FIX
+════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* ── Увеличиваем все кнопки для пальцев ── */
+  .icon-btn { min-width: 40px; min-height: 40px; }
+  .icon-btn.sm { min-width: 36px; min-height: 36px; }
+  .send-fab { width: 48px !important; height: 48px !important; border-radius: 16px !important; }
+  .sb-tab { min-height: 44px; }
+
+  /* ── Все inputs 16px чтобы iOS не зумировал ── */
+  input, textarea, select, .field, .msg-ta, #aiInput, #consoleInput {
+    font-size: 16px !important;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* ── Предотвращаем 300ms задержку кликов ── */
+  * { touch-action: manipulation; }
+  .msg-ta, .field, input, textarea { touch-action: auto; }
+
+  /* ── Модальные окна на весь экран ── */
+  .modal-card {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    border-radius: 24px 24px 0 0 !important;
+    max-height: 92dvh !important;
+  }
+  .modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  /* ── AI чат модал ── */
+  #aiChatModal .modal-card {
+    height: 85dvh !important;
+  }
+
+  /* ── Настройки ── */
+  .settings-modal .modal-card {
+    height: 90dvh !important;
+  }
+
+  /* ── Сообщения: убираем лишние отступы ── */
+  .msg-bubble { max-width: 88%; }
+  .msg-text { font-size: 15px; line-height: 1.5; }
+
+  /* ── Зона ввода ── */
+  .input-zone {
+    padding: 8px 8px env(safe-area-inset-bottom, 8px) !important;
+  }
+  .msg-ta {
+    min-height: 42px !important;
+    font-size: 16px !important;
+    padding: 11px 42px 11px 14px !important;
+  }
+
+  /* ── Шапка чата ── */
+  .chat-hdr { padding: 8px 12px; }
+  .hdr-info h3 { font-size: 15px; }
+
+  /* ── Sidebar items ── */
+  .chat-item { padding: 10px 12px; min-height: 60px; }
+  .ci-body { gap: 1px; }
+  .ci-name { font-size: 14px; }
+  .ci-last { font-size: 12px; }
+
+  /* ── Emoji picker ── */
+  #emojiPicker {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 60px !important;
+    width: 100% !important;
+    border-radius: 16px 16px 0 0 !important;
+  }
+
+  /* ── Context menu ── */
+  .ctx-menu {
+    min-width: 180px !important;
+    font-size: 15px !important;
+  }
+  .ctx-item { padding: 12px 16px !important; min-height: 44px; }
+  .ctx-item i { font-size: 18px !important; }
+
+  /* ── Overflow scroll smooth ── */
+  .sb-pane, .msgs, #aiMessages {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* ── Safe area insets for notch phones ── */
+  .sidebar { padding-top: env(safe-area-inset-top, 0); }
+  body { padding-bottom: env(safe-area-inset-bottom, 0); }
+}
+
+/* Extra small screens (iPhone SE etc) */
+@media (max-width: 375px) {
+  .modal-card { max-height: 95dvh !important; }
+  .msg-bubble { max-width: 92%; }
+  .hdr-right .icon-btn:not(:last-child):not(:nth-last-child(2)) { display: none; }
+}
