@@ -2862,6 +2862,8 @@ function _aiConnectSse() {
       document.getElementById('aiTyping')?.remove();
       if (d.type === 'image') {
         _aiAddMediaMessage(d.base64, d.prompt || '');
+      } else if (d.type === 'video_preview') {
+        _aiAddVideoPreviewMessage(d.base64, d.prompt || '', d.fileId, d.filename, d.frameCount || 1);
       }
     } catch(err) { console.error('SSE media err', err); }
   });
@@ -2927,6 +2929,72 @@ function _aiAddMediaMessage(base64url, prompt) {
   } else {
     bubble.appendChild(imgWrap);
   }
+
+  wrap.appendChild(ava);
+  wrap.appendChild(bubble);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// Показывает видео-превью от AI в чате
+function _aiAddVideoPreviewMessage(base64url, prompt, fileId, filename, frameCount) {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+  const welcome = msgs.querySelector('.ai-welcome');
+  if (welcome) welcome.remove();
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:8px';
+
+  const ava = document.createElement('div');
+  ava.style.cssText = 'width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px';
+  ava.innerHTML = '<i class="ti ti-robot" style="font-size:14px;color:#fff"></i>';
+
+  const bubble = document.createElement('div');
+  bubble.style.cssText = 'max-width:85%';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'position:relative;display:inline-block;border-radius:14px;overflow:hidden;background:var(--surface2)';
+
+  // Превью-кадр
+  const img = document.createElement('img');
+  img.src = base64url;
+  img.style.cssText = 'max-width:360px;max-height:280px;display:block;border-radius:14px;opacity:.85';
+
+  // Плашка "Видео"
+  const badge = document.createElement('div');
+  badge.style.cssText = 'position:absolute;top:8px;left:8px;background:rgba(0,0,0,.7);color:#fff;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:5px;backdrop-filter:blur(4px)';
+  badge.innerHTML = '<i class="ti ti-video" style="font-size:12px"></i> Видео · ' + frameCount + ' кадров';
+
+  // Кнопка открыть
+  const openBtn = document.createElement('div');
+  openBtn.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  openBtn.innerHTML = '<div style="width:52px;height:52px;border-radius:50%;background:rgba(99,102,241,.85);display:flex;align-items:center;justify-content:center"><i class="ti ti-player-play" style="font-size:22px;color:#fff;margin-left:2px"></i></div>';
+  openBtn.onclick = () => {
+    if (fileId) {
+      // Открываем HTML видео в превью
+      _aiPreviewFile(fileId, filename || 'ai_video.html');
+    }
+  };
+
+  // Скачать
+  const dl = document.createElement('a');
+  dl.href = '/api/ai-file/' + encodeURIComponent(currentUser) + '/' + fileId;
+  dl.download = filename || 'ai_video.html';
+  dl.style.cssText = 'position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;padding:5px 10px;border-radius:8px;font-size:12px;text-decoration:none;backdrop-filter:blur(4px)';
+  dl.innerHTML = '<i class="ti ti-download"></i>';
+
+  card.appendChild(img);
+  card.appendChild(badge);
+  card.appendChild(openBtn);
+  card.appendChild(dl);
+
+  const cap = document.createElement('div');
+  cap.style.cssText = 'font-size:11px;color:var(--text3);margin-top:4px;padding:0 2px';
+  cap.textContent = prompt;
+
+  bubble.appendChild(card);
+  bubble.appendChild(cap);
 
   wrap.appendChild(ava);
   wrap.appendChild(bubble);
@@ -3024,6 +3092,61 @@ async function aiSend() {
   const attach = _aiAttachment;
 
   if (!text && !attach) return;
+
+  // ── Перехват запросов на изображение/видео ─────────────────────────────
+  const imgKeywords  = /(нарисуй|сгенерируй|создай|сделай|покажи|draw|generate|create|make).*(картинк|изображени|фото|рисун|image|picture|photo|pic)|(image|picture|photo|img).*(of|с|кота|кот|собак|пейзаж|портрет)/i;
+  const vidKeywords  = /(сделай|создай|сгенерируй|generate|create|make).*(видео|video|анимаци|animation|клип|clip)/i;
+  const isImgRequest = imgKeywords.test(text) || text.toLowerCase().startsWith('нарисуй') || text.toLowerCase().startsWith('draw ') || text.toLowerCase().includes('картинку') || text.toLowerCase().includes('изображение') || /^(img|image|картинка|нарисуй|сгенерируй картинк)/i.test(text.trim());
+  const isVidRequest = vidKeywords.test(text);
+
+  if ((isImgRequest || isVidRequest) && !attach) {
+    inp.value = '';
+    autoGrow(inp);
+    _aiResetLiveLog();
+    _aiStreamingStarted = false;
+    _aiLastCreatedFiles = [];
+    _aiShownFileIds.clear();
+    document.getElementById('aiZipBar')?.remove();
+
+    const userMsg = text;
+    _aiAddMessage('user', userMsg);
+    const typing = _aiAddTyping();
+    if (sendBtn) sendBtn.disabled = true;
+
+    // Вытаскиваем промпт из сообщения
+    let prompt = userMsg
+      .replace(/^(нарисуй|сгенерируй|создай|сделай|покажи|draw|generate|create|make)\s+(мне\s+)?(картинку|картинк[аеу]|изображение|фото|рисунок|image|picture|photo|видео|video|анимацию)\s*/i, '')
+      .replace(/^(картинку|изображение|фото)\s+/i, '')
+      .trim() || userMsg;
+
+    const endpoint = isVidRequest ? '/api/generate-video' : '/api/generate-image';
+
+    try {
+      const r = await fetch(endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser, prompt, style: 'high quality, detailed, cinematic' })
+      });
+      const d = await r.json();
+      if (typing) typing.remove();
+
+      if (d.error) {
+        _aiAddMessage('assistant', '⚠️ ' + d.error);
+      } else {
+        if (d.message) _aiAddMessage('assistant', d.message);
+        if (d.createdFiles?.length) d.createdFiles.forEach(f => _aiAddFileCard(f));
+        if (d.remaining !== undefined && d.remaining <= 1) {
+          _aiAddMessage('assistant', `_(Осталось ${d.remaining} генераций сегодня)_`);
+        }
+      }
+    } catch {
+      if (typing) typing.remove();
+      _aiAddMessage('assistant', '⚠️ Нет соединения с сервером.');
+    } finally {
+      if (sendBtn) sendBtn.disabled = false;
+    }
+    return;
+  }
+  // ── Конец перехвата ────────────────────────────────────────────────────
 
   inp.value = '';
   autoGrow(inp);
