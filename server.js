@@ -1869,6 +1869,179 @@ function aiSseEmit(username, event, data) {
   } catch {}
 }
 
+// ── Прямая генерация изображения (обходит Mistral) ───────────────────────────
+app.post('/api/generate-image', async (req, res) => {
+  const { username, prompt, style } = req.body;
+  if (!username || !prompt) return res.status(400).json({ error: 'Нет данных' });
+
+  const limitErr = checkDailyLimit(username, 'image');
+  if (limitErr) return res.json({ error: limitErr });
+
+  aiSseEmit(username, 'log', { text: `Генерирую изображение: ${prompt.slice(0,50)}...`, type: 'process' });
+
+  const styleStr = style ? `, ${style}` : ', high quality, detailed';
+  const engines  = [
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleStr)}?width=896&height=640&nologo=true&model=flux`,
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleStr)}?width=896&height=640&nologo=true&model=flux-realism`,
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=896&height=640&nologo=true`,
+  ];
+
+  let imgBase64 = null;
+  for (const url of engines) {
+    try {
+      aiSseEmit(username, 'log', { text: 'Загружаю пиксели...', type: 'fetch' });
+      const r = await axios.get(url, { responseType: 'arraybuffer', timeout: 45000 });
+      if (r.data && r.data.byteLength > 5000) {
+        imgBase64 = Buffer.from(r.data).toString('base64');
+        break;
+      }
+    } catch(e) { console.log('[img-direct] failed:', e.message); }
+  }
+
+  if (!imgBase64) {
+    aiSseEmit(username, 'log', { text: 'Ошибка генерации', type: 'check' });
+    return res.json({ error: 'Не удалось сгенерировать изображение — попробуй другой промпт или чуть позже.' });
+  }
+
+  // Отправляем через SSE в чат
+  aiSseEmit(username, 'media', {
+    type:   'image',
+    base64: 'data:image/jpeg;base64,' + imgBase64,
+    prompt,
+  });
+
+  // Сохраняем в файловую базу
+  const html = `<!DOCTYPE html><html><head><title>${prompt.slice(0,40)}</title>
+<style>body{margin:0;background:#0d0d12;display:flex;align-items:center;justify-content:center;min-height:100vh}
+img{max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.8)}</style></head>
+<body><img src="data:image/jpeg;base64,${imgBase64}" alt="${prompt}"/></body></html>`;
+  const { fileId, safe } = aiSaveFile(username, 'ai_image.html', html, 'AI изображение: ' + prompt.slice(0,40));
+
+  aiSseEmit(username, 'log', { text: '✅ Изображение готово', type: 'result' });
+
+  const lim = aiDailyLimits.get(username);
+  const remaining = DAILY_IMG_LIMIT - (lim?.images || 0);
+
+  res.json({
+    success: true,
+    fileId,
+    prompt,
+    remaining,
+    message: `Изображение создано. Осталось сегодня: ${remaining} из ${DAILY_IMG_LIMIT}.`
+  });
+});
+
+// ── Прямая генерация видео (d-id / stability / free) ─────────────────────────
+app.post('/api/generate-video', async (req, res) => {
+  const { username, prompt, style } = req.body;
+  if (!username || !prompt) return res.status(400).json({ error: 'Нет данных' });
+
+  const limitErr = checkDailyLimit(username, 'video');
+  if (limitErr) return res.json({ error: limitErr });
+
+  aiSseEmit(username, 'log', { text: 'Генерирую видео... (это займёт ~30с)', type: 'process' });
+
+  // Пробуем Pollinations video (если доступен) или создаём анимированный HTML
+  try {
+    // Сначала генерируем 3 кадра и делаем CSS анимацию
+    const frames = [];
+    const prompts = [
+      prompt + ', frame 1, cinematic',
+      prompt + ', frame 2, slight movement',
+      prompt + ', frame 3, cinematic ending',
+    ];
+
+    for (let i = 0; i < prompts.length; i++) {
+      aiSseEmit(username, 'log', { text: `Кадр ${i+1}/3...`, type: 'fetch' });
+      try {
+        const r = await axios.get(
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(prompts[i])}?width=720&height=480&nologo=true&model=flux&seed=${Date.now()+i}`,
+          { responseType: 'arraybuffer', timeout: 40000 }
+        );
+        if (r.data?.byteLength > 5000) {
+          frames.push('data:image/jpeg;base64,' + Buffer.from(r.data).toString('base64'));
+        }
+      } catch(e) { console.log('[video] frame', i, 'failed'); }
+    }
+
+    if (frames.length === 0) {
+      return res.json({ error: 'Не удалось сгенерировать видео. Попробуй позже.' });
+    }
+
+    // Создаём HTML "видео" — CSS анимация между кадрами
+    const frameSrcs = frames.map((f, i) => `"${f}"`).join(',');
+    const html = `<!DOCTYPE html><html><head><title>${prompt.slice(0,40)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif}
+.viewer{position:relative;width:720px;max-width:95vw}
+.frame{width:100%;border-radius:12px;display:none;box-shadow:0 8px 40px rgba(0,0,0,.8)}
+.frame.active{display:block;animation:crossfade 1s ease}
+@keyframes crossfade{from{opacity:0}to{opacity:1}}
+.controls{display:flex;align-items:center;gap:12px;margin-top:14px;width:100%}
+.btn{padding:8px 20px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:14px}
+.btn:hover{background:#4f46e5}
+.progress{flex:1;height:4px;background:#333;border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;background:#6366f1;transition:width .5s}
+.info{color:#888;font-size:12px;text-align:center;margin-top:8px}
+</style></head>
+<body>
+<div class="viewer">
+${frames.map((f,i) => `<img class="frame${i===0?' active':''}" src="${f}" data-idx="${i}">`).join('')}
+<div class="controls">
+  <button class="btn" id="playBtn" onclick="togglePlay()">▶ Играть</button>
+  <div class="progress"><div class="progress-fill" id="prog" style="width:0%"></div></div>
+  <span style="color:#888;font-size:12px" id="frameNum">1/${frames.length}</span>
+</div>
+<div class="info">${prompt.slice(0,80)} · ${frames.length} кадров</div>
+</div>
+<script>
+const frames=${frameSrcs.split(',').length};
+const imgs=document.querySelectorAll('.frame');
+let cur=0,playing=false,timer=null;
+function show(n){imgs.forEach((el,i)=>{el.classList.toggle('active',i===n)});cur=n;
+document.getElementById('prog').style.width=((n+1)/imgs.length*100)+'%';
+document.getElementById('frameNum').textContent=(n+1)+'/'+imgs.length;}
+function next(){show((cur+1)%imgs.length);}
+function togglePlay(){
+  if(playing){clearInterval(timer);timer=null;playing=false;document.getElementById('playBtn').textContent='▶ Играть';}
+  else{playing=true;document.getElementById('playBtn').textContent='⏸ Пауза';timer=setInterval(next,800);}
+}
+// Автоплей
+setTimeout(togglePlay,300);
+</script>
+</body></html>`;
+
+    const { fileId, safe } = aiSaveFile(username, 'ai_video.html', html, 'AI видео: ' + prompt.slice(0,40));
+
+    // Отправляем первый кадр как превью в чат
+    if (frames[0]) {
+      aiSseEmit(username, 'media', {
+        type:     'video_preview',
+        base64:   frames[0],
+        fileId,
+        filename: safe,
+        prompt,
+        frameCount: frames.length,
+      });
+    }
+
+    aiSseEmit(username, 'log', { text: `✅ Видео готово (${frames.length} кадров)`, type: 'result' });
+
+    const lim = aiDailyLimits.get(username);
+    res.json({
+      success: true,
+      fileId,
+      frameCount: frames.length,
+      remaining: DAILY_VIDEO_LIMIT - (lim?.videos || 0),
+    });
+  } catch(e) {
+    console.error('[generate-video]', e.message);
+    res.json({ error: 'Ошибка генерации видео: ' + e.message });
+  }
+});
+
+
 
 app.get('/api/ai-files/:username', (req, res) => {
   const files = (aiUserFiles.get(req.params.username) || []).map(f => ({
