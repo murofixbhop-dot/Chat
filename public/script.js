@@ -810,16 +810,6 @@ function renderGroups() {
       </div>`;
       li.prepend(avaEl);
       li.onclick = () => { gotoRoom(`group:${g.id}`); closeSidebarMobile(); };
-      // HACK:delete-groups — кнопка удаления для всех групп
-      if (HACK?.deleteGroups) {
-        const hackDel = document.createElement('button');
-        hackDel.title = 'HACK: удалить группу';
-        hackDel.style.cssText = 'position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:rgba(239,68,68,.8);border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5';
-        hackDel.innerHTML = '<i class="ti ti-x"></i>';
-        hackDel.onclick = (e) => { e.stopPropagation(); openGroupEdit(g.id); };
-        li.style.position = 'relative';
-        li.appendChild(hackDel);
-      }
     } else {
       li.classList.toggle('active', isActive);
       // Обновляем аватарку если изменилась
@@ -2239,109 +2229,6 @@ function closeAiChat() {
   closeAiFilePanel();
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  DEVELOPER CONSOLE  — Ъ/} чтобы открыть, команды: Sudo HACK <cmd>
-//  Сессионные флаги сбрасываются при перезагрузке страницы (sessionStorage)
-// ════════════════════════════════════════════════════════════════════════════
-let _consoleOpen = false;
-
-// Флаги через sessionStorage (сбрасываются при закрытии/перезагрузке)
-function _hackFlag(key, val) {
-  if (val !== undefined) sessionStorage.setItem('hack_' + key, val ? '1' : '');
-  return !!sessionStorage.getItem('hack_' + key);
-}
-
-// Глобальные флаги доступа
-const HACK = {
-  get deleteGroups() { return _hackFlag('delete_groups'); },
-  get mediaGen()     { return _hackFlag('media_gen'); },
-  set deleteGroups(v){ _hackFlag('delete_groups', v); },
-  set mediaGen(v)    { _hackFlag('media_gen', v); },
-};
-
-function toggleConsole() {
-  _consoleOpen = !_consoleOpen;
-  const el = $('devConsole');
-  if (!el) return;
-  el.style.display = _consoleOpen ? 'flex' : 'none';
-  if (_consoleOpen) {
-    setTimeout(() => $('consoleInput')?.focus(), 80);
-    _consolePrint('Aura Dev Console v1.0', '#6366f1');
-    _consolePrint('─'.repeat(60), '#333');
-  }
-}
-
-function _consolePrint(msg, color='#ccc') {
-  const out = $('consoleOutput');
-  if (!out) return;
-  const line = document.createElement('div');
-  line.style.color = color;
-  line.innerHTML = `<span style="color:#555">[${new Date().toLocaleTimeString()}]</span> ${esc(msg)}`;
-  out.appendChild(line);
-  out.scrollTop = out.scrollHeight;
-}
-
-function runConsoleCmd() {
-  const inp = $('consoleInput');
-  if (!inp) return;
-  const cmd = inp.value.trim();
-  inp.value = '';
-  _consolePrint('› ' + cmd, '#e8e8f2');
-
-  if (!cmd.startsWith('Sudo HACK ')) {
-    _consolePrint('❌ Неизвестная команда. Начинай с "Sudo HACK"', '#ef4444');
-    return;
-  }
-
-  const action = cmd.slice('Sudo HACK '.length).trim().toLowerCase();
-
-  if (action === 'delete-groups' || action === 'delete_groups') {
-    HACK.deleteGroups = true;
-    _consolePrint('✅ HACK:delete-groups АКТИВИРОВАН', '#22c55e');
-    _consolePrint('   Теперь ты можешь удалять любые группы видимые тебе.', '#888');
-    _consolePrint('   Сброс при перезагрузке страницы.', '#f59e0b');
-    // Обновляем группы в интерфейсе — показываем кнопку удаления везде
-    _hackRefreshGroupList();
-
-  } else if (action === 'enable-media' || action === 'media') {
-    HACK.mediaGen = true;
-    _consolePrint('✅ HACK:enable-media АКТИВИРОВАН', '#22c55e');
-    _consolePrint('   AI теперь может генерировать изображения и видео.', '#888');
-    _consolePrint('   Используй в чате: /img <описание> | /video <описание>', '#6366f1');
-    _consolePrint('   Сброс при перезагрузке страницы.', '#f59e0b');
-    toast('🎨 Генерация медиа активирована', 'success');
-
-  } else if (action === 'status') {
-    _consolePrint('─ Статус флагов ─', '#6366f1');
-    _consolePrint(`delete-groups: ${HACK.deleteGroups ? '✅ АКТИВЕН' : '❌ неактивен'}`, HACK.deleteGroups ? '#22c55e' : '#888');
-    _consolePrint(`enable-media:  ${HACK.mediaGen ? '✅ АКТИВЕН' : '❌ неактивен'}`, HACK.mediaGen ? '#22c55e' : '#888');
-    _consolePrint(`Пользователь:  ${currentUser || 'не авторизован'}`, '#888');
-    _consolePrint(`Групп видимых: ${groups.length}`, '#888');
-
-  } else if (action === 'clear') {
-    $('consoleOutput').innerHTML = '';
-    _consolePrint('Console cleared.', '#555');
-
-  } else if (action === 'help') {
-    _consolePrint('Доступные команды:', '#6366f1');
-    _consolePrint('  Sudo HACK delete-groups  — удалять любые видимые группы', '#ccc');
-    _consolePrint('  Sudo HACK enable-media   — генерация картинок/видео в AI', '#ccc');
-    _consolePrint('  Sudo HACK status         — текущие флаги', '#ccc');
-    _consolePrint('  Sudo HACK clear          — очистить консоль', '#ccc');
-
-  } else {
-    _consolePrint(`❌ Неизвестная команда: "${action}"`, '#ef4444');
-    _consolePrint('   Введи "Sudo HACK help" для списка команд', '#888');
-  }
-}
-
-function _hackRefreshGroupList() {
-  // Перерисовываем список групп — у всех добавляем кнопку удаления
-  if (groupsList) groupsList._lastKey = '';
-  renderGroups();
-}
-
-// Консоль открывается только через Настройки → Аккаунт
 
 
 
@@ -3146,18 +3033,6 @@ async function aiSend() {
   _aiStreamingStarted = false;
   _aiLastCreatedFiles = [];
   _aiShownFileIds.clear();
-
-  // Специальные команды /img и /video
-  if (text.startsWith('/img ') || text.startsWith('/image ')) {
-    if (!HACK.mediaGen) {
-      _aiAddMessage('user', text);
-      _aiAddMessage('assistant', '🔒 Генерация изображений не активирована. Введи в консоли (Ъ): `Sudo HACK enable-media`');
-      if (sendBtn) sendBtn.disabled = false;
-      return;
-    }
-    // Перенаправляем как запрос к AI с явным указанием использовать image_generate
-    inp.value = `Сгенерируй изображение: ${text.replace(/^\/img\s*|\/image\s*/,'')}`;
-  }
   document.getElementById('aiZipBar')?.remove();
 
   const sendBtn = $('aiSendBtn');
