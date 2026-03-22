@@ -808,6 +808,54 @@ const AI_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'web_scrape',
+      description: 'Загружает и читает содержимое любой веб-страницы',
+      parameters: { type:'object', properties:{ url:{type:'string'}, extract:{type:'string',description:'all, text, links, images, title'} }, required:['url'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'code_convert',
+      description: 'Конвертирует код между языками: Python↔JavaScript, JSON↔YAML↔TOML, SQL↔MongoDB и т.д.',
+      parameters: { type:'object', properties:{ code:{type:'string'}, from_lang:{type:'string'}, to_lang:{type:'string'} }, required:['code','from_lang','to_lang'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'diagram_generate',
+      description: 'Создаёт диаграммы: flowchart, sequence, mindmap, gantt, pie. Возвращает HTML файл с интерактивной диаграммой.',
+      parameters: { type:'object', properties:{ type:{type:'string',description:'flowchart, sequence, mindmap, pie, gantt, orgchart'}, title:{type:'string'}, data:{type:'string',description:'описание элементов и связей'} }, required:['type','data'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'music_info',
+      description: 'Информация о песне, исполнителе, альбоме через Last.fm. Топ треки, биография.',
+      parameters: { type:'object', properties:{ query:{type:'string'}, type:{type:'string',description:'track, artist, album, top_tracks'} }, required:['query','type'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'recipe_find',
+      description: 'Находит рецепты блюд: ингредиенты, шаги, калории, время приготовления',
+      parameters: { type:'object', properties:{ dish:{type:'string'}, language:{type:'string',description:'ru, en'} }, required:['dish'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'file_convert',
+      description: 'Конвертирует данные между форматами: CSV↔JSON, XML↔JSON, Markdown↔HTML',
+      parameters: { type:'object', properties:{ content:{type:'string'}, from_format:{type:'string'}, to_format:{type:'string'} }, required:['content','from_format','to_format'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'ask_user',
       description: 'Задаёт пользователю уточняющий вопрос с вариантами ответов. Поддерживает мультиселект (несколько вариантов) и последовательность вопросов. Используй когда нужно уточнить детали перед выполнением.',
       parameters: {
@@ -1788,6 +1836,197 @@ document.querySelectorAll('.slide').forEach(s=>s.onclick=next);
         return `IP: **${d.ip}** · Страна: **${d.country_name}** · Город: ${d.city} · Провайдер: ${d.org}`;
       } catch(e) { return `Ошибка: ${e.message}`; }
     }
+    // ── Веб скрейпинг ────────────────────────────────────────────────────
+    if (name === 'web_scrape') {
+      const { url, extract = 'text' } = args;
+      aiSseEmit(username, 'log', { text: `Читаю: ${url.slice(0,50)}...`, type: 'fetch' });
+      try {
+        const r = await axios.get(url, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuraBot/1.0)' } });
+        const html2 = r.data || '';
+        // Простой парсинг без внешних зависимостей
+        const stripTags = h => h.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+        const title = (html2.match(/<title[^>]*>([^<]+)<\/title>/i)||[])[1] || url;
+        if (extract === 'title') return `Заголовок: **${title}**`;
+        const text = stripTags(html2).slice(0, 3000);
+        const links = [...html2.matchAll(/href=["']([^"']+)["']/gi)].map(m=>m[1]).filter(l=>l.startsWith('http')).slice(0,10);
+        if (extract === 'links') return `Ссылки на странице:\n${links.map(l=>`• ${l}`).join('\n')}`;
+        aiSseEmit(username, 'log', { text: `Прочитано ${text.length} символов`, type: 'result' });
+        return `**${title}**\n\n${text}`;
+      } catch(e) { return `Не удалось загрузить страницу: ${e.message}`; }
+    }
+
+    // ── Конвертация форматов ──────────────────────────────────────────────
+    if (name === 'file_convert') {
+      const { content, from_format, to_format } = args;
+      aiSseEmit(username, 'log', { text: `Конвертирую ${from_format} → ${to_format}`, type: 'process' });
+      try {
+        const ff = from_format.toLowerCase(), tf = to_format.toLowerCase();
+        // CSV → JSON
+        if (ff === 'csv' && tf === 'json') {
+          const lines2 = content.trim().split('\n');
+          const headers = lines2[0].split(',').map(h => h.trim().replace(/"/g,''));
+          const rows = lines2.slice(1).map(row => {
+            const vals = row.split(',').map(v => v.trim().replace(/"/g,''));
+            return Object.fromEntries(headers.map((h,i) => [h, vals[i]||'']));
+          });
+          const result = JSON.stringify(rows, null, 2);
+          const { fileId, safe } = aiSaveFile(username, 'converted.json', result, `CSV→JSON (${rows.length} строк)`);
+          return `FILE_CREATED:${fileId}:${safe}:CSV→JSON (${rows.length} строк):${result.length}`;
+        }
+        // JSON → CSV
+        if (ff === 'json' && tf === 'csv') {
+          const data = JSON.parse(content);
+          const arr  = Array.isArray(data) ? data : [data];
+          const headers = [...new Set(arr.flatMap(o => Object.keys(o)))];
+          const csv = [headers.join(','), ...arr.map(row => headers.map(h => JSON.stringify(row[h]??'')).join(','))].join('\n');
+          const { fileId, safe } = aiSaveFile(username, 'converted.csv', csv, `JSON→CSV (${arr.length} строк)`);
+          return `FILE_CREATED:${fileId}:${safe}:JSON→CSV (${arr.length} строк):${csv.length}`;
+        }
+        // Markdown → HTML
+        if (ff === 'markdown' || ff === 'md') {
+          const html3 = content
+            .replace(/^# (.+)$/gm,'<h1>$1</h1>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^### (.+)$/gm,'<h3>$1</h3>')
+            .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>')
+            .replace(/\`(.+?)\`/g,'<code>$1</code>').replace(/^- (.+)$/gm,'<li>$1</li>').replace(/\n\n/g,'</p><p>');
+          const full = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:sans-serif;max-width:800px;margin:2em auto;line-height:1.6}code{background:#f4f4f4;padding:2px 6px;border-radius:4px}</style></head><body><p>${html3}</p></body></html>`;
+          const { fileId, safe } = aiSaveFile(username, 'converted.html', full, 'Markdown→HTML');
+          return `FILE_CREATED:${fileId}:${safe}:Markdown→HTML:${full.length}`;
+        }
+        return `Конвертация ${ff}→${tf} пока не поддерживается`;
+      } catch(e) { return `Ошибка конвертации: ${e.message}`; }
+    }
+
+    // ── Диаграммы ─────────────────────────────────────────────────────────
+    if (name === 'diagram_generate') {
+      const { type, title: dtitle = 'Диаграмма', data } = args;
+      aiSseEmit(username, 'log', { text: `Создаю ${type} диаграмму...`, type: 'write' });
+
+      // Парсим данные для разных типов диаграмм
+      let diagramHtml = '';
+
+      if (type === 'pie') {
+        // Ожидаем: "Категория: 30, Другая: 70"
+        const items = data.split(/[,\n]/).map(s => {
+          const [label, val] = s.split(':').map(x => x.trim());
+          return { label: label || 'Unknown', value: parseFloat(val) || 0 };
+        }).filter(i => i.value > 0);
+        const total  = items.reduce((a,b) => a+b.value, 0);
+        const colors = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#14b8a6'];
+        let cumDeg   = 0;
+        const slices = items.map((item, i) => {
+          const pct   = item.value / total;
+          const deg   = pct * 360;
+          const start = cumDeg;
+          cumDeg += deg;
+          const color = colors[i % colors.length];
+          const r1x = Math.cos((start-90)*Math.PI/180)*80+100;
+          const r1y = Math.sin((start-90)*Math.PI/180)*80+100;
+          const r2x = Math.cos((cumDeg-90)*Math.PI/180)*80+100;
+          const r2y = Math.sin((cumDeg-90)*Math.PI/180)*80+100;
+          const large = deg > 180 ? 1 : 0;
+          return `<path d="M100,100 L${r1x.toFixed(1)},${r1y.toFixed(1)} A80,80 0 ${large},1 ${r2x.toFixed(1)},${r2y.toFixed(1)} Z" fill="${color}" stroke="#fff" stroke-width="2"><title>${item.label}: ${item.value} (${(pct*100).toFixed(1)}%)</title></path>`;
+        }).join('');
+        const legend = items.map((item, i) => `<div style="display:flex;align-items:center;gap:8px;font-size:13px"><span style="width:12px;height:12px;border-radius:3px;background:${colors[i%colors.length]};flex-shrink:0"></span>${item.label}: <strong>${item.value}</strong> (${(item.value/total*100).toFixed(1)}%)</div>`).join('');
+        diagramHtml = `<div style="display:flex;gap:32px;align-items:center;flex-wrap:wrap">
+          <svg viewBox="0 0 200 200" style="width:200px;height:200px;flex-shrink:0">${slices}</svg>
+          <div style="display:flex;flex-direction:column;gap:6px">${legend}</div>
+        </div>`;
+      } else if (type === 'mindmap') {
+        const lines2 = data.split('\n').filter(Boolean);
+        const root   = lines2[0];
+        const branches = lines2.slice(1).map((l,i) => {
+          const angle = (i / Math.max(lines2.length-1,1)) * 360 - 180;
+          const rad   = angle * Math.PI / 180;
+          const x     = 250 + Math.cos(rad)*140, y = 200 + Math.sin(rad)*110;
+          return `<line x1="250" y1="200" x2="${x.toFixed(0)}" y2="${y.toFixed(0)}" stroke="#6366f1" stroke-width="2" opacity=".6"/>
+          <rect x="${(x-45).toFixed(0)}" y="${(y-14).toFixed(0)}" width="90" height="28" rx="14" fill="#6366f1" opacity=".85"/>
+          <text x="${x.toFixed(0)}" y="${(y+5).toFixed(0)}" text-anchor="middle" fill="white" font-size="11">${l.trim().slice(0,14)}</text>`;
+        }).join('');
+        diagramHtml = `<svg viewBox="0 0 500 400" style="max-width:100%;height:auto">
+          ${branches}
+          <circle cx="250" cy="200" r="50" fill="#4f46e5"/>
+          <text x="250" y="205" text-anchor="middle" fill="white" font-size="13" font-weight="bold">${root.slice(0,12)}</text>
+        </svg>`;
+      } else {
+        // Flowchart — разбиваем на шаги
+        const steps  = data.split(/[\n,;]/).map(s => s.trim()).filter(Boolean).slice(0,8);
+        const shapes = steps.map((step, i) => {
+          const y = 20 + i * 80;
+          const isFirst = i===0, isLast = i===steps.length-1;
+          const shape = isFirst||isLast
+            ? `<ellipse cx="150" cy="${y+25}" rx="100" ry="22" fill="${isFirst?'#6366f1':'#10b981'}"/>`
+            : `<rect x="60" y="${y}" width="180" height="44" rx="8" fill="#4f46e5"/>`;
+          const arrow = i < steps.length-1 ? `<line x1="150" y1="${y+47}" x2="150" y2="${y+70}" stroke="#6366f1" stroke-width="2" marker-end="url(#arr)"/>` : '';
+          return `${shape}<text x="150" y="${y+30}" text-anchor="middle" fill="white" font-size="12">${step.slice(0,22)}</text>${arrow}`;
+        }).join('');
+        const svgH = 20 + steps.length*80 + 20;
+        diagramHtml = `<svg viewBox="0 0 300 ${svgH}" style="max-width:300px;height:auto">
+          <defs><marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#6366f1"/></marker></defs>
+          ${shapes}
+        </svg>`;
+      }
+
+      const fullHtml = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>${dtitle}</title>
+<style>body{font-family:-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:var(--bg,#f8f8fc);padding:24px;box-sizing:border-box}h2{margin-bottom:24px;color:#1e1b4b;font-size:20px}.card{background:#fff;border-radius:16px;padding:32px;box-shadow:0 4px 24px rgba(0,0,0,.08)}</style></head>
+<body><div class="card"><h2>${dtitle}</h2>${diagramHtml}</div></body></html>`;
+      const { fileId, safe } = aiSaveFile(username, `diagram_${type}.html`, fullHtml, `Диаграмма: ${dtitle}`);
+      aiSseEmit(username, 'log', { text: `Диаграмма готова`, type: 'result' });
+      return `FILE_CREATED:${fileId}:${safe}:Диаграмма ${type} - ${dtitle}:${fullHtml.length}`;
+    }
+
+    // ── Музыка (Last.fm) ──────────────────────────────────────────────────
+    if (name === 'music_info') {
+      const { query, type: mtype = 'track' } = args;
+      aiSseEmit(username, 'log', { text: `Ищу музыку: ${query}`, type: 'search' });
+      try {
+        const key = process.env.LASTFM_KEY || 'a7bb07f4419085c958d0cd79769a7a84'; // public demo key
+        let url2;
+        if (mtype === 'artist') url2 = `https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=${encodeURIComponent(query)}&api_key=${key}&format=json`;
+        else if (mtype === 'top_tracks') url2 = `https://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&artist=${encodeURIComponent(query)}&api_key=${key}&format=json&limit=5`;
+        else url2 = `https://ws.audioscrobbler.com/2.0/?method=track.search&track=${encodeURIComponent(query)}&api_key=${key}&format=json&limit=5`;
+        const r = await axios.get(url2, { timeout: 8000 });
+        const d = r.data;
+        if (mtype === 'top_tracks') {
+          const tracks = d.toptracks?.track || [];
+          return `🎵 Топ треки ${query}:
+          const trackList = tracks.map((t,i) => (i+1) + '. **' + t.name + '** (' + parseInt(t.playcount||0).toLocaleString() + ' прослушиваний)').join('\n');
+')}`;
+        }
+        if (mtype === 'artist') {
+          const a = d.artist;
+          return `🎤 **${a?.name}**
+${(a?.bio?.summary||'').replace(/<[^>]+>/g,'').slice(0,400)}`;
+        }
+        const tracks = d.results?.trackmatches?.track || [];
+        return `🎵 Результаты для "${query}":
+        return '🎵 Результаты для "' + query + '":\n' + tracks.map(t => '• **' + t.name + '** — ' + t.artist).join('\n');
+')}`;
+      } catch(e) {
+        return await executeTool('web_search', { query: query + ' music info' }, username);
+      }
+    }
+
+    // ── Рецепты ───────────────────────────────────────────────────────────
+    if (name === 'recipe_find') {
+      const { dish } = args;
+      aiSseEmit(username, 'log', { text: `Ищу рецепт: ${dish}`, type: 'search' });
+      try {
+        const r = await axios.get(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(dish)}`, { timeout: 8000 });
+        const meal = r.data?.meals?.[0];
+        if (!meal) return `Рецепт "${dish}" не найден. Попробуй на английском.`;
+        const ingr = [];
+        for (let i = 1; i <= 20; i++) {
+          if (meal[`strIngredient${i}`]) ingr.push(`${meal[`strMeasure${i}`]?.trim()||''} ${meal[`strIngredient${i}`]}`.trim());
+          else break;
+        }
+        const ingrList = ingr.map(ing => '• ' + ing).join('\n');
+        const result = '🍽 **' + meal.strMeal + '**\nКухня: ' + meal.strArea + ' · Категория: ' + meal.strCategory + '\n\n**Ингредиенты:**\n' + ingrList + '\n\n**Приготовление:**\n' + (meal.strInstructions||'').slice(0,600) + '...';
+        return result;
+      } catch(e) {
+        return await executeTool('web_search', { query: `рецепт ${dish}` }, username);
+      }
+    }
+
     // ── Вопрос пользователю ───────────────────────────────────────────────
     if (name === 'ask_user') {
       // Поддерживаем оба формата: { questions: [...] } и старый { question, options }
@@ -2128,125 +2367,223 @@ app.post('/api/generate-image', async (req, res) => {
   const limitErr = checkDailyLimit(username, 'image');
   if (limitErr) return res.json({ error: limitErr });
 
-  aiSseEmit(username, 'log', { text: `Генерирую изображение: ${prompt.slice(0,50)}...`, type: 'process' });
+  // Отвечаем сразу — генерация идёт через SSE (не блокируем HTTP)
+  res.json({ success: true, pending: true, prompt });
 
-  const styleStr = style ? `, ${style}` : ', high quality, detailed';
-  const engines  = [
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleStr)}?width=896&height=640&nologo=true&model=flux`,
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleStr)}?width=896&height=640&nologo=true&model=flux-realism`,
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=896&height=640&nologo=true`,
-  ];
-
-  let imgBase64 = null;
-  for (const url of engines) {
+  // Асинхронная генерация в фоне
+  setImmediate(async () => {
     try {
-      aiSseEmit(username, 'log', { text: 'Загружаю пиксели...', type: 'fetch' });
-      const r = await axios.get(url, { responseType: 'arraybuffer', timeout: 45000 });
-      if (r.data && r.data.byteLength > 5000) {
-        imgBase64 = Buffer.from(r.data).toString('base64');
-        break;
+      aiSseEmit(username, 'log', { text: `Генерирую: ${prompt.slice(0,50)}...`, type: 'process' });
+
+      const styleStr = style ? `, ${style}` : ', high quality, detailed, 4k';
+      const seed = Math.floor(Math.random() * 999999);
+      const engines = [
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleStr)}?width=896&height=640&nologo=true&model=flux&seed=${seed}`,
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + ', high quality')}?width=896&height=640&nologo=true&seed=${seed}`,
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=640&height=480&nologo=true&seed=${seed}`,
+      ];
+
+      let imgBase64 = null;
+      for (const url of engines) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            aiSseEmit(username, 'log', { text: 'Загружаю...', type: 'fetch' });
+            const r = await axios.get(url, {
+              responseType: 'arraybuffer',
+              timeout: 60000,
+              headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (r.data && r.data.byteLength > 5000) {
+              imgBase64 = Buffer.from(r.data).toString('base64');
+              break;
+            }
+          } catch(e) { console.log('[img]', e.message); await new Promise(r=>setTimeout(r,2000)); }
+        }
+        if (imgBase64) break;
       }
-    } catch(e) { console.log('[img-direct] failed:', e.message); }
-  }
 
-  if (!imgBase64) {
-    aiSseEmit(username, 'log', { text: 'Ошибка генерации', type: 'check' });
-    return res.json({ error: 'Не удалось сгенерировать изображение — попробуй другой промпт или чуть позже.' });
-  }
+      if (!imgBase64) {
+        aiSseEmit(username, 'media', { type: 'image_error', prompt, error: 'Не удалось загрузить изображение. Попробуй ещё раз.' });
+        return;
+      }
 
-  // Отправляем через SSE в чат
-  aiSseEmit(username, 'media', {
-    type:   'image',
-    base64: 'data:image/jpeg;base64,' + imgBase64,
-    prompt,
-  });
+      const dataUrl = 'data:image/jpeg;base64,' + imgBase64;
 
-  // Сохраняем в файловую базу
-  const html = `<!DOCTYPE html><html><head><title>${prompt.slice(0,40)}</title>
-<style>body{margin:0;background:#0d0d12;display:flex;align-items:center;justify-content:center;min-height:100vh}
-img{max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.8)}</style></head>
-<body><img src="data:image/jpeg;base64,${imgBase64}" alt="${prompt}"/></body></html>`;
-  const { fileId, safe } = aiSaveFile(username, 'ai_image.html', html, 'AI изображение: ' + prompt.slice(0,40));
+      // Сохраняем HTML файл с превью
+      const html = `<!DOCTYPE html><html><head><title>${prompt.slice(0,40)}</title><style>body{margin:0;background:#0d0d12;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.8)}</style></head><body><img src="${dataUrl}" alt="${prompt.replace(/"/g,"'")}"/></body></html>`;
+      const { fileId, safe } = aiSaveFile(username, 'ai_image.html', html, 'AI: ' + prompt.slice(0,40));
 
-  aiSseEmit(username, 'log', { text: '✅ Изображение готово', type: 'result' });
+      const lim = aiDailyLimits.get(username);
+      const remaining = DAILY_IMG_LIMIT - (lim?.images || 0);
 
-  const lim = aiDailyLimits.get(username);
-  const remaining = DAILY_IMG_LIMIT - (lim?.images || 0);
-
-  res.json({
-    success: true,
-    fileId,
-    prompt,
-    remaining,
-    message: `Изображение создано. Осталось сегодня: ${remaining} из ${DAILY_IMG_LIMIT}.`
+      aiSseEmit(username, 'media', { type: 'image', base64: dataUrl, prompt, fileId, remaining });
+      aiSseEmit(username, 'log', { text: `✅ Готово · осталось ${remaining}/${DAILY_IMG_LIMIT} сегодня`, type: 'result' });
+    } catch(e) {
+      console.error('[generate-image async]', e.message);
+      aiSseEmit(username, 'media', { type: 'image_error', error: e.message });
+    }
   });
 });
 
-// ── Генерация видео (canvas-анимация из 6 сгенерированных кадров) ──────────────
+// ── Генерация видео — async через SSE (6 кадров + canvas плеер) ─────────────
 app.post('/api/generate-video', async (req, res) => {
-  const { username, prompt, style } = req.body;
+  const { username, prompt } = req.body;
   if (!username || !prompt) return res.status(400).json({ error: 'Нет данных' });
-
   const limitErr = checkDailyLimit(username, 'video');
   if (limitErr) return res.json({ error: limitErr });
 
-  aiSseEmit(username, 'log', { text: `Создаю видео: ${prompt.slice(0,50)}... (~60с)`, type: 'process' });
+  // Отвечаем сразу, генерация в фоне через SSE
+  res.json({ success: true, pending: true, prompt });
 
-  const frames = [];
-  const seeds  = [42, 137, 271, 314, 500, 777];
-  const styleTag = ', cinematic, 8k, high quality, smooth';
-
-  for (let i = 0; i < seeds.length; i++) {
-    aiSseEmit(username, 'log', { text: `Кадр ${i+1}/${seeds.length}...`, type: 'fetch' });
+  setImmediate(async () => {
     try {
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleTag + `, moment ${i+1} of 6, slight camera movement`)}?width=768&height=432&nologo=true&model=flux&seed=${seeds[i]}`;
-      const r = await axios.get(url, { responseType: 'arraybuffer', timeout: 45000 });
-      if (r.data?.byteLength > 5000) {
-        frames.push('data:image/jpeg;base64,' + Buffer.from(r.data).toString('base64'));
+      aiSseEmit(username, 'log', { text: `Создаю видео: ${prompt.slice(0,40)}... (~60с)`, type: 'process' });
+
+      // ── Попытка 1: Stability AI Video (нужен STABILITY_API_KEY) ─────────
+      if (STABILITY_KEY) {
+        try {
+          aiSseEmit(username, 'log', { text: 'Stability AI: генерирую базовое изображение...', type: 'fetch' });
+          const imgResp = await axios.post(
+            'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image',
+            { text_prompts:[{ text: prompt + ', cinematic, high quality', weight:1 }], cfg_scale:7, height:576, width:1024, samples:1, steps:25 },
+            { headers:{ Authorization:'Bearer ' + STABILITY_KEY, 'Content-Type':'application/json' }, timeout:60000 }
+          );
+          const imgB64 = imgResp.data?.artifacts?.[0]?.base64;
+          if (imgB64) {
+            aiSseEmit(username, 'log', { text: 'Анимирую через Stability Video...', type: 'process' });
+            const FormData = require('form-data');
+            const formData = new FormData();
+            formData.append('image', Buffer.from(imgB64, 'base64'), { filename:'init.png', contentType:'image/png' });
+            formData.append('seed', '0');
+            formData.append('cfg_scale', '2.5');
+            formData.append('motion_bucket_id', '100');
+            const vidResp = await axios.post(
+              'https://api.stability.ai/v2beta/image-to-video',
+              formData,
+              { headers:{ ...formData.getHeaders(), Authorization:'Bearer ' + STABILITY_KEY }, timeout:15000 }
+            );
+            const genId = vidResp.data?.id;
+            if (genId) {
+              for (let i = 0; i < 18; i++) {
+                await new Promise(r => setTimeout(r, 7000));
+                aiSseEmit(username, 'log', { text: `Рендер ${Math.round((i+1)/18*100)}%...`, type: 'fetch' });
+                try {
+                  const poll = await axios.get(
+                    'https://api.stability.ai/v2beta/image-to-video/result/' + genId,
+                    { headers:{ Authorization:'Bearer ' + STABILITY_KEY, Accept:'video/*' }, responseType:'arraybuffer', timeout:15000 }
+                  );
+                  if (poll.status === 200 && poll.data?.byteLength > 10000) {
+                    const vB64 = 'data:video/mp4;base64,' + Buffer.from(poll.data).toString('base64');
+                    const { fileId, safe } = aiSaveFile(username, 'ai_video.mp4', 'VIDEO:' + vB64, 'AI видео: ' + prompt.slice(0,40));
+                    aiSseEmit(username, 'media', { type:'video_real', base64:vB64, fileId, filename:safe, prompt });
+                    aiSseEmit(username, 'log', { text: '✅ Реальное MP4 видео готово!', type: 'result' });
+                    const lim = aiDailyLimits.get(username);
+                    return;
+                  }
+                } catch(pe) { if (pe.response?.status !== 202) break; }
+              }
+            }
+          }
+        } catch(e) { console.log('[video] Stability failed:', e.response?.data?.message || e.message); }
       }
-    } catch(e) { console.log('[video] frame', i, 'failed:', e.message); }
-  }
 
-  if (frames.length < 2) {
-    return res.json({ error: 'Не удалось сгенерировать видео. Попробуй позже.' });
-  }
+      // ── Попытка 2: Replicate (нужен REPLICATE_API_TOKEN) ─────────────
+      if (REPLICATE_KEY) {
+        try {
+          aiSseEmit(username, 'log', { text: 'Replicate: запускаю zeroscope-v2...', type: 'fetch' });
+          const startR = await axios.post(
+            'https://api.replicate.com/v1/models/anotherjesse/zeroscope-v2-xl/predictions',
+            { input:{ prompt, num_frames:24, num_inference_steps:40, fps:8, width:576, height:320 } },
+            { headers:{ Authorization:'Token ' + REPLICATE_KEY, 'Content-Type':'application/json' }, timeout:15000 }
+          );
+          const predId = startR.data?.id;
+          if (predId) {
+            for (let i = 0; i < 20; i++) {
+              await new Promise(r => setTimeout(r, 7000));
+              const poll = await axios.get('https://api.replicate.com/v1/predictions/' + predId, { headers:{ Authorization:'Token ' + REPLICATE_KEY }, timeout:10000 });
+              if (poll.data?.status === 'succeeded' && poll.data?.output) {
+                const videoUrl = Array.isArray(poll.data.output) ? poll.data.output[0] : poll.data.output;
+                const vr = await axios.get(videoUrl, { responseType:'arraybuffer', timeout:30000 });
+                const vB64 = 'data:video/mp4;base64,' + Buffer.from(vr.data).toString('base64');
+                const { fileId, safe } = aiSaveFile(username, 'ai_video.mp4', 'VIDEO:' + vB64, 'AI видео: ' + prompt.slice(0,40));
+                aiSseEmit(username, 'media', { type:'video_real', base64:vB64, fileId, filename:safe, prompt });
+                aiSseEmit(username, 'log', { text: '✅ Реальное MP4 видео готово! (Replicate)', type: 'result' });
+                return;
+              }
+              if (poll.data?.status === 'failed') break;
+            }
+          }
+        } catch(e) { console.log('[video] Replicate failed:', e.message); }
+      }
+      const frames = [];
+      const seeds  = [11, 42, 137, 271, 314, 777];
+      for (let i = 0; i < seeds.length; i++) {
+        aiSseEmit(username, 'log', { text: `Кадр ${i+1}/${seeds.length}...`, type: 'fetch' });
+        const variants = [
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + `, cinematic scene ${i+1} of 6, smooth motion, 4k`)}?width=768&height=432&nologo=true&model=flux&seed=${seeds[i]}`,
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + ` frame ${i+1}`)}?width=768&height=432&nologo=true&seed=${seeds[i]}`,
+        ];
+        for (const url of variants) {
+          try {
+            const r = await axios.get(url, { responseType: 'arraybuffer', timeout: 55000, headers: {'User-Agent':'Mozilla/5.0'} });
+            if (r.data?.byteLength > 5000) {
+              frames.push('data:image/jpeg;base64,' + Buffer.from(r.data).toString('base64'));
+              break;
+            }
+          } catch(e) { console.log('[video frame]', i, e.message); }
+        }
+      }
 
-  aiSseEmit(username, 'log', { text: `Собираю видео из ${frames.length} кадров...`, type: 'process' });
+      if (frames.length < 2) {
+        aiSseEmit(username, 'media', { type: 'image_error', error: 'Не удалось сгенерировать видео. Попробуй позже.' });
+        return;
+      }
+      aiSseEmit(username, 'log', { text: `Собираю ${frames.length} кадров в видео...`, type: 'process' });
 
-  const framesJson = JSON.stringify(frames);
-  const html = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
-<title>${prompt.slice(0,50)}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#fff}canvas{max-width:95vw;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.8)}.ui{width:100%;max-width:768px;padding:12px 0;display:flex;flex-direction:column;gap:10px}.pb{display:flex;align-items:center;gap:10px}.pbg{flex:1;height:4px;background:rgba(255,255,255,.2);border-radius:99px;cursor:pointer}.pf{height:100%;background:#6366f1;border-radius:99px;transition:width .1s}.ctrls{display:flex;gap:8px;align-items:center}.btn{padding:7px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:13px}.btn:hover{background:rgba(255,255,255,.2)}.btn.p{background:#6366f1;border-color:#6366f1}.tc{font-size:12px;color:rgba(255,255,255,.5);font-variant-numeric:tabular-nums;min-width:52px}.ttl{font-size:12px;color:rgba(255,255,255,.35);text-align:center}</style></head>
-<body><canvas id="c"></canvas>
+      const framesJson = JSON.stringify(frames);
+      const html = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>${prompt.slice(0,50)}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#fff;gap:14px}canvas{max-width:95vw;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.8)}.ui{width:100%;max-width:768px;display:flex;flex-direction:column;gap:8px}.row{display:flex;align-items:center;gap:10px}.pb{flex:1;height:4px;background:rgba(255,255,255,.2);border-radius:99px;cursor:pointer;position:relative}.pf{height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:99px;transition:width .08s}.btn{padding:6px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:13px;transition:background .15s;white-space:nowrap}.btn:hover{background:rgba(255,255,255,.22)}.btn.p{background:#6366f1;border-color:#6366f1}.tc{font-size:11px;color:rgba(255,255,255,.45);min-width:36px;font-variant-numeric:tabular-nums}.ttl{font-size:11px;color:rgba(255,255,255,.3);text-align:center}.spd{font-size:11px;color:rgba(255,255,255,.5);min-width:28px;text-align:center}</style></head>
+<body>
+<canvas id="c"></canvas>
 <div class="ui">
-<div class="pb"><span class="tc" id="tc">0:00</span><div class="pbg" id="pb" onclick="seek(event)"><div class="pf" id="pf" style="width:0%"></div></div><span class="tc" id="td">0:00</span></div>
-<div class="ctrls"><button class="btn p" id="pb2" onclick="tog()">▶</button><button class="btn" onclick="rst()">⏮</button><button class="btn" onclick="spd()">1x</button><a id="dl" class="btn" download="frame.jpg" style="text-decoration:none;margin-left:auto">⬇</a></div>
-<div class="ttl">${prompt.slice(0,80)}</div></div>
+<div class="row"><span class="tc" id="tc">0:00</span><div class="pb" id="pb" onclick="seek(event)"><div class="pf" id="pf" style="width:0%"></div></div><span class="tc" id="td">0:00</span></div>
+<div class="row"><button class="btn p" id="pb2" onclick="tog()">▶</button><button class="btn" onclick="rst()">⏮</button><button class="btn" onclick="spd()" id="sb">1x</button><span class="spd" id="fi">${frames.length}к</span><a id="dl" class="btn" download="frame.jpg" style="text-decoration:none;margin-left:auto">⬇ Кадр</a></div>
+<div class="ttl">${prompt.slice(0,80)}</div>
+</div>
 <script>
 const F=${framesJson};
-let fps=24,play=false,cur=0,last=null;
+const imgs=F.map(src=>{const i=new Image();i.src=src;return i;});
 const c=document.getElementById('c'),x=c.getContext('2d');
-const imgs=F.map(s=>{const i=new Image();i.src=s;return i;});
 imgs[0].onload=()=>{c.width=imgs[0].naturalWidth||768;c.height=imgs[0].naturalHeight||432;draw(0);document.getElementById('td').textContent=fmt(F.length/fps);};
+let fps=24,playing=false,cur=0,last=null,si=1;
+const FPS=[12,24,30];const SPD=['0.5x','1x','1.25x'];
 function fmt(s){return Math.floor(s/60)+':'+(Math.floor(s%60)).toString().padStart(2,'0');}
-function draw(f){const i=Math.min(Math.floor(f),F.length-1),n=Math.min(i+1,F.length-1),t=f-Math.floor(f);if(imgs[i].complete&&imgs[n].complete){x.drawImage(imgs[i],0,0,c.width,c.height);if(t>0){x.globalAlpha=t;x.drawImage(imgs[n],0,0,c.width,c.height);x.globalAlpha=1;}}else if(imgs[i].complete)x.drawImage(imgs[i],0,0,c.width,c.height);document.getElementById('dl').href=c.toDataURL('image/jpeg',.9);}
-function frame(ts){if(!play)return;if(!last)last=ts;cur+=(ts-last)/1000*fps;last=ts;if(cur>=F.length)cur=0;const p=cur/F.length*100;document.getElementById('pf').style.width=p+'%';document.getElementById('tc').textContent=fmt(cur/fps);draw(cur);requestAnimationFrame(frame);}
-function tog(){play=!play;document.getElementById('pb2').textContent=play?'⏸':'▶';if(play){last=null;requestAnimationFrame(frame);}}
-function rst(){cur=0;draw(0);}
-let si=1;function spd(){si=(si+1)%3;fps=[12,24,30][si];document.querySelector('.ctrls .btn:nth-child(3)').textContent=['.5x','1x','1.25x'][si];}
-function seek(e){const r=document.getElementById('pb').getBoundingClientRect();cur=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*F.length;draw(cur);}
-setTimeout(tog,400);
+function draw(f){
+  const i=Math.min(Math.floor(f),F.length-1),n=Math.min(i+1,F.length-1),t=f-Math.floor(f);
+  if(imgs[i].complete){x.drawImage(imgs[i],0,0,c.width,c.height);}
+  if(t>0.05&&imgs[n].complete){x.globalAlpha=t;x.drawImage(imgs[n],0,0,c.width,c.height);x.globalAlpha=1;}
+  try{document.getElementById('dl').href=c.toDataURL('image/jpeg',.92);}catch{}
+}
+function frame(ts){if(!playing)return;if(!last)last=ts;cur+=(ts-last)/1000*fps;last=ts;if(cur>=F.length)cur=0;document.getElementById('pf').style.width=(cur/F.length*100)+'%';document.getElementById('tc').textContent=fmt(cur/fps);draw(cur);requestAnimationFrame(frame);}
+function tog(){playing=!playing;document.getElementById('pb2').textContent=playing?'⏸':'▶';if(playing){last=null;requestAnimationFrame(frame);}}
+function rst(){cur=0;draw(0);document.getElementById('pf').style.width='0%';document.getElementById('tc').textContent='0:00';}
+function spd(){si=(si+1)%3;fps=FPS[si];document.getElementById('sb').textContent=SPD[si];document.getElementById('td').textContent=fmt(F.length/fps);}
+function seek(e){const r=document.getElementById('pb').getBoundingClientRect();cur=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*F.length;draw(cur);document.getElementById('pf').style.width=(cur/F.length*100)+'%';document.getElementById('tc').textContent=fmt(cur/fps);}
+setTimeout(tog,600);
 </script></body></html>`;
 
-  const { fileId, safe } = aiSaveFile(username, 'ai_video.html', html, 'AI видео: ' + prompt.slice(0,40));
-  if (frames[0]) {
-    aiSseEmit(username, 'media', { type:'video_preview', base64:frames[0], fileId, filename:safe, prompt, frameCount:frames.length });
-  }
-  aiSseEmit(username, 'log', { text: `✅ Видео готово (${frames.length} кадров)`, type: 'result' });
-  const lim = aiDailyLimits.get(username);
-  res.json({ success:true, fileId, frameCount:frames.length, remaining: DAILY_VIDEO_LIMIT-(lim?.videos||0) });
+      const { fileId, safe } = aiSaveFile(username, 'ai_video.html', html, 'AI видео: ' + prompt.slice(0,40));
+      if (frames[0]) {
+        aiSseEmit(username, 'media', { type:'video_preview', base64:frames[0], fileId, filename:safe, prompt, frameCount:frames.length });
+      }
+      const lim = aiDailyLimits.get(username);
+      aiSseEmit(username, 'log', { text: `✅ Видео готово (${frames.length} кадров)`, type: 'result' });
+    } catch(e) {
+      console.error('[generate-video]', e.message);
+      aiSseEmit(username, 'media', { type:'image_error', error: 'Ошибка: ' + e.message });
+    }
+  });
 });
-
 
 app.get('/api/ai-files/:username', (req, res) => {
   const files = (aiUserFiles.get(req.params.username) || []).map(f => ({
