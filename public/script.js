@@ -1023,13 +1023,13 @@ function addMessage(msg) {
   } else if (msg.type === 'video_circle') {
     const u = fileUrl(msg.url);
     const vid_id = 'vc_' + (msg.id || Math.random().toString(36).slice(2,9));
-    inner += `<div class="msg-circle-wrap" id="${vid_id}_wrap">
-      <video class="msg-circle" id="${vid_id}" playsinline preload="metadata"
+    inner += `<div class="msg-square-wrap" id="${vid_id}_wrap">
+      <video class="msg-square" id="${vid_id}" playsinline webkit-playsinline preload="metadata"
         src="${u}"
         onmousedown="event.preventDefault()"
         onclick="vcTogglePlay('${vid_id}')"
         onloadedmetadata="vcShowDuration('${vid_id}')"></video>
-      <div class="vc-overlay" id="${vid_id}_ov">
+      <div class="vc-overlay" id="${vid_id}_ov" onclick="event.stopPropagation();vcTogglePlay('${vid_id}')">
         <i class="ti ti-player-play vc-play-ico"></i>
       </div>
       <span class="vc-dur" id="${vid_id}_dur"></span>
@@ -1483,12 +1483,13 @@ async function startCircleRecord() {
     circleRec.ondataavailable = e => e.data.size && circleChunks.push(e.data);
     circleRec.start(200);
     circleSecs = 0;
-    circleFg.style.strokeDashoffset = '628.3';
+    const PERIM = 813.7; // периметр прямоугольника 212x212 rx=20
+    if (circleFg) { circleFg.style.strokeDasharray = PERIM; circleFg.style.strokeDashoffset = '0'; }
     circleTimerID = setInterval(() => {
       circleSecs++;
-      const m = Math.floor(circleSecs/60), s = circleSecs % 60;
-      circleTimeEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
-      circleFg.style.strokeDashoffset = 628.3 * (1 - circleSecs / MAX_CIRCLE);
+      const m = Math.floor(circleSecs/60), sec = circleSecs % 60;
+      circleTimeEl.textContent = `${m}:${sec.toString().padStart(2,'0')}`;
+      if (circleFg) circleFg.style.strokeDashoffset = PERIM * (circleSecs / MAX_CIRCLE);
       if (circleSecs >= MAX_CIRCLE) sendCircleRecord();
     }, 1000);
   } catch { toast('Нет доступа к камере', 'error'); }
@@ -1691,7 +1692,7 @@ function viewMedia(url, type) {
     <button class="mv-close" onclick="this.closest('.media-viewer').remove()"><i class="ti ti-x"></i></button>
     ${type === 'image'
       ? `<img src="${url}" style="max-width:92vw;max-height:92vh;border-radius:12px;object-fit:contain;">`
-      : `<video src="${url}" controls autoplay playsinline style="max-width:92vw;max-height:92vh;border-radius:12px;"></video>`}`;
+      : `<video src="${url}" controls autoplay playsinline webkit-playsinline style="max-width:92vw;max-height:92vh;border-radius:12px;"></video>`}`;
   viewer.onclick = e => { if (e.target === viewer) viewer.remove(); };
   document.body.appendChild(viewer);
 }
@@ -1890,7 +1891,11 @@ socket.on('avatar-updated', ({ username, avatar }) => {
   const applyAll = (sel) => document.querySelectorAll(sel).forEach(el => setAvatar(el, username, avatar));
   applyAll(`.msg-ava[data-user="${username}"]`);
   applyAll(`.ci-ava[data-user="${username}"]`);
-  if (currentRoom && currentRoom.includes(username)) setAvatar(roomAvatar, username, avatar);
+  // Обновляем аватарку в шапке чата ТОЛЬКО если это собеседник (не мы сами)
+  if (currentRoom && currentRoom.startsWith('private:')) {
+    const other = currentRoom.split(':').slice(1).find(p => p !== currentUser);
+    if (other && other === username) setAvatar(roomAvatar, username, avatar);
+  }
   const settingsAva = document.getElementById('settingsAvatar');
   if (settingsAva && username === currentUser) setAvatar(settingsAva, username, avatar);
 });
@@ -2528,15 +2533,22 @@ async function _aiPreviewFile(fileId, mainName) {
   document.body.appendChild(modal);
 
   const iframe = modal.querySelector('#aiPreviewFrame');
-  // Используем blob URL для надёжного рендера
+  // iOS Safari не поддерживает blob URL в iframe — используем srcdoc везде
   try {
-    const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
-    const blobUrl = URL.createObjectURL(blob);
-    iframe.src = blobUrl;
-    // Освобождаем через 60с
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-  } catch(e) {
+    // srcdoc работает везде включая iOS
     iframe.srcdoc = html;
+    // Fallback: blob URL если srcdoc не сработал
+    setTimeout(() => {
+      try {
+        if (!iframe.contentDocument?.body?.innerHTML?.length) {
+          const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+          iframe.src = URL.createObjectURL(blob);
+        }
+      } catch {}
+    }, 1500);
+  } catch(e) {
+    const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+    iframe.src = URL.createObjectURL(blob);
   }
 }
 
@@ -2929,6 +2941,8 @@ function _aiConnectSse() {
         }
       } else if (d.type === 'video_preview') {
         _aiAddVideoPreviewMessage(d.base64, d.prompt || '', d.fileId, d.filename, d.frameCount || 1);
+      } else if (d.type === 'video_real') {
+        _aiAddRealVideoMessage(d.base64, d.prompt || '', d.fileId, d.filename);
       } else if (d.type === 'image_error') {
         _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка генерации'));
       }
@@ -3004,6 +3018,58 @@ function _aiAddMediaMessage(base64url, prompt, fileId) {
 }
 
 // Показывает видео-превью от AI в чате
+// Показывает реальное MP4 видео в чате (Stability AI / Replicate)
+function _aiAddRealVideoMessage(base64url, prompt, fileId, filename) {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+
+  const welcome = msgs.querySelector('.ai-welcome');
+  if (welcome) welcome.remove();
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:8px';
+
+  const ava = document.createElement('div');
+  ava.style.cssText = 'width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px';
+  ava.innerHTML = '<i class="ti ti-robot" style="font-size:14px;color:#fff"></i>';
+
+  const bubble = document.createElement('div');
+  bubble.style.cssText = 'max-width:min(420px,90vw)';
+
+  const videoEl = document.createElement('video');
+  videoEl.src = base64url;
+  videoEl.controls = true;
+  videoEl.loop = true;
+  videoEl.muted = true;
+  videoEl.playsInline = true;
+  videoEl.setAttribute('playsinline', '');
+  videoEl.setAttribute('webkit-playsinline', '');
+  videoEl.setAttribute('x-webkit-airplay', 'allow');
+  videoEl.style.cssText = 'width:100%;border-radius:14px;display:block;box-shadow:0 4px 20px rgba(0,0,0,.4);background:#000';
+  // iOS requires user gesture for play — show native controls
+  videoEl.addEventListener('loadedmetadata', () => { videoEl.play().catch(() => {}); });
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap';
+  const dlLink = document.createElement('a');
+  dlLink.href = base64url;
+  dlLink.download = filename || 'ai_video.mp4';
+  dlLink.style.cssText = 'padding:5px 12px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;flex-shrink:0';
+  dlLink.innerHTML = '<i class="ti ti-download"></i> Скачать MP4';
+  const caption = document.createElement('span');
+  caption.style.cssText = 'font-size:11px;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  caption.textContent = prompt;
+  actions.appendChild(dlLink);
+  actions.appendChild(caption);
+
+  bubble.appendChild(videoEl);
+  bubble.appendChild(actions);
+  wrap.appendChild(ava);
+  wrap.appendChild(bubble);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
 function _aiAddVideoPreviewMessage(base64url, prompt, fileId, filename, frameCount) {
   const msgs = $('aiMessages');
   if (!msgs) return;
@@ -3026,7 +3092,7 @@ function _aiAddVideoPreviewMessage(base64url, prompt, fileId, filename, frameCou
   // Превью-кадр
   const img = document.createElement('img');
   img.src = base64url;
-  img.style.cssText = 'max-width:360px;max-height:280px;display:block;border-radius:14px;opacity:.85';
+  img.style.cssText = 'max-width:min(360px,85vw);max-height:280px;display:block;border-radius:14px;opacity:.85';
 
   // Плашка "Видео"
   const badge = document.createElement('div');
@@ -3654,26 +3720,37 @@ async function deleteAccount() {
 // ICE / TURN — расширенный список серверов для работы за NAT/firewall
 // ══════════════════════════════════════════════════════════════════════
 const ICE_SERVERS_STATIC = [
-  // ── STUN серверы (для обнаружения внешнего IP) ──────────────────────
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
   { urls: 'stun:stun.cloudflare.com:3478' },
   { urls: 'stun:stun.relay.metered.ca:80' },
-  // ── openrelay TURN (бесплатный, UDP + TCP + TLS) ─────────────────────
-  { urls: 'turn:openrelay.metered.ca:80',          username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443',         username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'stun:stun.global.twilio.com:3478' },
+  { urls: 'stun:stun.stunprotocol.org:3478' },
+  { urls: 'stun:stun.nextcloud.com:443' },
+  // openrelay — все транспорты
+  { urls: 'turn:openrelay.metered.ca:80',                username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turns:openrelay.metered.ca:443',        username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:3478',        username: 'openrelayproject', credential: 'openrelayproject' },
-  // ── freeturn (резерв) ──────────────────────────────────────────────
-  { urls: 'turn:freeturn.net:3478',                username: 'free', credential: 'free' },
-  { urls: 'turn:freeturn.net:5349?transport=tcp',  username: 'free', credential: 'free' },
-  { urls: 'turns:freeturn.tel:5349',               username: 'free', credential: 'free' },
-  // ── Numb (публичный TURN от Philipp Hancke) ───────────────────────
-  { urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh' },
-  // ── Xirsys free tier ─────────────────────────────────────────────
-  { urls: 'stun:ss-turn1.xirsys.com' },
+  { urls: 'turn:openrelay.metered.ca:3478',              username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443',              username: 'openrelayproject', credential: 'openrelayproject' },
+  // freeturn
+  { urls: 'turn:freeturn.net:3478',                      username: 'free', credential: 'free' },
+  { urls: 'turn:freeturn.net:5349?transport=tcp',        username: 'free', credential: 'free' },
+  { urls: 'turns:freeturn.tel:5349',                     username: 'free', credential: 'free' },
+  // numb
+  { urls: 'turn:numb.viagenie.ca',                       username: 'webrtc@live.com', credential: 'muazkh' },
+  { urls: 'turn:numb.viagenie.ca?transport=tcp',         username: 'webrtc@live.com', credential: 'muazkh' },
+  // expressrturn
+  { urls: 'turn:turn.anyfirewall.com:443?transport=tcp', username: 'webrtc', credential: 'webrtc' },
+  // relay.webwormhole.it
+  { urls: 'stun:stun.webwormhole.it:3478' },
+  // Additional Google STUN
+  { urls: 'stun:stun.services.mozilla.com' },
+  { urls: 'stun:stun.sipgate.net' },
+  { urls: 'stun:stun.voipstunt.com' },
 ];
 
 let ICE_SERVERS = ICE_SERVERS_STATIC; // будет обновлён ниже если есть API ключ
@@ -3999,7 +4076,45 @@ function answerCall() {
       socket.emit('call-answer-ready', { to: _callTarget, from: currentUser });
       callModal.classList.remove('open');
     })
-    .catch(() => { toast('Нет доступа к медиа', 'error'); declineCall(); });
+    .catch(async (err) => {
+      console.log('[Call] Медиа ошибка:', err.name, err.message);
+      if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError' || err.name === 'NotReadableError') {
+        // Нет камеры — пробуем только аудио
+        if (_callIsVid) {
+          toast('Камера недоступна — звонок только с аудио', 'info', 3000);
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            _callIsVid = false; // помечаем что у нас нет видео
+            _callNoCamera = true; // флаг — показываем аватарку вместо камеры
+            _startCallAsCaller_noVideo();
+            return;
+          } catch(e2) {
+            toast('Нет доступа к микрофону', 'error');
+          }
+        }
+      } else {
+        toast('Нет доступа к медиа', 'error');
+      }
+      declineCall();
+    });
+}
+
+// Начинаем звонок без камеры (только аудио + аватарка)
+async function _startCallAsCaller_noVideo() {
+  // localStream уже получен с только аудио
+  const target = _callTarget;
+  _createPeer(target);
+  if (localStream) {
+    localStream.getTracks().forEach(t => rtcPeer.addTrack(t, localStream));
+  }
+  try {
+    const offer = await rtcPeer.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
+    await rtcPeer.setLocalDescription(offer);
+    socket.emit('call-offer', { to: target, from: currentUser, sdp: offer, noCamera: true });
+  } catch(e) {
+    console.error('[Call no-camera]', e);
+    endCall();
+  }
 }
 
 function declineCall() {
@@ -4361,18 +4476,23 @@ function _showCallWindow(remoteStream) {
     <button class="cw-btn cw-screen ss-toggle" id="cwScreenBtn" title="Экран"><i class="ti ti-screen-share"></i></button>
     <button class="cw-btn cw-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>`;
 
-  if (_callIsVid) {
+  if (_callIsVid || _callNoCamera) {
+    // Если нет камеры — показываем аватарку в PIP вместо видео
+    const pipContent = _callNoCamera
+      ? `<div id="lv" style="position:absolute;bottom:58px;right:10px;width:90px;height:68px;border-radius:9px;border:2px solid rgba(255,255,255,.3);background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;z-index:3;font-size:24px;font-weight:700;color:#fff">${(currentUser||'?')[0].toUpperCase()}</div>`
+      : `<video id="lv" autoplay playsinline webkit-playsinline muted style="position:absolute;bottom:58px;right:10px;width:90px;height:68px;border-radius:9px;border:2px solid rgba(255,255,255,.2);object-fit:cover;z-index:3;"></video>`;
     win.innerHTML = `
       <div class="cw-bg"></div>
-      <video id="rv" autoplay playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;z-index:1;"></video>
-      <video id="lv" autoplay playsinline muted style="position:absolute;bottom:58px;right:10px;width:90px;height:68px;border-radius:9px;border:2px solid rgba(255,255,255,.2);object-fit:cover;z-index:3;"></video>
+      <video id="rv" autoplay playsinline webkit-playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;z-index:1;"></video>
+      ${pipContent}
+      ${_callNoCamera ? '<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:3px 8px;border-radius:99px;z-index:5;backdrop-filter:blur(4px)">🎤 Только аудио</div>' : ''}
       <div class="cw-controls" style="z-index:4;">
         <span class="cw-timer" id="cwTimer">0:00</span>
         <div class="cw-btns">${btns}</div>
       </div>`;
     document.body.appendChild(win);
     win.querySelector('#rv').srcObject = remoteStream;
-    if (localStream) win.querySelector('#lv').srcObject = localStream;
+    if (localStream && !_callNoCamera) win.querySelector('#lv').srcObject = localStream;
   } else {
     win.innerHTML = `
       <div class="cw-bg"></div>
@@ -4716,7 +4836,10 @@ function showScreenQualityPicker(cb) {
 // ── END / CLEANUP ────────────────────────────────────────
 function endCall() {
   stopRing();
-  if (_inCall && _callTarget) socket.emit('call-end', { to: _callTarget, from: currentUser });
+  // Отправляем сигнал обоим — и целевому пользователю и на все устройства
+  if (_callTarget) {
+    socket.emit('call-end', { to: _callTarget, from: currentUser });
+  }
   _cleanup();
 }
 function _cleanup() {
@@ -4735,7 +4858,7 @@ function _cleanup() {
   }
   _callConnectedTime = null;
 
-  _inCall = false; _connected = false; _screenSharing = false; _muted = false;
+  _inCall = false; _connected = false; _screenSharing = false; _muted = false; _callNoCamera = false;
   rtcPeer?.close(); rtcPeer = null;
   // Close all group peer connections
   groupPeers.forEach(pc => pc.close());
@@ -4754,6 +4877,7 @@ function _cleanup() {
 }
 
 let _callConnectedTime = null;
+let _callNoCamera = false; // true если у нас нет камеры — показываем аватарку
 
 function addCallRecord(icon, label, extra, time) {
   const row = document.createElement('div');
@@ -4780,6 +4904,9 @@ let _vcExpandedId   = null; // id текущего развёрнутого кр
 let _vcExpandTimer  = null; // таймер для различения одиночного/двойного тапа
 
 function vcTogglePlay(id) {
+  // Предотвращаем прокрутку чата при нажатии на видео
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
   const v    = document.getElementById(id);
   const wrap = document.getElementById(id + '_wrap');
   if (!v || !wrap) return;
