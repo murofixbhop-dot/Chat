@@ -358,33 +358,75 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 // ========== ICE SERVERS (динамические TURN credentials) ==========
-// Если у вас есть API ключ от metered.ca — укажите его в .env как METERED_API_KEY
-// Бесплатный план: https://dashboard.metered.ca/  (50 GB/месяц бесплатно)
+// ── Metered.ca webhook (нужен для создания проекта в Metered) ─────────────────
+app.post('/api/metered-webhook', (req, res) => {
+  console.log('[Metered webhook]', req.body);
+  res.json({ received: true });
+});
+app.get('/api/metered-webhook', (req, res) => {
+  res.json({ status: 'ok', service: 'Aura Metered Webhook' });
+});
+
+// ── ICE/TURN серверы — поддержка Twilio, Metered, статичный fallback ─────────
+// Добавьте в .env на Render:
+//   METERED_API_KEY  — бесплатно 50GB/мес: dashboard.metered.ca
+//   TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN — бесплатный триал с TURN
 app.get('/api/ice-servers', async (req, res) => {
-  const METERED_API_KEY = process.env.METERED_API_KEY;
-  if (METERED_API_KEY) {
+  const METERED_KEY = process.env.METERED_API_KEY;
+  const TWILIO_SID  = process.env.TWILIO_ACCOUNT_SID;
+  const TWILIO_AUTH = process.env.TWILIO_AUTH_TOKEN;
+
+  // Попытка 1: Twilio Network Traversal Service (самый надёжный TURN)
+  if (TWILIO_SID && TWILIO_AUTH) {
     try {
-      const response = await axios.get(
-        `https://aura.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`,
-        { timeout: 5000 }
+      const auth = Buffer.from(`${TWILIO_SID}:${TWILIO_AUTH}`).toString('base64');
+      const r = await axios.post(
+        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Tokens.json`,
+        null,
+        { headers:{ Authorization:`Basic ${auth}` }, timeout:5000 }
       );
-      return res.json(response.data);
-    } catch (err) {
-      console.log('[ICE] metered.ca недоступен, возвращаем статичные серверы');
-    }
+      if (r.data?.ice_servers?.length) {
+        console.log('[ICE] Twilio TURN серверы получены:', r.data.ice_servers.length);
+        return res.json(r.data.ice_servers);
+      }
+    } catch(e) { console.log('[ICE] Twilio недоступен:', e.message); }
   }
-  // Fallback — статичные серверы (всегда работают как запасной вариант)
+
+  // Попытка 2: Metered.ca
+  if (METERED_KEY) {
+    try {
+      const r = await axios.get(
+        `https://aura.metered.live/api/v1/turn/credentials?apiKey=${METERED_KEY}`,
+        { timeout:5000 }
+      );
+      if (Array.isArray(r.data) && r.data.length) {
+        console.log('[ICE] Metered TURN серверы получены:', r.data.length);
+        return res.json(r.data);
+      }
+    } catch(e) { console.log('[ICE] Metered недоступен:', e.message); }
+  }
+
+  // Fallback: расширенный статичный список (UDP + TCP + TLS)
   res.json([
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:openrelay.metered.ca:3478' },
-    { urls: 'turn:openrelay.metered.ca:3478',  credential: 'openrelayproject', username: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443',   credential: 'openrelayproject', username: 'openrelayproject' },
-    { urls: 'turns:openrelay.metered.ca:443',  credential: 'openrelayproject', username: 'openrelayproject' },
-    { urls: 'turn:freeturn.net:3478',           credential: 'free',             username: 'free' },
-    { urls: 'turns:freeturn.tel:5349',          credential: 'free',             username: 'free' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:stun.relay.metered.ca:80' },
+    // openrelay — все транспорты
+    { urls: 'turn:openrelay.metered.ca:80',              username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443',             username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443',            username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:3478',            username: 'openrelayproject', credential: 'openrelayproject' },
+    // freeturn
+    { urls: 'turn:freeturn.net:3478',                    username: 'free', credential: 'free' },
+    { urls: 'turn:freeturn.net:5349?transport=tcp',      username: 'free', credential: 'free' },
+    { urls: 'turns:freeturn.tel:5349',                   username: 'free', credential: 'free' },
+    // numb
+    { urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh' },
   ]);
 });
+
 
 
 app.use(express.json());
