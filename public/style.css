@@ -743,11 +743,11 @@ option { background: var(--surface2); color: var(--text); }
 .msg-file a:hover { text-decoration: underline; }
 
 /* Video circle ← КРАСОТА */
-.msg-circle-wrap {
+.msg-circle-wrap, .msg-square-wrap {
   position: relative; display: inline-block;
   margin-top: 2px; cursor: pointer;
-  border-radius: 18px; overflow: hidden;
-  width: 130px; height: 130px;
+  overflow: hidden;
+  width: 140px; height: 140px;
   transition: width .35s cubic-bezier(.16,1,.3,1),
               height .35s cubic-bezier(.16,1,.3,1),
               border-radius .35s cubic-bezier(.16,1,.3,1),
@@ -757,7 +757,7 @@ option { background: var(--surface2); color: var(--text); }
   flex-shrink: 0;
 }
 .msg-circle-wrap:hover { box-shadow: 0 4px 20px rgba(0,0,0,.3); }
-.msg-circle {
+.msg-circle, .msg-square {
   width: 100%; height: 100%;
   border-radius: 18px;
   object-fit: cover; display: block;
@@ -1882,3 +1882,214 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
   .msg-bubble { max-width: 92%; }
   .hdr-right .icon-btn:not(:last-child):not(:nth-last-child(2)) { display: none; }
 }
+
+/* ════════════════════════════════════════════════
+   MOBILE VIDEO & MEDIA FIXES
+════════════════════════════════════════════════ */
+
+/* Все видео должны воспроизводиться inline на iOS */
+video {
+  -webkit-playsinline: true;
+  playsinline: true;
+}
+
+/* Видео в чате */
+.msg-video, .msg-circle, .msg-square {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  /* Видео в AI чате */
+  #aiMessages video {
+    max-width: 85vw !important;
+    width: 100% !important;
+  }
+
+  /* Превью файлов в AI */
+  #aiMessages img {
+    max-width: 85vw !important;
+  }
+
+  /* iframe превью — на весь экран */
+  #aiPreviewFrame {
+    height: 100% !important;
+  }
+
+  /* Модальное превью на весь экран */
+  [style*="position:fixed"][style*="z-index:9999"] {
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0) !important;
+  }
+
+  /* Контекстное меню — нижняя шторка */
+  .ctx-menu {
+    position: fixed !important;
+    left: 50% !important;
+    bottom: env(safe-area-inset-bottom, 8px) !important;
+    top: auto !important;
+    transform: translateX(-50%) !important;
+    width: calc(100% - 16px) !important;
+    max-width: 340px !important;
+    border-radius: 20px !important;
+    padding: 6px 0 8px !important;
+    box-shadow: 0 -4px 40px rgba(0,0,0,.3) !important;
+  }
+  .ctx-item {
+    padding: 13px 18px !important;
+    min-height: 48px !important;
+    font-size: 15px !important;
+  }
+
+  /* Плавная анимация для шторки */
+  .ctx-menu.open {
+    animation: slideUpSheet .25s cubic-bezier(.16,1,.3,1) !important;
+  }
+}
+
+@keyframes slideUpSheet {
+  from { transform: translateX(-50%) translateY(100%); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);   opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════
+   ICONS FALLBACK — если шрифт не загрузился
+════════════════════════════════════════════════ */
+/* Базовые стили иконок чтобы не было квадратиков */
+.ti {
+  font-family: 'tabler-icons', sans-serif;
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: inline-block;
+}
+
+/* Если шрифт не загрузился — иконки становятся прозрачными точками */
+@supports not (font-family: 'tabler-icons') {
+  .ti { opacity: 0.3; width: 1em; height: 1em; }
+}
+
+
+/* ── Video Square (квадрат вместо кружка) ── */
+.msg-square-wrap {
+  border-radius: 14px !important; /* квадрат с закруглёнными углами */
+  box-shadow: 0 2px 12px rgba(0,0,0,.2);
+}
+.msg-square-wrap.expanded {
+  border-radius: 16px !important;
+}
+.msg-square { border-radius: 0 !important; }
+
+/* Предотвращаем прокрутку чата при тапе на видео */
+.msg-square-wrap, .msg-circle-wrap {
+  touch-action: none; /* мы сами обрабатываем касания */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ════════════════════════════════════════════════
+   SQUARE VIDEO — вместо кружка
+════════════════════════════════════════════════ */
+
+/* Квадратная карточка записи */
+.square-card { padding: 12px !important; }
+
+.square-preview-wrap {
+  position: relative;
+  width: 220px; height: 220px;
+  border-radius: 20px;
+  overflow: hidden;
+  margin: 0 auto 10px;
+  background: #000;
+  box-shadow: 0 4px 24px rgba(0,0,0,.4);
+}
+
+.square-preview-wrap video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 20px;
+}
+
+/* SVG прогресс-рамка */
+.square-progress-svg {
+  z-index: 2;
+}
+.sq-bg {
+  fill: none;
+  stroke: rgba(255,255,255,.15);
+  stroke-width: 4;
+}
+.sq-fg {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 813.7;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 1s linear;
+  transform-origin: center;
+  transform: rotate(-90deg) scaleX(-1);
+}
+
+/* Сообщение-квадрат в чате */
+.msg-square-wrap {
+  position: relative;
+  display: inline-block;
+  width: 180px; height: 180px;
+  border-radius: 14px !important;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  transition: transform .15s, box-shadow .15s;
+  flex-shrink: 0;
+}
+.msg-square-wrap:active { transform: scale(.97); }
+
+.msg-square-wrap.expanded {
+  width: min(70vw, 320px) !important;
+  height: min(70vw, 320px) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  z-index: 2;
+}
+
+.msg-square {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 0 !important;
+}
+
+/* Overlay play кнопка */
+.msg-square-wrap .vc-overlay {
+  border-radius: 14px;
+}
+
+/* Таймер длительности */
+.msg-square-wrap .vc-dur {
+  position: absolute;
+  bottom: 6px; right: 8px;
+  font-size: 11px; font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,.6);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Кнопка записи - квадрат */
+.circle-btn {
+  border-radius: 10px !important;
+}
+
+@media (max-width: 768px) {
+  .square-preview-wrap { width: 180px; height: 180px; }
+  .msg-square-wrap { width: 160px; height: 160px; }
+  .msg-square-wrap.expanded { width: min(75vw,280px) !important; height: min(75vw,280px) !important; }
+}
+
