@@ -290,7 +290,7 @@ async function doLogin() {
   try {
     const r = await fetch('/api/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, email })
+      body: JSON.stringify({ username, password, email, mode: _isRegisterMode ? 'register' : 'login' })
     });
     const d = await r.json();
     if (d.success) {
@@ -1171,7 +1171,7 @@ attachMenu.innerHTML = `
   <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('video/*')"><i class="ti ti-video"></i> Видео</div>
   <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('audio/*')"><i class="ti ti-music"></i> Аудио</div>
   <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('*/*')"><i class="ti ti-file"></i> Файл</div>
-  <div class="att-item" onmousedown="event.preventDefault()" onclick="startCircleRecord()"><i class="ti ti-circle"></i> Кружок</div>`;
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="startCircleRecord()"><i class="ti ti-square-rounded"></i> Квадрат</div>`;
 
 attachBtn.addEventListener('mousedown', e => e.preventDefault()); // prevent text selection popup
 attachBtn.addEventListener('click', e => {
@@ -4496,7 +4496,7 @@ function _showCallWindow(remoteStream) {
   } else {
     win.innerHTML = `
       <div class="cw-bg"></div>
-      <div class="cw-audio-content" id="cwAudioContent">
+      <div class="cw-audio-content" id="cwAudioContent" style="transition:opacity .3s">
         <div class="cw-ava" id="cwAva"></div>
         <div class="cw-name" id="cwName">${_callTarget}</div>
       </div>
@@ -4709,22 +4709,26 @@ async function _applyScreenShare(capturedStream) {
     } catch(e) { console.error('[SS] renegotiation error:', e); return; }
   }
 
-  // Show caller's own screen preview
+  // Звонящий — показываем маленький превью своего экрана в PIP
+  // и большой экран СОБЕСЕДНИКА (rv) оставляем без изменений
   const win = document.getElementById('activeCallWin');
   const lv = win?.querySelector('#lv');
   if (lv) {
+    // Уже есть PIP — показываем превью своего экрана там
     lv.srcObject = screenStream;
-    lv.style.cssText += ';width:180px;height:100px;object-fit:contain;';
+    lv.style.width  = '180px';
+    lv.style.height = '100px';
+    lv.style.objectFit = 'contain';
+    lv.style.background = '#000';
   } else if (win) {
-    let rv = win.querySelector('#rv');
-    if (!rv) {
-      rv = document.createElement('video');
-      rv.id = 'rv'; rv.autoplay = true; rv.playsinline = true; rv.muted = true;
-      rv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1;border-radius:inherit;';
-      win.insertBefore(rv, win.firstChild);
-    }
-    rv.srcObject = screenStream;
-    rv.play().catch(() => {});
+    // Добавляем маленький превью своего экрана в углу
+    const pip = document.createElement('video');
+    pip.id = 'lv'; pip.autoplay = true; pip.playsinline = true; pip.muted = true;
+    pip.style.cssText = 'position:absolute;bottom:58px;right:10px;width:160px;height:90px;border-radius:8px;border:2px solid rgba(255,255,255,.3);object-fit:contain;background:#000;z-index:3;';
+    pip.srcObject = screenStream;
+    win.appendChild(pip);
+    pip.play().catch(() => {});
+    // rv (remote video) остаётся нетронутым
   }
 
   _screenSharing = true;
@@ -4732,9 +4736,9 @@ async function _applyScreenShare(capturedStream) {
     b.style.background = 'var(--accent)';
     b.querySelector('i').className = 'ti ti-screen-share-off';
   });
-  // Hide avatar/name during screen share
+  // Скрываем аватарку/имя во время демонстрации экрана
   const ac = document.getElementById('cwAudioContent');
-  if (ac) { ac.style.opacity = '0'; ac.style.pointerEvents = 'none'; }
+  if (ac) { ac.style.display = 'none'; ac.style.pointerEvents = 'none'; }
   toast('Демонстрация экрана активна', 'success', 2500);
 
   vid.onended = () => switchToScreenShare(); // user clicks "stop sharing" in browser
@@ -4767,9 +4771,9 @@ async function switchToScreenShare() {
       b.style.background = ''; b.title = 'Экран';
       b.querySelector('i').className = 'ti ti-screen-share';
     });
-    // Restore avatar/name
+    // Восстанавливаем аватарку/имя
     const ac = document.getElementById('cwAudioContent');
-    if (ac) { ac.style.opacity = ''; ac.style.pointerEvents = ''; }
+    if (ac) { ac.style.display = ''; ac.style.pointerEvents = ''; }
     // Remove screen video
     const rv = document.getElementById('activeCallWin')?.querySelector('#rv');
     if (rv && !_callIsVid) { rv.remove(); }
@@ -4842,19 +4846,41 @@ function endCall() {
   }
   _cleanup();
 }
+function doLogout() {
+  // Очищаем сессию и возвращаем на экран входа
+  localStorage.removeItem('aura_user');
+  localStorage.removeItem('aura_pass');
+  localStorage.removeItem('aura_last_room');
+  // Отключаемся от сокета
+  socket.emit('logout', { username: currentUser });
+  // Сбрасываем состояние
+  currentUser = null;
+  if (_inCall) endCall();
+  // Показываем экран входа
+  const chatApp = document.getElementById('chatApp');
+  if (chatApp) chatApp.style.display = 'none';
+  const loginScreen = document.getElementById('loginScreen');
+  if (loginScreen) { loginScreen.style.display = 'flex'; loginScreen.classList.add('open'); }
+  closeSettings();
+  toast('Вы вышли из аккаунта', 'info', 2000);
+}
+
 function _cleanup() {
   stopRing();
   // Add call record to chat if call was connected
-  if (_callTarget && currentRoom && _callConnectedTime && !_groupCall) {
-    const dur = Math.floor((Date.now() - _callConnectedTime) / 1000);
+  if (_callTarget && currentRoom && !_groupCall) {
+    const now = new Date();
+    const dur = _callConnectedTime ? Math.floor((Date.now() - _callConnectedTime) / 1000) : 0;
     const durStr = dur > 0
-      ? (dur < 60 ? `${dur}с` : `${Math.floor(dur/60)}м ${dur%60}с`)
+      ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur%60} сек`)
       : '';
-    const icon = _callIsVid ? '📹' : '📞';
-    const time = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-    const label = _isCaller ? `Исходящий звонок` : `Входящий звонок`;
-    const durLabel = durStr ? ` · ${durStr}` : ' · Не отвечено';
-    addCallRecord(icon, label, durLabel, time);
+    const icon  = _callIsVid ? '📹' : '📞';
+    const timeStr = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
+    const dateStr = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
+    const label   = _isCaller ? 'Исходящий звонок' : 'Входящий звонок';
+    const typeStr = _callIsVid ? 'Видеозвонок' : 'Аудиозвонок';
+    const durLabel = durStr ? ` · ${durStr}` : ' · Не принят';
+    addCallRecord(icon, `${label} · ${typeStr}`, `${durLabel} · ${dateStr}, ${timeStr}`, timeStr);
   }
   _callConnectedTime = null;
 
