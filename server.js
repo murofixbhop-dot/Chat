@@ -917,6 +917,54 @@ const AI_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'web_screenshot',
+      description: 'Делает описание/анализ веб-страницы: заголовок, мета-теги, основной контент, ссылки',
+      parameters: { type:'object', properties: { url:{type:'string'}, depth:{type:'string',description:'basic, full, links'} }, required:['url'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'emoji_search',
+      description: 'Поиск эмодзи по описанию на русском или английском',
+      parameters: { type:'object', properties: { query:{type:'string'}, count:{type:'number'} }, required:['query'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'poem_generate',
+      description: 'Генерирует стихотворение, рэп-куплет, песню, слоган по теме. Сохраняет как файл.',
+      parameters: { type:'object', properties: { theme:{type:'string'}, style:{type:'string',description:'poem, rap, haiku, limerick, song, slogan'}, language:{type:'string',description:'ru, en'} }, required:['theme','style'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'math_solve',
+      description: 'Решает уравнения, системы уравнений, вычисляет пределы, производные, интегралы. Показывает шаги.',
+      parameters: { type:'object', properties: { expression:{type:'string',description:'Математическое выражение или уравнение'}, action:{type:'string',description:'solve, derivative, integral, limit, simplify, factor'} }, required:['expression'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'compare',
+      description: 'Сравнивает два объекта/технологии/продукта: плюсы/минусы, характеристики в таблице',
+      parameters: { type:'object', properties: { item1:{type:'string'}, item2:{type:'string'}, aspect:{type:'string',description:'Аспект сравнения: цена, производительность, функции...'} }, required:['item1','item2'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'image_generate',
+      description: 'Генерирует изображение по описанию используя Pollinations AI (лимит 3/день). Отправляет прямо в чат.',
+      parameters: { type:'object', properties: { prompt:{type:'string'}, style:{type:'string',description:'realistic, anime, digital-art, watercolor, cinematic, 3d-render, sketch'} }, required:['prompt'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'ask_user',
       description: 'Задаёт пользователю уточняющий вопрос с вариантами ответов. Поддерживает мультиселект (несколько вариантов) и последовательность вопросов. Используй когда нужно уточнить детали перед выполнением.',
       parameters: {
@@ -2088,6 +2136,123 @@ ${(a?.bio?.summary||'').replace(/<[^>]+>/g,'').slice(0,400)}`;
       }
     }
 
+    // ── Веб анализ ───────────────────────────────────────────────────────
+    if (name === 'web_screenshot') {
+      aiSseEmit(username, 'log', { text: `Анализирую: ${args.url.slice(0,60)}`, type: 'fetch' });
+      try {
+        const r = await axios.get(args.url, { timeout:10000, headers:{'User-Agent':'Mozilla/5.0 AuraBot/1.0'}, maxContentLength:500000 });
+        const html = r.data?.toString() || '';
+        const title   = html.match(/<title[^>]*>([^<]+)/i)?.[1]?.trim() || '';
+        const desc    = html.match(/meta[^>]+description[^>]+content="([^"]+)"/i)?.[1] || '';
+        const h1s     = [...html.matchAll(/<h[12][^>]*>([^<]+)/gi)].map(m => m[1]).slice(0,5).join(', ');
+        const text    = html.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,2000);
+        aiSseEmit(username, 'log', { text: `Прочитано: "${title}"`, type: 'result' });
+        return `**${title}**
+        return '**' + title + '**\n' + (desc ? '> ' + desc + '\n' : '') + '**Заголовки:** ' + h1s + '\n\n' + text;
+
+${text}`;
+      } catch(e) { return `Не удалось загрузить: ${e.message}`; }
+    }
+
+    // ── Поиск эмодзи ─────────────────────────────────────────────────────
+    if (name === 'emoji_search') {
+      const q = args.query.toLowerCase();
+      const count = Math.min(args.count || 10, 30);
+      const emojiDB = {
+        'счастье|радость|улыбка|smile|happy': ['😊','😄','😃','😁','🥰','😍','🤩','😆','😂','🥳'],
+        'грусть|печаль|плакать|sad|cry': ['😢','😭','😔','😞','🥺','😿','💔','😪','🙁','😟'],
+        'огонь|fire|жарко|hot': ['🔥','🌶️','♨️','🥵','💥','✨','⚡','🌟'],
+        'сердце|любовь|love|heart': ['❤️','💕','💖','💗','💓','💞','💝','🫶','💑','💏'],
+        'еда|food|вкусно|yummy': ['🍕','🍔','🍟','🌮','🍜','🍱','🍣','🍰','🎂','🍩'],
+        'кот|кошка|cat': ['🐱','😸','😻','🐈','🐾','🦁','🐯'],
+        'собака|пёс|dog': ['🐶','🐕','🦮','🐩','🐾'],
+        'природа|nature|дерево|tree': ['🌲','🌳','🌿','🍀','🌸','🌺','🌻','🍁','🌊','🏔️'],
+        'деньги|money|богатство': ['💰','💵','💸','🤑','💎','🏆','🎰'],
+        'музыка|music|нота': ['🎵','🎶','🎸','🎹','🎺','🎻','🥁','🎤','🎧','🎼'],
+        'спорт|sport|футбол': ['⚽','🏀','🎾','🏋️','🚴','🏊','🎯','🏆','⭐','🥇'],
+      };
+      let found = [];
+      for (const [keys, emojis] of Object.entries(emojiDB)) {
+        if (keys.split('|').some(k => q.includes(k) || k.includes(q))) {
+          found.push(...emojis);
+        }
+      }
+      if (!found.length) found = ['😊','👍','❤️','🔥','✨','💪','🎉','🤔','💡','⭐'];
+      return `Эмодзи для "${args.query}": ${found.slice(0,count).join(' ')}`;
+    }
+
+    // ── Стихи и тексты ────────────────────────────────────────────────────
+    if (name === 'poem_generate') {
+      const { theme, style = 'poem', language = 'ru' } = args;
+      aiSseEmit(username, 'log', { text: `Пишу ${style}: ${theme}`, type: 'write' });
+      const stylePrompts = {
+        poem: 'Напиши красивое стихотворение на тему',
+        rap: 'Напиши рэп-куплет (16 строк, рифмы, ритм) на тему',
+        haiku: 'Напиши хайку (5-7-5 слогов) на тему',
+        limerick: 'Напиши лимерик (5 строк, схема AABBA) на тему',
+        song: 'Напиши текст песни (куплет + припев) на тему',
+        slogan: 'Придумай 5 слоганов/девизов для темы',
+      };
+      const prompt = `${stylePrompts[style] || 'Напиши текст на тему'}: "${theme}". Язык: ${language === 'ru' ? 'русский' : 'английский'}. Верни только текст, без пояснений.`;
+      const r = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+        model: 'mistral-small-latest', messages: [{role:'user',content:prompt}], max_tokens: 800, temperature: 0.9
+      }, { headers:{'Authorization':`Bearer ${MISTRAL_API_KEY}`,'Content-Type':'application/json'}, timeout:20000 });
+      const text = r.data.choices?.[0]?.message?.content || '';
+      const { fileId, safe } = aiSaveFile(username, `${style}_${theme.slice(0,20).replace(/\s+/g,'_')}.txt`, text, `${style}: ${theme}`);
+      aiSseEmit(username, 'log', { text: `${style} написан!`, type: 'result' });
+      return 'FILE_CREATED:' + fileId + ':' + safe + ':' + style + ' - ' + theme.slice(0,30) + ':' + text.length + '\n\n' + text;
+    }
+
+    // ── Математика с шагами ───────────────────────────────────────────────
+    if (name === 'math_solve') {
+      const { expression, action = 'solve' } = args;
+      aiSseEmit(username, 'log', { text: `Решаю: ${expression.slice(0,50)}`, type: 'process' });
+      // Используем Mistral для математики с пошаговым решением
+      const mathPrompt = `Выполни действие "${action}" для выражения: ${expression}
+Покажи пошаговое решение на русском языке. Формат: сначала шаги, потом ответ.`;
+      const r = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+        model: 'mistral-small-latest', messages: [{role:'user',content:mathPrompt}], max_tokens: 1000, temperature: 0.1
+      }, { headers:{'Authorization':`Bearer ${MISTRAL_API_KEY}`,'Content-Type':'application/json'}, timeout:20000 });
+      const result = r.data.choices?.[0]?.message?.content || 'Не удалось решить';
+      aiSseEmit(username, 'log', { text: 'Решение готово', type: 'result' });
+      return result;
+    }
+
+    // ── Сравнение ─────────────────────────────────────────────────────────
+    if (name === 'compare') {
+      const { item1, item2, aspect = 'общее сравнение' } = args;
+      aiSseEmit(username, 'log', { text: `Сравниваю: ${item1} vs ${item2}`, type: 'process' });
+      const prompt = `Сравни "${item1}" и "${item2}" по аспекту "${aspect}".
+Верни HTML таблицу сравнения с заголовком и CSS стилями. Включи плюсы и минусы каждого. Только HTML, без пояснений.`;
+      const r = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+        model: 'mistral-small-latest', messages: [{role:'user',content:prompt}], max_tokens: 1500, temperature: 0.3
+      }, { headers:{'Authorization':`Bearer ${MISTRAL_API_KEY}`,'Content-Type':'application/json'}, timeout:20000 });
+      const html = (r.data.choices?.[0]?.message?.content || '').replace(/```html?|```/g,'').trim();
+      const { fileId, safe } = aiSaveFile(username, `compare_${item1.slice(0,15)}_vs_${item2.slice(0,15)}.html`, html, `${item1} vs ${item2}`);
+      aiSseEmit(username, 'log', { text: `Сравнение готово`, type: 'result' });
+      return 'FILE_CREATED:' + fileId + ':' + safe + ':' + item1 + ' vs ' + item2 + ':' + html.length;
+    }
+
+    // ── image_generate через executeTool (для Mistral вызова) ─────────────
+    if (name === 'image_generate') {
+      aiSseEmit(username, 'log', { text: `Генерирую: ${(args.prompt||'').slice(0,50)}`, type: 'process' });
+      const limitErr2 = checkDailyLimit(username, 'image');
+      if (limitErr2) return limitErr2;
+      const seed2 = Math.floor(Math.random() * 999999);
+      const p2 = encodeURIComponent((args.prompt || '') + (args.style ? ', ' + args.style : ', high quality'));
+      const url2 = `https://image.pollinations.ai/prompt/${p2}?width=896&height=640&nologo=true&model=flux&seed=${seed2}`;
+      try {
+        const r2 = await axios.get(url2, { responseType:'arraybuffer', timeout:60000, headers:{'User-Agent':'Mozilla/5.0'} });
+        if (r2.data?.byteLength > 5000) {
+          const b64 = 'data:image/jpeg;base64,' + Buffer.from(r2.data).toString('base64');
+          aiSseEmit(username, 'media', { type:'image', base64:b64, prompt:args.prompt, remaining: DAILY_IMG_LIMIT - (aiDailyLimits.get(username)?.images||0) });
+          aiSseEmit(username, 'log', { text: '✅ Изображение отправлено в чат', type: 'result' });
+          return `Изображение сгенерировано и отправлено в чат.`;
+        }
+      } catch(e2) { return `Ошибка генерации: ${e2.message}`; }
+      return 'Не удалось сгенерировать изображение.';
+    }
+
     // ── Вопрос пользователю ───────────────────────────────────────────────
     if (name === 'ask_user') {
       // Поддерживаем оба формата: { questions: [...] } и старый { question, options }
@@ -2418,6 +2583,36 @@ function aiSseEmit(username, event, data) {
   try {
     client.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   } catch {}
+}
+
+// ── Дневные лимиты на генерацию медиа ─────────────────────────────────────────
+const aiDailyLimits  = new Map(); // username -> { date, images, videos }
+const DAILY_IMG_LIMIT   = 3;
+const DAILY_VIDEO_LIMIT = 1;
+
+function checkDailyLimit(username, type) {
+  const today = new Date().toDateString();
+  if (!aiDailyLimits.has(username)) aiDailyLimits.set(username, { date: today, images: 0, videos: 0 });
+  const lim = aiDailyLimits.get(username);
+  if (lim.date !== today) { lim.date = today; lim.images = 0; lim.videos = 0; }
+  if (type === 'image') {
+    if (lim.images >= DAILY_IMG_LIMIT) return `Лимит изображений исчерпан (${DAILY_IMG_LIMIT}/день). Попробуй завтра.`;
+    lim.images++;
+    return null;
+  }
+  if (type === 'video') {
+    if (lim.videos >= DAILY_VIDEO_LIMIT) return `Лимит видео исчерпан (${DAILY_VIDEO_LIMIT}/день). Попробуй завтра.`;
+    lim.videos++;
+    return null;
+  }
+  return null;
+}
+
+function getDailyLimitInfo(username) {
+  const today = new Date().toDateString();
+  const lim   = aiDailyLimits.get(username) || { images: 0, videos: 0 };
+  if (lim.date !== today) return `Осталось: ${DAILY_IMG_LIMIT} изображений, ${DAILY_VIDEO_LIMIT} видео`;
+  return `Осталось сегодня: ${DAILY_IMG_LIMIT - lim.images} изображений, ${DAILY_VIDEO_LIMIT - lim.videos} видео`;
 }
 
 // ── Прямая генерация изображения (обходит Mistral) ───────────────────────────
