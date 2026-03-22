@@ -1984,7 +1984,7 @@ video {
 
 /* Предотвращаем прокрутку чата при тапе на видео */
 .msg-square-wrap, .msg-circle-wrap {
-  touch-action: none; /* мы сами обрабатываем касания */
+  touch-action: manipulation; /* НЕ блокируем скролл */
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -2051,12 +2051,11 @@ video {
 }
 .msg-square-wrap:active { transform: scale(.97); }
 
-.msg-square-wrap.expanded {
-  width: min(70vw, 320px) !important;
-  height: min(70vw, 320px) !important;
-  border-radius: 18px !important;
-  box-shadow: 0 8px 32px rgba(0,0,0,.4);
-  z-index: 2;
+.msg-square-wrap.vc-expanded {
+  /* JS управляет размером через style.width/height */
+  border-radius: 14px !important;
+  z-index: 10;
+  position: relative;
 }
 
 .msg-square {
@@ -2089,8 +2088,9 @@ video {
 
 @media (max-width: 768px) {
   .square-preview-wrap { width: 180px; height: 180px; }
-  .msg-square-wrap { width: 160px; height: 160px; }
-  .msg-square-wrap.expanded { width: min(75vw,280px) !important; height: min(75vw,280px) !important; }
+  /* Мобильный — квадрат чуть меньше */
+  .msg-square-wrap { width: 160px !important; height: 160px !important; }
+  /* При расширении JS сам задаёт размер */
 }
 
 
@@ -2146,3 +2146,42 @@ video {
 
 /* Кнопка записи квадрат */
 [onclick="startCircleRecord()"] { border-radius: 10px; }
+
+/* ── Video Square expand: сообщения раздвигаются, скролл работает ── */
+.msg-square-wrap.vc-expanded {
+  /* Переходы управляются JS */
+  overflow: hidden;
+}
+
+/* Область сообщений — overflow-y: auto всегда чтобы скролл работал */
+#messages {
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Запрет только горизонтального скролла в чате */
+.msgs {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Vc overlay поверх expanded */
+.msg-square-wrap.vc-expanded .vc-overlay {
+  opacity: 0 !important;
+}
+
+/* Hint под fullscreen video */
+#messages .msg-square-wrap.vc-expanded::after {
+  content: '2× для полного экрана';
+  position: absolute;
+  bottom: 6px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,.55);
+  color: rgba(255,255,255,.7);
+  font-size: 10px; padding: 2px 10px;
+  border-radius: 99px; white-space: nowrap;
+  pointer-events: none;
+  font-family: -apple-system, sans-serif;
+}
