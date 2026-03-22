@@ -2423,7 +2423,7 @@ const _aiToolLabels = {
   wiki_search: '📖 Wikipedia', get_stock: '📈 Котировки',
   timezone_convert: '🕐 Часовые пояса', qr_generate: '🔲 QR-код',
   color_palette: '🎨 Палитра', unit_convert: '📐 Конвертер единиц',
-  dictionary: '📚 Словарь', analyze_archive: '📦 Архив'
+  dictionary: '📚 Словарь', analyze_archive: '📦 Архив', check_code: '🔬 Проверка кода'
 };
 
 // Добавляет коллапсируемый лог инструментов (как на скрине)
@@ -2730,6 +2730,7 @@ function _aiAddToolLog(tools) {
 let _aiSse = null;          // EventSource
 let _aiStreamBubble = null; // текущий стримящийся bubble div
 let _aiStreamContent = '';  // накопленный текст
+let _aiStreamingStarted = false; // флаг — SSE стриминг уже начался
 
 function _aiConnectSse() {
   if (_aiSse) return;
@@ -2746,6 +2747,7 @@ function _aiConnectSse() {
   _aiSse.addEventListener('chunk', (e) => {
     try {
       const { text } = JSON.parse(e.data);
+      _aiStreamingStarted = true;
       if (!_aiStreamBubble) {
         // Создаём bubble для стриминга
         _aiStreamContent = '';
@@ -2827,7 +2829,10 @@ function _aiAddLiveLog(d) {
 
   const item = document.createElement('div');
   item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--text2);animation:fadeIn .2s ease';
-  item.innerHTML = `<span style="font-size:14px">${d.icon || '⚡'}</span><span>${esc(d.text || '')}</span>`;
+  // Иконка по типу (маленький индикатор без emoji-роботов)
+  const typeColors = { search:'#6366f1', fetch:'#06b6d4', process:'#f59e0b', write:'#10b981', check:'#8b5cf6', think:'#9898b0', result:'#22c55e' };
+  const col = typeColors[d.type] || 'var(--text3)';
+  item.innerHTML = `<span style="width:6px;height:6px;border-radius:50%;background:${col};flex-shrink:0;display:inline-block;margin-top:5px"></span><span style="color:var(--text2)">${esc(d.text || '')}</span>`;
   _aiLiveLogList.appendChild(item);
   _aiLiveLogItems.push(item);
 
@@ -2867,6 +2872,7 @@ async function aiSend() {
   _aiAttachment = null;
   _aiUpdateAttachBar();
   _aiResetLiveLog();
+  _aiStreamingStarted = false;
   _aiLastCreatedFiles = []; // сбрасываем трекер файлов
   document.getElementById('aiZipBar')?.remove();
 
@@ -2903,7 +2909,8 @@ async function aiSend() {
       }
       // Если ответ уже пришёл через SSE streaming — _aiStreamBubble уже готов
       // Если нет SSE клиента — добавляем обычно
-      if (d.reply && !_aiStreamBubble && _aiStreamContent === '') {
+      // Добавляем ответ только если SSE стриминг не начался
+      if (d.reply && !_aiStreamingStarted) {
         _aiAddMessage('assistant', d.reply);
       }
       // Файлы
