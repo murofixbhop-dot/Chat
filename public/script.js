@@ -729,7 +729,14 @@ function renderFriends(filter = '') {
       </div>`;
       li.prepend(avaEl);
       li.onclick = () => { gotoPrivate(f); closeSidebarMobile(); };
-      li.addEventListener('contextmenu', e => showCtxFriend(e, f));
+      li.addEventListener('contextmenu', e => { e.preventDefault(); showCtxFriend(e, f); });
+      // Long press mobile
+      let _lptF = null;
+      li.addEventListener('touchstart', e => {
+        _lptF = setTimeout(() => { _lptF=null; const t=e.touches[0]; showCtxFriend({clientX:t.clientX,clientY:t.clientY,preventDefault:()=>{}},f); }, 600);
+      }, { passive:true });
+      li.addEventListener('touchend', () => { if(_lptF){clearTimeout(_lptF);_lptF=null;} }, { passive:true });
+      li.addEventListener('touchmove', () => { if(_lptF){clearTimeout(_lptF);_lptF=null;} }, { passive:true });
     } else {
       // Обновляем существующий без мигания
       li.classList.toggle('active', isActive);
@@ -1066,8 +1073,20 @@ function addMessage(msg) {
     a.replaceWith(vp);
   });
 
-  // ← УДОБСТВО: right-click context menu
-  bub.addEventListener('contextmenu', e => showCtxMsg(e, msg));
+  // ← УДОБСТВО: right-click (desktop) + long-press (mobile)
+  bub.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMsg(e, msg); });
+  // Long press для мобильного
+  let _lpt = null;
+  bub.addEventListener('touchstart', e => {
+    _lpt = setTimeout(() => {
+      _lpt = null;
+      // Симулируем позицию
+      const t = e.touches[0];
+      showCtxMsg({ clientX: t.clientX, clientY: t.clientY, preventDefault:()=>{} }, msg);
+    }, 600);
+  }, { passive: true });
+  bub.addEventListener('touchend',   () => { if(_lpt){ clearTimeout(_lpt); _lpt=null; } }, { passive: true });
+  bub.addEventListener('touchmove',  () => { if(_lpt){ clearTimeout(_lpt); _lpt=null; } }, { passive: true });
 
   if (!own) row.appendChild(ava);   // no avatar for own messages — no empty gap
   row.appendChild(bub);
@@ -1270,6 +1289,27 @@ function setupDragDrop() {
 // RECORDING (Voice + Circle)  ← УДОБСТВО
 // ══════════════════════════════════════════════
 const isMobile = 'ontouchstart' in window;
+
+// ── Visual Viewport API — предотвращаем прыжок при появлении клавиатуры ──────
+if (window.visualViewport && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+  let _lastVVH = window.visualViewport.height;
+  window.visualViewport.addEventListener('resize', () => {
+    const newH = window.visualViewport.height;
+    const diff = _lastVVH - newH;
+    _lastVVH = newH;
+    // Клавиатура показалась (экран уменьшился)
+    if (diff > 100) {
+      // Скроллим к активному элементу
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+        setTimeout(() => {
+          active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }, 100);
+      }
+    }
+  });
+}
+
 
 // Helper: get audio constraints using saved mic
 function audioConstraints() {
@@ -1585,33 +1625,43 @@ function showCtx(e) {
   ctxMenu.style.top  = '-9999px';
   ctxMenu.classList.add('open');
 
-  // После рендера — измеряем реальный размер и корректируем позицию
   requestAnimationFrame(() => {
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    const mw = ctxMenu.offsetWidth  || 180;
-    const mh = ctxMenu.offsetHeight || 80;
+    const W  = window.innerWidth;
+    const H  = window.innerHeight;
+    const mw = ctxMenu.offsetWidth  || 200;
+    const mh = ctxMenu.offsetHeight || 100;
 
-    // Исходная точка — cursor/touch
-    let x = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
-    let y = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
-
-    // Если меню выходит за правый край — открываем левее курсора
-    if (x + mw + 8 > W) x = Math.max(8, x - mw);
-    // Если меню выходит за нижний край — открываем выше курсора
-    if (y + mh + 8 > H) y = Math.max(8, y - mh);
-
-    // Финальные ограничения
-    x = Math.max(8, Math.min(x, W - mw - 8));
-    y = Math.max(8, Math.min(y, H - mh - 8));
-
-    ctxMenu.style.left = x + 'px';
-    ctxMenu.style.top  = y + 'px';
+    // Мобильный: всегда у нижнего края — удобнее для пальцев
+    if (isMobile || W < 600) {
+      ctxMenu.style.left   = '50%';
+      ctxMenu.style.top    = 'auto';
+      ctxMenu.style.bottom = '8px';
+      ctxMenu.style.transform = 'translateX(-50%)';
+      ctxMenu.style.width  = Math.min(W - 16, 320) + 'px';
+      ctxMenu.style.borderRadius = '16px';
+    } else {
+      ctxMenu.style.transform = '';
+      ctxMenu.style.width  = '';
+      ctxMenu.style.bottom = '';
+      let x = e.clientX ?? 0;
+      let y = e.clientY ?? 0;
+      if (x + mw + 8 > W) x = Math.max(8, x - mw);
+      if (y + mh + 8 > H) y = Math.max(8, y - mh);
+      x = Math.max(8, Math.min(x, W - mw - 8));
+      y = Math.max(8, Math.min(y, H - mh - 8));
+      ctxMenu.style.left = x + 'px';
+      ctxMenu.style.top  = y + 'px';
+    }
   });
 }
 
 function closeCtx() { ctxMenu.classList.remove('open'); }
 document.addEventListener('click', closeCtx);
+document.addEventListener('touchstart', e => {
+  if (ctxMenu && ctxMenu.classList.contains('open') && !ctxMenu.contains(e.target)) {
+    closeCtx();
+  }
+}, { passive: true });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx(); $('emojiPicker').classList.remove('open'); closeAiChat(); } });
 
 function copyMsgText(id) {
@@ -2220,8 +2270,9 @@ let _aiDebugMode = false;
 function openAiChat() {
   $('aiChatModal').classList.add('open');
   aiRefreshFileBadge();
-  _aiConnectSse(); // подключаемся к SSE стримингу
-  setTimeout(() => $('aiInput')?.focus(), 80);
+  _aiConnectSse();
+  // На мобильном не фокусируем автоматически — это вызывает прыжок клавиатуры
+  if (!isMobile) setTimeout(() => $('aiInput')?.focus(), 80);
 }
 
 function closeAiChat() {
@@ -3600,23 +3651,29 @@ async function deleteAccount() {
 // ══════════════════════════════════════════════════════════
 
 // ══════════════════════════════════════════════
-// ICE / TURN  — динамические TURN credentials
-// ══════════════════════════════════════════════
-// Статичный fallback (бесплатный openrelay — работает, но ненадёжно)
+// ICE / TURN — расширенный список серверов для работы за NAT/firewall
+// ══════════════════════════════════════════════════════════════════════
 const ICE_SERVERS_STATIC = [
+  // ── STUN серверы (для обнаружения внешнего IP) ──────────────────────
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' },
-  // openrelay — бесплатный публичный TURN (нет SLA, но лучше чем ничего)
-  { urls: 'stun:openrelay.metered.ca:3478' },
-  { urls: 'turn:openrelay.metered.ca:3478',       credential: 'openrelayproject', username: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443',         credential: 'openrelayproject', username: 'openrelayproject' },
-  { urls: 'turns:openrelay.metered.ca:443',        credential: 'openrelayproject', username: 'openrelayproject' },
-  // Freeturn — ещё один публичный TURN
-  { urls: 'turn:freeturn.net:3478',                credential: 'free',             username: 'free' },
-  { urls: 'turns:freeturn.tel:5349',               credential: 'free',             username: 'free' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  // ── openrelay TURN (бесплатный, UDP + TCP + TLS) ─────────────────────
+  { urls: 'turn:openrelay.metered.ca:80',          username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443',         username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443',        username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:3478',        username: 'openrelayproject', credential: 'openrelayproject' },
+  // ── freeturn (резерв) ──────────────────────────────────────────────
+  { urls: 'turn:freeturn.net:3478',                username: 'free', credential: 'free' },
+  { urls: 'turn:freeturn.net:5349?transport=tcp',  username: 'free', credential: 'free' },
+  { urls: 'turns:freeturn.tel:5349',               username: 'free', credential: 'free' },
+  // ── Numb (публичный TURN от Philipp Hancke) ───────────────────────
+  { urls: 'turn:numb.viagenie.ca', username: 'webrtc@live.com', credential: 'muazkh' },
+  // ── Xirsys free tier ─────────────────────────────────────────────
+  { urls: 'stun:ss-turn1.xirsys.com' },
 ];
 
 let ICE_SERVERS = ICE_SERVERS_STATIC; // будет обновлён ниже если есть API ключ
@@ -3751,6 +3808,10 @@ async function startCall(isVid) {
 async function _initiateGroupPeer(member) {
   const pc = new RTCPeerConnection({
     iceServers: ICE_SERVERS,
+    iceTransportPolicy: 'all',       // пробуем все пути включая TURN
+    iceCandidatePoolSize: 10,        // больше кандидатов = быстрее соединение
+    bundlePolicy: 'max-bundle',      // объединяем аудио+видео в один поток
+    rtcpMuxPolicy: 'require',        // экономим порты
     iceCandidatePoolSize: 10,
     sdpSemantics: 'unified-plan',
   });
@@ -4097,6 +4158,10 @@ function _createPeer() {
   if (rtcPeer) { try { rtcPeer.close(); } catch {} }
   rtcPeer = new RTCPeerConnection({
     iceServers: ICE_SERVERS,
+    iceTransportPolicy: 'all',
+    iceCandidatePoolSize: 10,
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
     iceCandidatePoolSize: 10,
     sdpSemantics: 'unified-plan',
   });
