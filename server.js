@@ -194,9 +194,36 @@ async function getBucketId(bucketName, auth) {
   if (!bucket) throw new Error(`Бакет "${bucketName}" не найден`);
   return bucket.bucketId;
 }
+// Кэш download-токенов по имени бакета { bucketName -> { token, expires } }
+const b2DownloadTokens = new Map();
+
+async function getB2DownloadToken(bucketId, bucketName) {
+  // Возвращаем кэшированный токен если ещё не истёк (даём 10 мин запаса)
+  const cached = b2DownloadTokens.get(bucketName);
+  if (cached && cached.expires > Date.now() + 600000) return cached.token;
+
+  try {
+    const r = await axios.post(
+      `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
+      { bucketId, fileNamePrefix: '', validDurationInSeconds: 604800 }, // 7 дней
+      { headers: { Authorization: b2Auth.authorizationToken }, timeout: 10000 }
+    );
+    const token = r.data.authorizationToken;
+    b2DownloadTokens.set(bucketName, { token, expires: Date.now() + 604800000 });
+    console.log(`[B2] Download-токен для "${bucketName}" получен`);
+    return token;
+  } catch(e) {
+    console.warn(`[B2] Не удалось получить download-токен для "${bucketName}": ${e.message}`);
+    // Fallback: используем master auth token
+    return b2Auth.authorizationToken;
+  }
+}
+
 async function reAuthB2() {
   b2Auth     = await authorizeB2();
   b2BucketId = await getBucketId(B2_BUCKET_NAME);
+  // Очищаем кэш токенов при переавторизации
+  b2DownloadTokens.clear();
   if (USE_B2_DUAL) {
     try {
       b2BucketId2 = await getBucketId(B2_BUCKET_NAME2);
@@ -264,11 +291,12 @@ async function storageUpload(fileName, buffer, contentType) {
 async function storageDownload(fileName) {
   if (USE_SB) return sbDownload(fileName);
   if (USE_R2) return r2Download(fileName);
-  // B2 — определяем правильный бакет
+  // B2 — определяем правильный бакет и получаем download-токен
   if (!b2Auth) await reAuthB2();
-  const { bucketName } = b2GetBucketForFile(fileName);
+  const { bucketId, bucketName } = b2GetBucketForFile(fileName);
+  const token = await getB2DownloadToken(bucketId, bucketName);
   const url = `${b2Auth.downloadUrl}/file/${bucketName}/${encodeURIComponent(fileName)}`;
-  return { url, token: b2Auth.authorizationToken };
+  return { url, token };
 }
 
 async function initStorage() {
@@ -289,10 +317,13 @@ async function initStorage() {
     b2BucketId = await getBucketId(B2_BUCKET_NAME);
     B2_BUCKET_NAME_ACTIVE = B2_BUCKET_NAME;
     console.log(`✅ B2 бакет 1: "${B2_BUCKET_NAME}" (видео, квадраты)`);
+    // Получаем download-токен для бакета 1
+    await getB2DownloadToken(b2BucketId, B2_BUCKET_NAME);
     if (USE_B2_DUAL) {
       try {
         b2BucketId2 = await getBucketId(B2_BUCKET_NAME2);
         console.log(`✅ B2 бакет 2: "${B2_BUCKET_NAME2}" (фото, аудио, файлы)`);
+        await getB2DownloadToken(b2BucketId2, B2_BUCKET_NAME2);
       } catch(e) {
         console.warn(`⚠️  B2 бакет 2 недоступен: ${e.message}`);
       }
