@@ -212,23 +212,29 @@ async function b2SetBucketPublic(bucketId, bucketName) {
 const b2DownloadTokens = new Map();
 
 async function getB2DownloadToken(bucketId, bucketName) {
-  // Возвращаем кэшированный токен если ещё не истёк (даём 10 мин запаса)
   const cached = b2DownloadTokens.get(bucketName);
   if (cached && cached.expires > Date.now() + 600000) return cached.token;
 
   try {
     const r = await axios.post(
-      `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
-      { bucketId, fileNamePrefix: '', validDurationInSeconds: 604800 }, // 7 дней
+      b2Auth.apiUrl + '/b2api/v2/b2_get_download_authorization',
+      {
+        bucketId,
+        fileNamePrefix: '',      // пустой = доступ ко всем файлам бакета
+        validDurationInSeconds: 604800  // 7 дней
+      },
       { headers: { Authorization: b2Auth.authorizationToken }, timeout: 10000 }
     );
     const token = r.data.authorizationToken;
+    // Проверяем что получили ДРУГОЙ токен (не мастер)
+    if (token === b2Auth.authorizationToken) {
+      console.warn('[B2] Download-токен совпадает с мастер-токеном — возможна проблема с ключом');
+    }
     b2DownloadTokens.set(bucketName, { token, expires: Date.now() + 604800000 });
-    console.log(`[B2] Download-токен для "${bucketName}" получен`);
+    console.log('[B2] Download-токен для "' + bucketName + '" получен, длина:', token.length);
     return token;
   } catch(e) {
-    console.warn(`[B2] Не удалось получить download-токен для "${bucketName}": ${e.message}`);
-    // Fallback: используем master auth token
+    console.warn('[B2] Ошибка получения download-токена для "' + bucketName + '":', e.response?.status, e.response?.data?.message || e.message);
     return b2Auth.authorizationToken;
   }
 }
@@ -315,8 +321,10 @@ async function storageDownload(fileName) {
   if (!b2Auth) await reAuthB2();
   const { bucketName } = b2GetBucketForFile(fileName);
   // API endpoint для приватных бакетов (работает с master token)
+  const { bucketId } = b2GetBucketForFile(fileName);
+  const dlToken = await getB2DownloadToken(bucketId, bucketName);
   const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + encodeURIComponent(fileName);
-  return { url, token: b2Auth.authorizationToken };
+  return { url, token: dlToken };
 }
 
 async function initStorage() {
@@ -506,11 +514,13 @@ async function loadUsers() {
   try {
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(USERS_FILE);
+    const { bucketId } = b2GetBucketForFile(USERS_FILE);
+    const dlToken = await getB2DownloadToken(bucketId, bucketName);
     const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + USERS_FILE;
     console.log('[B2 load] users URL:', url);
     const response = await axios.get(url, {
       timeout: 15000,
-      headers: { Authorization: b2Auth.authorizationToken }
+      headers: { Authorization: dlToken }
     });
     if (response.data && typeof response.data === 'object') {
       users = new Map(Object.entries(response.data));
@@ -3665,10 +3675,12 @@ async function loadHistory() {
   try {
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
+    const { bucketId } = b2GetBucketForFile(HISTORY_FILE);
+    const dlToken = await getB2DownloadToken(bucketId, bucketName);
     const url = b2Auth.downloadUrl + '/file/' + bucketName + '/' + HISTORY_FILE;
     const response = await axios.get(url, {
       timeout: 15000,
-      headers: { Authorization: b2Auth.authorizationToken }
+      headers: { Authorization: dlToken }
     });
     if (response.data && Array.isArray(response.data)) {
       messageHistory = response.data.slice(-MAX_HISTORY);
