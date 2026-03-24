@@ -57,8 +57,10 @@ document.addEventListener('visibilitychange', () => {
       socket.emit('identify', currentUser);
       if (currentRoom) socket.emit('join-room', currentRoom);
     }
-    loadUserData();
+    // Не перезагружаем данные если идёт звонок (может сбросить состояние)
+    if (!_inCall) loadUserData();
   }
+  // Звонок продолжается в фоне — ничего не делаем
 });
 socket.on('connect_error', () => {
   if (splashText) splashText.textContent = 'Ошибка соединения…';
@@ -681,6 +683,14 @@ function setAvatar(el, name, url) {
 // ══════════════════════════════════════════════
 // RENDER LISTS  ← УДОБСТВО
 // ══════════════════════════════════════════════
+// Двигаем чат собеседника на первое место в списке
+const _chatOrder = []; // username в порядке последнего сообщения
+function _moveChatToTop(username) {
+  const idx = _chatOrder.indexOf(username);
+  if (idx > -1) _chatOrder.splice(idx, 1);
+  _chatOrder.unshift(username);
+}
+
 function renderFriends(filter = '') {
   const ul = friendsList;
   const list = filter
@@ -690,8 +700,20 @@ function renderFriends(filter = '') {
       })
     : friends;
 
+  // Сортируем: сначала с непрочитанными/последними сообщениями
+  const sortedList = [...list].sort((a, b) => {
+    const ai = _chatOrder.indexOf(a);
+    const bi = _chatOrder.indexOf(b);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+  const list2 = filter ? list : sortedList;
+
   // ── Smart diff: не перерисовываем если список не изменился ──
-  const newKey = list.join('|') + '|' + (currentRoom || '');
+  const unreadKey = [...unreadCounts.entries()].map(([k,v])=>k+':'+v).join(',');
+  const newKey = list2.join('|') + '|' + (currentRoom || '') + '|' + unreadKey;
   if (ul._lastKey === newKey && !filter) return;
   ul._lastKey = newKey;
 
@@ -708,7 +730,7 @@ function renderFriends(filter = '') {
   });
 
   // Добавляем/обновляем без удаления — просто переставляем порядок
-  list.forEach((f, idx) => {
+  list2.forEach((f, idx) => {
     const room     = getRoomId(f);
     const dispName = userNicknames[f] || f;
     const isActive = currentRoom === room;
@@ -726,7 +748,8 @@ function renderFriends(filter = '') {
       li.innerHTML = `<div class="ci-body">
         <span class="ci-name">${esc(dispName)}</span>
         <span class="ci-sub">${dispName !== f ? '<span style="color:var(--text3)">@' + esc(f) + '</span>' : 'Личный чат'}</span>
-      </div>`;
+      </div>
+      <div class="ci-badge" id="badge_${f}" style="display:none"></div>`;
       li.prepend(avaEl);
       li.onclick = () => { gotoPrivate(f); closeSidebarMobile(); };
       li.addEventListener('contextmenu', e => { e.preventDefault(); showCtxFriend(e, f); });
@@ -743,6 +766,19 @@ function renderFriends(filter = '') {
       const nameEl = li.querySelector('.ci-name');
       if (nameEl && nameEl.textContent !== dispName) nameEl.textContent = dispName;
     }
+    // Обновляем бейдж непрочитанных
+    const badge = li.querySelector('.ci-badge') || document.getElementById('badge_' + f);
+    if (badge) {
+      const cnt = unreadCounts.get(f) || 0;
+      if (cnt > 0 && currentRoom !== getRoomId(f)) {
+        badge.textContent = cnt > 99 ? '99+' : cnt;
+        badge.style.display = 'flex';
+        li.classList.add('has-unread');
+      } else {
+        badge.style.display = 'none';
+        li.classList.remove('has-unread');
+      }
+    }
 
     // Убеждаемся что порядок правильный
     const atIdx = ul.children[idx];
@@ -751,7 +787,7 @@ function renderFriends(filter = '') {
 
   // Удаляем исчезнувших друзей
   ul.querySelectorAll('li[data-friend]').forEach(li => {
-    if (!list.includes(li.dataset.friend)) li.remove();
+    if (!list2.includes(li.dataset.friend)) li.remove();
   });
 
   // Убираем пустой-стейт li если он есть
@@ -988,6 +1024,13 @@ function fileUrl(url) {
   return url;
 }
 
+// Звонок от сервера (из истории или реалтайм)
+socket.on('call-record', msg => {
+  if (msg.room !== currentRoom) return;
+  // Рендерим как обычное сообщение с типом call_record
+  addMessage(msg);
+});
+
 function addMessage(msg) {
   if (msgsEmpty) msgsEmpty.style.display = 'none';
   const own = msg.user === currentUser;
@@ -1075,18 +1118,32 @@ function addMessage(msg) {
 
   // ← УДОБСТВО: right-click (desktop) + long-press (mobile)
   bub.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMsg(e, msg); });
-  // Long press для мобильного
-  let _lpt = null;
+  // Long press + swipe-right для мобильного
+  let _lpt = null, _tx0 = 0, _ty0 = 0, _didSwipe = false;
   bub.addEventListener('touchstart', e => {
+    _tx0 = e.touches[0].clientX; _ty0 = e.touches[0].clientY; _didSwipe = false;
     _lpt = setTimeout(() => {
-      _lpt = null;
-      // Симулируем позицию
-      const t = e.touches[0];
-      showCtxMsg({ clientX: t.clientX, clientY: t.clientY, preventDefault:()=>{} }, msg);
+      if (!_didSwipe) {
+        _lpt = null;
+        const t = e.touches[0];
+        showCtxMsg({ clientX: t.clientX, clientY: t.clientY, preventDefault:()=>{} }, msg);
+      }
     }, 600);
   }, { passive: true });
-  bub.addEventListener('touchend',   () => { if(_lpt){ clearTimeout(_lpt); _lpt=null; } }, { passive: true });
-  bub.addEventListener('touchmove',  () => { if(_lpt){ clearTimeout(_lpt); _lpt=null; } }, { passive: true });
+  bub.addEventListener('touchmove', e => {
+    const dx = e.touches[0].clientX - _tx0;
+    const dy = Math.abs(e.touches[0].clientY - _ty0);
+    if (dx > 55 && dy < 40 && !_didSwipe) {
+      _didSwipe = true;
+      clearTimeout(_lpt); _lpt = null;
+      startReply(msg);
+      bub.style.transition = 'transform .18s cubic-bezier(.16,1,.3,1)';
+      bub.style.transform = 'translateX(36px)';
+      setTimeout(() => { bub.style.transition = 'transform .2s'; bub.style.transform = ''; }, 200);
+    }
+    if (dx > 8 || dy > 8) { clearTimeout(_lpt); _lpt = null; }
+  }, { passive: true });
+  bub.addEventListener('touchend', () => { clearTimeout(_lpt); _lpt = null; }, { passive: true });
 
   if (!own) row.appendChild(ava);   // no avatar for own messages — no empty gap
   row.appendChild(bub);
@@ -1291,21 +1348,44 @@ function setupDragDrop() {
 const isMobile = 'ontouchstart' in window;
 
 // ── Visual Viewport API — предотвращаем прыжок при появлении клавиатуры ──────
-if (window.visualViewport && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+if (window.visualViewport && /Android/i.test(navigator.userAgent)) {
   let _lastVVH = window.visualViewport.height;
+  let _kbOpen = false;
+
   window.visualViewport.addEventListener('resize', () => {
     const newH = window.visualViewport.height;
     const diff = _lastVVH - newH;
     _lastVVH = newH;
-    // Клавиатура показалась (экран уменьшился)
-    if (diff > 100) {
-      // Скроллим к активному элементу
-      const active = document.activeElement;
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-        setTimeout(() => {
-          active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }, 100);
+
+    if (diff > 100 && !_kbOpen) {
+      // Клавиатура открылась — фиксируем нижнюю часть интерфейса
+      _kbOpen = true;
+      const chatApp = document.getElementById('chatApp');
+      const msgs = document.getElementById('messages');
+      if (chatApp) {
+        chatApp.style.height = newH + 'px';
+        chatApp.style.position = 'fixed';
+        chatApp.style.top = window.visualViewport.offsetTop + 'px';
       }
+      // Скроллим сообщения вниз после анимации клавиатуры
+      if (msgs) setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 300);
+    } else if (diff < -100 && _kbOpen) {
+      // Клавиатура закрылась — восстанавливаем
+      _kbOpen = false;
+      const chatApp = document.getElementById('chatApp');
+      if (chatApp) {
+        chatApp.style.height = '';
+        chatApp.style.position = '';
+        chatApp.style.top = '';
+      }
+    }
+  });
+
+  // iOS/Android: при фокусе на инпуте скроллим вниз
+  document.addEventListener('focusin', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      const msgs = document.getElementById('messages');
+      if (msgs) setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 350);
     }
   });
 }
@@ -1564,10 +1644,53 @@ function insertEmoji(em) {
 // ══════════════════════════════════════════════
 const ctxMenu = $('ctxMenu');
 
+let _replyMsg = null;
+
+function startReply(msg) {
+  _replyMsg = msg;
+  let bar = document.getElementById('replyBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'replyBar';
+    const inputZone = document.querySelector('.input-zone') || document.querySelector('.msg-input-wrap') || document.getElementById('inputArea');
+    if (inputZone) inputZone.insertBefore(bar, inputZone.firstChild);
+    else document.body.appendChild(bar);
+  }
+  const nick = userNicknames?.[msg.user] || msg.user;
+  const prev = msg.text ? msg.text.slice(0,60) : (msg.type === 'audio' ? '🎤 Голосовое' : msg.type === 'video_circle' ? '📹 Видео' : '📎 Вложение');
+  bar.innerHTML = `<i class="ti ti-arrow-back-up" style="color:var(--accent);font-size:16px;flex-shrink:0"></i>
+    <div style="flex:1;min-width:0;overflow:hidden">
+      <div style="color:var(--accent);font-size:11px;font-weight:700">${esc(nick)}</div>
+      <div style="color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(prev)}</div>
+    </div>
+    <button onclick="cancelReply()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:0 4px;line-height:1"><i class="ti ti-x"></i></button>`;
+  bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--surface2);border-top:2px solid var(--accent);';
+  document.getElementById('msgInput')?.focus();
+}
+
+function cancelReply() {
+  _replyMsg = null;
+  const bar = document.getElementById('replyBar');
+  if (bar) bar.style.display = 'none';
+}
+
+function scrollToMsg(id) {
+  const el = document.querySelector('[data-id="' + id + '"]');
+  if (!el) { toast('Сообщение не найдено', 'info', 1500); return; }
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const bub = el.querySelector('.msg-bubble');
+  if (bub) {
+    bub.style.transition = 'outline .1s';
+    bub.style.outline = '2px solid var(--accent)';
+    setTimeout(() => { bub.style.outline = ''; }, 1200);
+  }
+}
+
 function showCtxMsg(e, msg) {
   e.preventDefault();
   const own = msg.user === currentUser;
   ctxMenu.innerHTML = `
+    <div class="ctx-item" onclick="startReply(JSON.parse(this.dataset.m));closeCtx()" data-m="${esc(JSON.stringify(msg).replace(/"/g,'&quot;'))}"><i class="ti ti-arrow-back-up"></i> Ответить</div>
     <div class="ctx-item" onclick="copyMsgText('${msg.id}')"><i class="ti ti-copy"></i> Копировать текст</div>
     ${own ? `
     <div class="ctx-sep"></div>
@@ -3852,6 +3975,20 @@ function stopRing() {
 }
 
 // ── OUTGOING ────────────────────────────────────────────
+// ── Wake Lock: не даём устройству спать во время звонка ─────────────────
+let _wakeLock = null;
+async function _acquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator && !_wakeLock) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    }
+  } catch(e) { /* не поддерживается — игнорируем */ }
+}
+function _releaseWakeLock() {
+  if (_wakeLock) { _wakeLock.release(); _wakeLock = null; }
+}
+
 async function startCall(isVid) {
   const target = callTarget();
   if (!target) { toast('Открой чат для звонка', 'warning'); return; }
@@ -3891,6 +4028,13 @@ async function startCall(isVid) {
       _groupMembers = [];
       socket.emit('call-invite', { to: target, from: currentUser, isVid });
       _showOutgoingUI(target, isVid);
+      // Авто-сброс через 60 секунд если нет ответа
+      _callAutoTimeout = setTimeout(() => {
+        if (_inCall && !_connected) {
+          toast('Нет ответа', 'info', 3000);
+          endCall();
+        }
+      }, 60000);
     }
   } catch(err) {
     toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error');
@@ -4222,7 +4366,23 @@ socket.on('call-ice', async ({ from, candidate }) => {
 });
 
 // End
-socket.on('call-end', () => _cleanup());
+socket.on('call-end', () => {
+  // Callee side: если нам звонили но мы не приняли → пропущенный
+  if (_inCall && !_connected && !_isCaller && _callTarget && currentRoom) {
+    const now = new Date();
+    const ts  = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
+    const ds  = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
+    const icon = _callIsVid ? '📹' : '📞';
+    const type = _callIsVid ? 'Видеозвонок' : 'Аудиозвонок';
+    addCallRecord(`${type} · Пропущенный`, ` · ${ds}, ${ts}`, ts);
+    socket.emit('save-call-record', {
+      room: currentRoom, from: _callTarget, to: currentUser,
+      isVid: _callIsVid, isCaller: false, connected: false,
+      dur: 0, missed: true, timestamp: Date.now()
+    });
+  }
+  _cleanup();
+});
 
 // Caller started screen share (replaceTrack path — no ontrack fired)
 socket.on('screen-share-started', ({ from }) => {
@@ -4889,16 +5049,23 @@ function _cleanup() {
     const durStr = dur > 0
       ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur%60} сек`)
       : '';
-    const icon  = _callIsVid ? '📹' : '📞';
     const timeStr = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
     const dateStr = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
-    const label   = _isCaller ? 'Исходящий звонок' : 'Входящий звонок';
     const typeStr = _callIsVid ? 'Видеозвонок' : 'Аудиозвонок';
-    const durLabel = durStr ? ` · ${durStr}` : ' · Не принят';
-    addCallRecord(icon, `${label} · ${typeStr}`, `${durLabel} · ${dateStr}, ${timeStr}`, timeStr);
+    const durLabel = durStr ? ` · ${durStr}` : ' · Нет ответа';
+    addCallRecord(typeStr, `${durLabel} · ${dateStr}, ${timeStr}`, timeStr);
+    // Сохраняем на сервере — не исчезнет при перезагрузке
+    socket.emit('save-call-record', {
+      room: currentRoom, from: currentUser, to: _callTarget,
+      isVid: _callIsVid, isCaller: _isCaller,
+      connected: !!_callConnectedTime, dur,
+      timestamp: Date.now()
+    });
   }
   _callConnectedTime = null;
 
+  if (_callAutoTimeout) { clearTimeout(_callAutoTimeout); _callAutoTimeout = null; }
+  _releaseWakeLock();
   _inCall = false; _connected = false; _screenSharing = false; _muted = false; _callNoCamera = false;
   rtcPeer?.close(); rtcPeer = null;
   // Close all group peer connections
@@ -4918,9 +5085,11 @@ function _cleanup() {
 }
 
 let _callConnectedTime = null;
-let _callNoCamera = false; // true если у нас нет камеры — показываем аватарку
+let _callNoCamera = false;
+let _callAutoTimeout = null; // авто-сброс через 60с если не ответили
 
-function addCallRecord(icon, label, extra, time) {
+function addCallRecord(label, extra, time) {
+  const icon = label.includes('Видео') ? '🎬' : '🎙';
   const row = document.createElement('div');
   row.className = 'call-record';
   row.innerHTML = `
