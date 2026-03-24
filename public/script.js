@@ -1763,7 +1763,7 @@ function showCtxMsg(e, msg) {
   e.preventDefault();
   const own = msg.user === currentUser;
   ctxMenu.innerHTML = `
-    <div class="ctx-item" onclick="startReply(JSON.parse(this.dataset.m));closeCtx()" data-m="${esc(JSON.stringify(msg).replace(/"/g,'&quot;'))}"><i class="ti ti-arrow-back-up"></i> Ответить</div>
+    <div class="ctx-item" onclick="_replyFromId('${String(msg.id).replace(/'/g,'')}');closeCtx()"><i class="ti ti-arrow-back-up"></i> Ответить</div>
     <div class="ctx-item" onclick="copyMsgText('${msg.id}')"><i class="ti ti-copy"></i> Копировать текст</div>
     ${own ? `
     <div class="ctx-sep"></div>
