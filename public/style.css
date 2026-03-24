@@ -521,7 +521,7 @@ option { background: var(--surface2); color: var(--text); }
   position: relative; padding: 0 12px 12px;
   flex-shrink: 0;
 }
-.sb-search-ico { position: absolute; left: 24px; top: 50%; transform: translateY(-62%); color: var(--text3); font-size: 15px; pointer-events: none; } /* поднята на 1px */
+.sb-search-ico { position: absolute; left: 24px; top: calc(50% - 12px); color: var(--text3); font-size: 15px; pointer-events: none; }
 .sb-search-input {
   width: 100%; padding: 10px 14px 10px 38px;
   background: var(--surface3); color: var(--text);
@@ -1116,63 +1116,6 @@ option { background: var(--surface2); color: var(--text); }
    MOBILE  ← УДОБСТВО: mobile-first
 ════════════════════════════════════════════════ */
 
-/* ── AI Model Selector ─────────────────────────────────────── */
-#aiModelSelect {
-  border: 1.5px solid var(--border);
-  background: var(--surface2);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-  outline: none;
-  flex-shrink: 0;
-  transition: border-color .2s;
-  appearance: auto;
-  -webkit-appearance: auto;
-  max-width: 110px;
-}
-#aiModelSelect:focus { border-color: var(--accent); }
-
-@media (max-width: 768px) {
-  :root { --sb-w: 84vw; }
-
-  .sidebar {
-    position: fixed; left: 0; top: 0; bottom: 0;
-    transform: translateX(-100%);
-    box-shadow: 8px 0 40px rgba(0,0,0,.4);
-    z-index: 200;
-  }
-  .sidebar.open { transform: translateX(0); }
-
-  .sidebar-overlay {
-    display: none; position: fixed; inset: 0; z-index: 199;
-    background: rgba(0,0,0,.4);
-    backdrop-filter: blur(2px);
-  }
-  .sidebar-overlay.open { display: block; }
-
-  .hamburger { display: flex !important; }
-  .search-kbd { display: none; }
-  .sb-search kbd { display: none; }
-
-  .msg-bubble { max-width: 86%; }
-  .msgs { padding: 12px; }
-  .input-zone { padding: 8px 10px 12px; }
-  .chat-hdr { padding: 10px 14px; min-height: 56px; }
-  #toastContainer { top: 12px; right: 12px; left: 12px; align-items: flex-end; }
-  .toast { max-width: 100%; }
-  /* Smaller call window on mobile */
-  .call-win-float {
-    top: 8px; right: 8px;
-    width: 200px; height: 150px;
-    border-radius: 14px;
-  }
-  .cw-btns .cw-btn { width: 30px; height: 30px; font-size: 13px; }
-  .cw-name { font-size: 13px; }
-  .cw-ava  { width: 44px; height: 44px; font-size: 18px; }
-}
 
 /* ════════════════════════════════════════════════
    KEYBOARD SHORTCUTS OVERLAY  ← УДОБСТВО
@@ -2267,4 +2210,56 @@ video {
 
 /* ── Call record in chat (no phone emoji version) ──────────── */
 .call-record .cr-icon { font-size: 15px; }
+
+
+/* ── Reply quote inside message bubble ──────────────────────── */
+
+/* ── Reply bar above input ──────────────────────────────────── */
+#replyBar {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--surface2);
+  border-left: 3px solid var(--accent);
+  font-size: 13px;
+  animation: slideUp .15s ease;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ── AI Model Selector ──────────────────────────────────────── */
+#aiModelSelect {
+  position: relative;
+  bottom: 16px;
+  border: 1.5px solid var(--border);
+  background: var(--surface3);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 7px 12px 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+  transition: border-color .2s, background .2s;
+  min-width: 90px;
+  appearance: auto;
+  -webkit-appearance: auto;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+#aiModelSelect:hover { border-color: var(--accent); background: var(--surface2); }
+#aiModelSelect:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+@media (max-width: 768px) {
+  #aiModelSelect {
+    font-size: 12px;
+    padding: 5px 8px;
+    min-width: 76px;
+    bottom: 14px;
+  }
+}
 
