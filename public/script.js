@@ -2483,7 +2483,7 @@ function openAiChat() {
 
       const wrap = document.createElement('div');
       wrap.id = 'aiModelWrap';
-      wrap.style.cssText = 'position:relative;flex-shrink:0;bottom:10px;';
+      wrap.style.cssText = 'position:relative;flex-shrink:0;bottom:7px;';
 
       const btn = document.createElement('button');
       btn.id = 'aiModelBtn';
@@ -2525,15 +2525,27 @@ function openAiChat() {
 
       btn.onclick = (e) => {
         e.stopPropagation();
-        const open = drop.style.display === 'block';
-        drop.style.display = open ? 'none' : 'block';
-        btn.style.borderColor = open ? 'var(--border)' : 'var(--accent)';
-        btn.style.background  = open ? 'var(--surface3)' : 'var(--surface2)';
+        const open = drop.classList.contains('ai-drop-open');
+        if (open) {
+          drop.classList.remove('ai-drop-open');
+          drop.style.display = 'none';
+          btn.style.borderColor = 'var(--border)';
+          btn.style.background  = 'var(--surface3)';
+        } else {
+          drop.classList.add('ai-drop-open');
+          drop.style.display = 'block';
+          btn.style.borderColor = 'var(--accent)';
+          btn.style.background  = 'var(--surface2)';
+        }
       };
-      document.addEventListener('click', () => {
-        drop.style.display='none';
-        btn.style.borderColor='var(--border)';
-        btn.style.background='var(--surface3)';
+      drop.addEventListener('click', e => e.stopPropagation());
+      document.addEventListener('click', (e) => {
+        if (!wrap.contains(e.target)) {
+          drop.classList.remove('ai-drop-open');
+          drop.style.display='none';
+          btn.style.borderColor='var(--border)';
+          btn.style.background='var(--surface3)';
+        }
       });
 
       // Скрытый select для получения значения
