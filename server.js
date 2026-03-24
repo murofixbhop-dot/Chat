@@ -2703,6 +2703,26 @@ app.post('/api/ai-chat', async (req, res) => {
 
   try {
     const isDebug  = session.debugMode;
+
+    // Если выбрана Aura AI (MiniMax) — отвечаем напрямую без инструментов
+    if (useAuraAI) {
+      let reply = '';
+      try {
+        reply = await callMiniMax(
+          [{ role: 'system', content: currentSystemPrompt }, ...history],
+          true,
+          delta => aiSseEmit(username, 'chunk', { text: delta })
+        );
+      } catch(mmErr) {
+        console.error('[MiniMax] Ошибка:', mmErr.response?.data || mmErr.message);
+        reply = '⚠️ Aura AI временно недоступна. Попробуй позже или выбери Mistral.';
+      }
+      if (!reply) reply = 'Готово';
+      history.push({ role: 'assistant', content: reply });
+      aiSseEmit(username, 'done', {});
+      return res.json({ success: true, reply, toolsUsed: [], createdFiles: [] });
+    }
+
     const model    = imageData ? 'pixtral-12b-2409' : (isDebug ? 'mistral-large-latest' : 'mistral-small-latest');
     const resp1 = await axios.post('https://api.mistral.ai/v1/chat/completions', {
       model,
@@ -2826,18 +2846,8 @@ app.post('/api/ai-chat', async (req, res) => {
       res.json({ success: true, reply, toolsUsed, createdFiles });
     } else {
       // Прямой ответ без инструментов
-      let reply;
-      if (useAuraAI) {
-        // MiniMax прямой вызов
-        reply = await callMiniMax(
-          [{ role: 'system', content: currentSystemPrompt }, ...history],
-          true,
-          delta => aiSseEmit(username, 'chunk', { text: delta })
-        ) || 'Готово';
-      } else {
-        reply = msg1?.content || 'Нет ответа';
-      }
-      history.push({ role: 'assistant', content: _reply });
+      const reply = msg1?.content || 'Нет ответа';
+      history.push({ role: 'assistant', content: reply });
       if (aiSseClients.has(username)) {
         // Имитируем стриминг — разбиваем на слова
         const words = (_reply || reply || '').split(' ');
