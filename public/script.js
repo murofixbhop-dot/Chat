@@ -100,6 +100,8 @@ let currentUser    = null;
 let _historyLoading = false; // true while loading history — подавляем уведомления
 let userData       = { nickname:'', avatar:null, theme:'dark' };
 let currentRoom    = null;
+const unreadCounts = new Map(); // username -> кол-во непрочитанных
+const _chatOrder   = [];        // порядок чатов по активности
 let friends        = [];
 let groups         = [];
 let friendRequests = [];
@@ -684,7 +686,6 @@ function setAvatar(el, name, url) {
 // RENDER LISTS  ← УДОБСТВО
 // ══════════════════════════════════════════════
 // Двигаем чат собеседника на первое место в списке
-const _chatOrder = []; // username в порядке последнего сообщения
 function _moveChatToTop(username) {
   const idx = _chatOrder.indexOf(username);
   if (idx > -1) _chatOrder.splice(idx, 1);
@@ -3265,7 +3266,7 @@ function _aiSmartScroll() {
   if (!msgs) return;
   const threshold = 80; // px от низа — считаем "внизу"
   const atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < threshold;
-  _aiSmartScroll();
+  if (atBottom) msgs.scrollTop = msgs.scrollHeight;
 }
 
 function _aiCreateStreamBubble() {
