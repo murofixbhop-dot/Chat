@@ -307,12 +307,7 @@ async function storageUpload(fileName, buffer, contentType) {
   console.log(`[B2] Загружено "${fileName}" → бакет "${bucketName}"`);
 }
 
-async function storageDownload(fileName) {
-  if (USE_SB) return sbDownload(fileName);
-  if (USE_R2) return r2Download(fileName);
-  if (!b2Auth) await reAuthB2();
-  const { bucketId, bucketName } = b2GetBucketForFile(fileName);
-  // Рабочий метод: fileNamePrefix = конкретный файл, токен в query-параметре
+async function b2GetDownloadUrl(bucketId, bucketName, fileName) {
   try {
     const r = await axios.post(
       `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
@@ -320,11 +315,36 @@ async function storageDownload(fileName) {
       { headers: { Authorization: b2Auth.authorizationToken }, timeout: 10000 }
     );
     const token = r.data.authorizationToken;
-    const url = `${b2Auth.downloadUrl}/file/${bucketName}/${fileName}?Authorization=${encodeURIComponent(token)}`;
-    return { url, token: null };
+    return `${b2Auth.downloadUrl}/file/${bucketName}/${fileName}?Authorization=${encodeURIComponent(token)}`;
   } catch(e) {
-    const url = `${b2Auth.downloadUrl}/file/${bucketName}/${encodeURIComponent(fileName)}`;
-    return { url, token: b2Auth.authorizationToken };
+    return `${b2Auth.downloadUrl}/file/${bucketName}/${encodeURIComponent(fileName)}`;
+  }
+}
+
+async function storageDownload(fileName) {
+  if (USE_SB) return sbDownload(fileName);
+  if (USE_R2) return r2Download(fileName);
+  if (!b2Auth) await reAuthB2();
+
+  // Определяем "правильный" бакет по имени/размеру
+  const { bucketId, bucketName } = b2GetBucketForFile(fileName);
+
+  // Пробуем сначала правильный бакет
+  const url1 = await b2GetDownloadUrl(bucketId, bucketName, fileName);
+  try {
+    // Быстрая HEAD проверка — существует ли файл в этом бакете
+    await axios.head(url1, { timeout: 5000 });
+    return { url: url1, token: null };
+  } catch(e1) {
+    // Файл не найден — пробуем второй бакет если есть
+    if (USE_B2_DUAL && b2BucketId2) {
+      const otherBucketId   = bucketId === b2BucketId ? b2BucketId2 : b2BucketId;
+      const otherBucketName = bucketId === b2BucketId ? B2_BUCKET_NAME2 : B2_BUCKET_NAME;
+      const url2 = await b2GetDownloadUrl(otherBucketId, otherBucketName, fileName);
+      return { url: url2, token: null };
+    }
+    // Один бакет — возвращаем как есть (пусть /api/dl сам обработает ошибку)
+    return { url: url1, token: null };
   }
 }
 
