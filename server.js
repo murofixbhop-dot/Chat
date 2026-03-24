@@ -615,7 +615,23 @@ app.get('/api/dl', async (req, res) => {
     b2Response.data.pipe(res);
   } catch (err) {
     if (!res.headersSent) {
-      console.error('[dl proxy] Ошибка:', err.message);
+      const status = err.response?.status;
+      console.error('[dl proxy] Ошибка:', err.message, 'status:', status);
+      // При 403 — пробуем переавторизоваться
+      if (status === 403 || status === 401) {
+        try {
+          await reAuthB2();
+          const dl2 = await storageDownload(fileName);
+          const dlH2 = dl2.token ? { Authorization: dl2.token } : {};
+          const b2R2 = await axios.get(dl2.url, { responseType:'stream', timeout:30000, headers: dlH2 });
+          res.status(200);
+          res.setHeader('Content-Type', b2R2.headers['content-type'] || 'application/octet-stream');
+          res.setHeader('Cache-Control', 'private, max-age=3600');
+          return b2R2.data.pipe(res);
+        } catch(e2) {
+          console.error('[dl proxy] Retry failed:', e2.message);
+        }
+      }
       res.status(500).send('Не удалось получить файл');
     }
   }
@@ -750,6 +766,9 @@ app.use(express.json());
 //  AI ЧАТ — Mistral с инструментами, памятью файлов и просмотром изображений
 // ════════════════════════════════════════════════════════════════════════════
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
+// MiniMax (Aura AI) — модель MiniMax-M1
+const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || 'sk-cp-qMBs7AEO3Zr356vh-A5IRhi1z4E5H22EEL7YFRs23zb8hffwKzXo6YMcuzxTyunMDkp9J0luUP0M2o9avo262W-NtYGsFJA-ZtkbYZjssw0nQUrLchyztyE';
+const MINIMAX_API_URL = 'https://api.minimax.chat/v1/text/chatcompletion_v2';
 const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
 const aiUserFiles     = new Map(); // username -> [{ id, name, content, ttl }]
 const AI_MAX_HISTORY  = 80;
@@ -2568,8 +2587,54 @@ ${text}`;
 }
 
 // ── /api/ai-chat — основной эндпоинт ─────────────────────────────────────────
+// ── MiniMax (Aura AI) API call ─────────────────────────────────────────────
+async function callMiniMax(messages, stream, onChunk) {
+  const resp = await axios.post(MINIMAX_API_URL, {
+    model: 'MiniMax-M1',
+    messages,
+    max_tokens: 3000,
+    temperature: 0.7,
+    stream: !!stream,
+  }, {
+    headers: {
+      'Authorization': `Bearer ${MINIMAX_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    responseType: stream ? 'stream' : 'json',
+    timeout: 60000,
+  });
+
+  if (!stream) {
+    return resp.data.choices?.[0]?.message?.content || '';
+  }
+
+  let reply = '';
+  await new Promise((resolve, reject) => {
+    let buf = '';
+    resp.data.on('data', chunk => {
+      buf += chunk.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') return resolve();
+        try {
+          const j = JSON.parse(raw);
+          const delta = j.choices?.[0]?.delta?.content || '';
+          if (delta) { reply += delta; onChunk?.(delta); }
+        } catch {}
+      }
+    });
+    resp.data.on('end', resolve);
+    resp.data.on('error', reject);
+  });
+  return reply;
+}
+
 app.post('/api/ai-chat', async (req, res) => {
-  const { username, message, imageData, imageType, fileName, fileContent } = req.body;
+  const { username, message, imageData, imageType, fileName, fileContent, model } = req.body;
+  const useAuraAI = model === 'minimax'; // Aura AI = MiniMax
   if (!username) return res.status(400).json({ error: 'Нет username' });
   if (!message?.trim() && !imageData && !fileContent) return res.status(400).json({ error: 'Нет сообщения' });
 
@@ -2678,6 +2743,18 @@ app.post('/api/ai-chat', async (req, res) => {
       // Стриминг финального ответа через SSE
       let reply = '';
       try {
+        if (useAuraAI) {
+          // MiniMax (Aura AI)
+          reply = await callMiniMax(
+            [{ role: 'system', content: currentSystemPrompt }, ...history],
+            true,
+            delta => aiSseEmit(username, 'chunk', { text: delta })
+          );
+          if (!reply) reply = 'Готово';
+          history.push({ role: 'assistant', content: reply });
+          aiSseEmit(username, 'done', {});
+          return res.json({ success: true, reply, toolsUsed, createdFiles });
+        }
         const streamResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
           model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
           messages: [{ role: 'system', content: currentSystemPrompt }, ...history],
@@ -2728,12 +2805,22 @@ app.post('/api/ai-chat', async (req, res) => {
       aiSseEmit(username, 'done', {});
       res.json({ success: true, reply, toolsUsed, createdFiles });
     } else {
-      // Прямой ответ без инструментов — тоже стримим если есть SSE клиент
-      const reply = msg1?.content || 'Нет ответа';
-      history.push({ role: 'assistant', content: reply });
+      // Прямой ответ без инструментов
+      let reply;
+      if (useAuraAI) {
+        // MiniMax прямой вызов
+        reply = await callMiniMax(
+          [{ role: 'system', content: currentSystemPrompt }, ...history],
+          true,
+          delta => aiSseEmit(username, 'chunk', { text: delta })
+        ) || 'Готово';
+      } else {
+        reply = msg1?.content || 'Нет ответа';
+      }
+      history.push({ role: 'assistant', content: _reply });
       if (aiSseClients.has(username)) {
         // Имитируем стриминг — разбиваем на слова
-        const words = reply.split(' ');
+        const words = (_reply || reply || '').split(' ');
         for (const w of words) {
           aiSseEmit(username, 'chunk', { text: w + ' ' });
           await new Promise(r => setTimeout(r, 15));
@@ -3749,6 +3836,9 @@ function broadcastOnlineCount() {
     if (now - user.lastSeen > 10000) onlineUsers.delete(id);
   }
   io.emit('online-count', onlineUsers.size);
+  // Рассылаем список онлайн пользователей
+  const onlineList = [...onlineUsers.values()].map(u => u.username).filter(Boolean);
+  io.emit('online-users', onlineList);
 }
 setInterval(broadcastOnlineCount, 5000);
 
@@ -3758,6 +3848,9 @@ io.on('connection', (socket) => {
   socket.on('identify', (username) => {
     currentUser = username;
     onlineUsers.set(socket.id, { username, lastSeen: Date.now() });
+    // Рассылаем обновлённый список
+    const onlineList2 = [...onlineUsers.values()].map(u => u.username).filter(Boolean);
+    io.emit('online-users', onlineList2);
     userSockets.set(username, socket.id);
     broadcastOnlineCount();
     // НЕ присоединяем к general — чат выбирается клиентом
@@ -3804,6 +3897,9 @@ io.on('connection', (socket) => {
   socket.on('ping', () => {
     if (onlineUsers.has(socket.id)) {
       const user = onlineUsers.get(socket.id);
+      onlineUsers.delete(socket.id);
+      const onlineList3 = [...onlineUsers.values()].map(u => u.username).filter(Boolean);
+      io.emit('online-users', onlineList3);
       user.lastSeen = Date.now();
       onlineUsers.set(socket.id, user);
     }
