@@ -2850,7 +2850,7 @@ app.post('/api/ai-chat', async (req, res) => {
       history.push({ role: 'assistant', content: reply });
       if (aiSseClients.has(username)) {
         // Имитируем стриминг — разбиваем на слова
-        const words = (_reply || reply || '').split(' ');
+        const words = (reply || '').split(' ');
         for (const w of words) {
           aiSseEmit(username, 'chunk', { text: w + ' ' });
           await new Promise(r => setTimeout(r, 15));
