@@ -2436,16 +2436,16 @@ let _aiDebugMode = false;
 function openAiChat() {
   // Добавляем выбор модели если ещё нет
   if (!document.getElementById('aiModelSelect')) {
-    const aiInput = document.getElementById('aiInput') || document.querySelector('.ai-input-row');
-    if (aiInput) {
+    // Ищем родителя кнопки отправки — туда вставляем выбор модели
+    const sendBtn = document.getElementById('aiSendBtn');
+    const parent  = sendBtn?.parentElement;
+    if (parent) {
       const sel = document.createElement('select');
       sel.id = 'aiModelSelect';
       sel.title = 'Выбор модели';
-      sel.style.cssText = 'border:none;background:var(--surface2);color:var(--text);border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer;outline:none;margin-right:4px;';
+      sel.style.cssText = 'border:none;background:var(--surface2);color:var(--text);border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer;outline:none;margin-right:4px;flex-shrink:0;';
       sel.innerHTML = '<option value="mistral">Mistral</option><option value="minimax">Aura AI</option>';
-      const sendBtn = document.getElementById('aiSendBtn') || aiInput.querySelector('button');
-      if (sendBtn) aiInput.insertBefore(sel, sendBtn);
-      else aiInput.appendChild(sel);
+      parent.insertBefore(sel, sendBtn);
     }
   }
   $('aiChatModal').classList.add('open');
