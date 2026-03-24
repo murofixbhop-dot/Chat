@@ -261,21 +261,35 @@ async function reAuthB2() {
 // Определяем бакет по типу файла:
 // Бакет 1 (B2_BUCKET_NAME)  → videos/, squares/ (видео и квадратики)
 // Бакет 2 (B2_BUCKET_NAME2) → photos/, audio/, files/ (фото, аудио, файлы)
-function b2GetBucketForFile(fileName) {
-  const f = fileName.toLowerCase();
-  // Системные файлы ВСЕГДА в бакете 1
-  if (f === 'users.json' || f === 'history.json' || f === 'history_v2.json') {
+// Выбор бакета по РАЗМЕРУ файла:
+// Бакет 1 (B2_BUCKET_NAME):  маленькие файлы ≤ 5 MB (фото, аудио, json)
+// Бакет 2 (B2_BUCKET_NAME2): большие файлы > 5 MB (видео, квадраты)
+const B2_SMALL_LIMIT = 5 * 1024 * 1024; // 5 MB
+
+function b2GetBucket(fileName, fileSize) {
+  // Системные файлы всегда в бакете 1
+  if (fileName === 'users.json' || fileName === 'history.json') {
     return { bucketId: b2BucketId, bucketName: B2_BUCKET_NAME };
   }
-  // Видео и квадраты → бакет 1
-  const isVideoBucket1 = f.startsWith('videos/') || f.startsWith('squares/')
-    || (f.endsWith('.mp4') && !f.startsWith('audio/'))
-    || (f.endsWith('.webm') && !f.startsWith('audio/'));
-  if (USE_B2_DUAL && !isVideoBucket1 && b2BucketId2) {
-    return { bucketId: b2BucketId2, bucketName: B2_BUCKET_NAME2 };
+  if (!USE_B2_DUAL || !b2BucketId2) {
+    return { bucketId: b2BucketId, bucketName: B2_BUCKET_NAME };
   }
-  return { bucketId: b2BucketId, bucketName: B2_BUCKET_NAME };
+  // Если размер известен — по размеру
+  if (fileSize !== undefined) {
+    return fileSize > B2_SMALL_LIMIT
+      ? { bucketId: b2BucketId2, bucketName: B2_BUCKET_NAME2 }
+      : { bucketId: b2BucketId, bucketName: B2_BUCKET_NAME };
+  }
+  // Если размер неизвестен — по расширению
+  const f = fileName.toLowerCase();
+  const isLarge = f.endsWith('.mp4') || f.endsWith('.webm') || f.endsWith('.mov')
+    || f.endsWith('.avi') || f.endsWith('.mkv') || f.startsWith('videos/') || f.startsWith('squares/');
+  return isLarge
+    ? { bucketId: b2BucketId2, bucketName: B2_BUCKET_NAME2 }
+    : { bucketId: b2BucketId, bucketName: B2_BUCKET_NAME };
 }
+// Алиас для совместимости
+function b2GetBucketForFile(fileName, fileSize) { return b2GetBucket(fileName, fileSize); }
 
 async function storageUpload(fileName, buffer, contentType) {
   if (USE_SB) {
@@ -3803,7 +3817,8 @@ io.on('connection', (socket) => {
       text,
       type: 'text',
       time: new Date().toLocaleTimeString(),
-      room: room || 'general'
+      room: room || 'general',
+      replyTo: data.replyTo || undefined
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
@@ -3811,7 +3826,8 @@ io.on('connection', (socket) => {
     io.to(msg.room).emit('message', msg);
   });
 
-  socket.on('media-message', ({ mediaData, room }) => {
+  socket.on('media-message', (data) => {
+    const { mediaData, room } = data;
     if (!currentUser) return;
     const msg = {
       id: Date.now() + Math.random(),
@@ -3821,7 +3837,8 @@ io.on('connection', (socket) => {
       url: mediaData.url,
       fileName: mediaData.fileName,
       time: new Date().toLocaleTimeString(),
-      room: room || 'general'
+      room: room || 'general',
+      replyTo: data.replyTo || undefined
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
@@ -3899,6 +3916,41 @@ io.on('connection', (socket) => {
   socket.on('call-offer',        data => relayTo('call-offer',        data));
   socket.on('call-answer',       data => relayTo('call-answer',       data));
   socket.on('call-ice',          data => relayTo('call-ice',          data));
+  // ── Запись о звонке → в историю ──────────────────────────────────────────
+  socket.on('save-call-record', async ({ room, from, to, isVid, isCaller, connected, dur, missed, timestamp }) => {
+    if (!room || !from) return;
+    const now  = new Date(timestamp || Date.now());
+    const ts   = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
+    const ds   = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
+    const icon = isVid ? '📹' : '📞';
+    const type = isVid ? 'Видеозвонок' : 'Аудиозвонок';
+    let label, extra;
+    if (missed) {
+      label = `${type} · Пропущенный`;
+      extra = `· ${ds}, ${ts}`;
+    } else {
+      const durStr = dur > 0 ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur%60} сек`) : '';
+      label = type;
+      extra = (durStr ? `· ${durStr} · ` : '· Нет ответа · ') + `${ds}, ${ts}`;
+    }
+    const msg = {
+      id:       `cr_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+      room,
+      user:     from,
+      type:     'call_record',
+      cr_icon:  icon,
+      cr_label: label,
+      cr_extra: extra,
+      time:     ts,
+      timestamp: timestamp || Date.now()
+    };
+    messageHistory.push(msg);
+    if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
+    saveHistory();
+    // Рассылаем обеим сторонам в комнате
+    io.to(room).emit('call-record', msg);
+  });
+
   socket.on('call-end', data => {
     // Очищаем активный звонок
     activeCalls.delete(data.to);
