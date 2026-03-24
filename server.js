@@ -3925,8 +3925,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('message', ({ text, room }) => {
+  socket.on('message', (data) => {
     if (!currentUser) return;
+    const { text, room, replyTo } = data;
     const msg = {
       id: Date.now() + Math.random(),
       user: currentUser,
@@ -3934,7 +3935,7 @@ io.on('connection', (socket) => {
       type: 'text',
       time: new Date().toLocaleTimeString(),
       room: room || 'general',
-      replyTo: data.replyTo || undefined
+      replyTo: replyTo || undefined
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
