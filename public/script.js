@@ -100,6 +100,8 @@ let currentUser    = null;
 let _historyLoading = false; // true while loading history — подавляем уведомления
 let userData       = { nickname:'', avatar:null, theme:'dark' };
 let currentRoom    = null;
+let _chatPartner    = null;
+const onlineUsersSet = new Set(); // кто сейчас онлайн
 const unreadCounts = new Map(); // username -> кол-во непрочитанных
 const _chatOrder   = [];        // порядок чатов по активности
 let friends        = [];
@@ -751,6 +753,17 @@ function renderFriends(filter = '') {
         <span class="ci-sub">${dispName !== f ? '<span style="color:var(--text3)">@' + esc(f) + '</span>' : 'Личный чат'}</span>
       </div>
       <div class="ci-badge" id="badge_${f}" style="display:none"></div>`;
+      // Онлайн-точка на аватарке
+      const avaWrap = li.querySelector('.ci-ava');
+      if (avaWrap && !avaWrap.querySelector('.online-dot')) {
+        const dot = document.createElement('span');
+        dot.className = 'online-dot';
+        dot.dataset.onlineFor = f;
+        dot.style.cssText = 'position:absolute;bottom:1px;right:1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--surface);background:#6b7280;';
+        dot.title = 'Не в сети';
+        avaWrap.style.position = 'relative';
+        avaWrap.appendChild(dot);
+      }
       li.prepend(avaEl);
       li.onclick = () => { gotoPrivate(f); closeSidebarMobile(); };
       li.addEventListener('contextmenu', e => { e.preventDefault(); showCtxFriend(e, f); });
@@ -964,9 +977,13 @@ function gotoRoom(room) {
   if (room.startsWith('private:')) {
     const parts = room.split(':');
     const other = parts.slice(1).find(p => p !== currentUser) || parts[1];
+    _chatPartner = other;
     const dispName = userNicknames[other] || other;
     roomName.textContent = dispName;
-    roomSub.textContent  = dispName !== other ? `@${other}` : 'Личные сообщения';
+    // Онлайн-статус в подзаголовке
+    const isOnlineNow = onlineUsersSet.has(other);
+    roomSub.innerHTML = `<span id="chatOnlineStatus" style="color:${isOnlineNow?'#22c55e':'var(--text3)'}">
+      ${isOnlineNow ? 'онлайн' : 'не в сети'}</span>`;
     setAvatar(roomAvatar, other, userAvatars[other]);
     if (onlinePill) onlinePill.style.display = 'none';
     hdrRight.innerHTML = callBtnsHtml;
@@ -1001,6 +1018,26 @@ function gotoRoom(room) {
 // MESSAGES  ← КРАСОТА + УДОБСТВО
 // ══════════════════════════════════════════════
 socket.on('online-count', n => { if (onlineCount) onlineCount.textContent = n; });
+socket.on('online-users', users => {
+  onlineUsersSet.clear();
+  users.forEach(u => onlineUsersSet.add(u));
+  // Обновляем индикаторы онлайна в списке контактов
+  document.querySelectorAll('[data-online-for]').forEach(dot => {
+    const u = dot.dataset.onlineFor;
+    dot.style.background = onlineUsersSet.has(u) ? '#22c55e' : '#6b7280';
+    dot.title = onlineUsersSet.has(u) ? 'Онлайн' : 'Не в сети';
+  });
+  // В шапке открытого чата
+  _updateChatOnlineStatus();
+});
+
+function _updateChatOnlineStatus() {
+  const statusEl = document.getElementById('chatOnlineStatus');
+  if (!statusEl || !_chatPartner) return;
+  const isOnline = onlineUsersSet.has(_chatPartner);
+  statusEl.textContent = isOnline ? 'онлайн' : 'не в сети';
+  statusEl.style.color = isOnline ? '#22c55e' : 'var(--text3)';
+}
 
 socket.on('history', msgs => {
   _historyLoading = true;
@@ -2397,6 +2434,20 @@ let _aiAttachment = null; // { type:'image'|'file', data, mimeType, name, previe
 let _aiDebugMode = false;
 
 function openAiChat() {
+  // Добавляем выбор модели если ещё нет
+  if (!document.getElementById('aiModelSelect')) {
+    const aiInput = document.getElementById('aiInput') || document.querySelector('.ai-input-row');
+    if (aiInput) {
+      const sel = document.createElement('select');
+      sel.id = 'aiModelSelect';
+      sel.title = 'Выбор модели';
+      sel.style.cssText = 'border:none;background:var(--surface2);color:var(--text);border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer;outline:none;margin-right:4px;';
+      sel.innerHTML = '<option value="mistral">Mistral</option><option value="minimax">Aura AI</option>';
+      const sendBtn = document.getElementById('aiSendBtn') || aiInput.querySelector('button');
+      if (sendBtn) aiInput.insertBefore(sel, sendBtn);
+      else aiInput.appendChild(sel);
+    }
+  }
   $('aiChatModal').classList.add('open');
   aiRefreshFileBadge();
   _aiConnectSse();
@@ -2909,9 +2960,10 @@ async function _aiSubmitAnswers() {
   const typing = _aiAddTyping();
 
   try {
+    const aiModel = document.getElementById('aiModelSelect')?.value || 'mistral';
     const r = await fetch('/api/ai-chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, message: summaryMsg })
+      body: JSON.stringify({ username: currentUser, message: summaryMsg, model: aiModel })
     });
     const d = await r.json();
     if (typing) typing.remove();
@@ -3447,6 +3499,7 @@ async function aiSend() {
       body.fileName    = attach.name;
     }
 
+    body.model = document.getElementById('aiModelSelect')?.value || 'mistral';
     const r = await fetch('/api/ai-chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -4388,6 +4441,11 @@ socket.on('call-end', () => {
 // Caller started screen share (replaceTrack path — no ontrack fired)
 socket.on('screen-share-started', ({ from }) => {
   console.log('[SS] screen-share-started from', from);
+  // Скрываем своё имя/аватар при демонстрации экрана
+  if (from === currentUser) {
+    const cwAudio = document.getElementById('cwAudioContent');
+    if (cwAudio) cwAudio.style.display = 'none';
+  }
   // The video track was already replaced in peer connection
   // Just update the video element to show the new stream
   const rv = document.querySelector('#rv');
@@ -4414,6 +4472,10 @@ socket.on('screen-share-started', ({ from }) => {
 
 // Caller stopped screen share
 socket.on('screen-share-stopped', ({ from }) => {
+  if (from === currentUser) {
+    const cwAudio = document.getElementById('cwAudioContent');
+    if (cwAudio) cwAudio.style.display = '';
+  }
   document.querySelector('#rv')?.remove();
   document.querySelector('#screenReceiveOverlay')?.remove();
   const win = document.getElementById('activeCallWin');
