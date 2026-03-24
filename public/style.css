@@ -521,7 +521,7 @@ option { background: var(--surface2); color: var(--text); }
   position: relative; padding: 0 12px 12px;
   flex-shrink: 0;
 }
-.sb-search-ico { position: absolute; left: 24px; top: 50%; transform: translateY(-60%); color: var(--text3); font-size: 15px; pointer-events: none; }
+.sb-search-ico { position: absolute; left: 24px; top: 50%; transform: translateY(-62%); color: var(--text3); font-size: 15px; pointer-events: none; } /* поднята на 1px */
 .sb-search-input {
   width: 100%; padding: 10px 14px 10px 38px;
   background: var(--surface3); color: var(--text);
@@ -531,10 +531,7 @@ option { background: var(--surface2); color: var(--text); }
 }
 .sb-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .sb-search kbd {
-  position: absolute; right: 20px; top: 50%; transform: translateY(-60%);
-  font-size: 11px; color: var(--text3);
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 6px; padding: 2px 6px; pointer-events: none;
+  display: none; /* убрана подсказка ⌘K */
 }
 
 /* Tabs ← УДОБСТВО */
@@ -942,6 +939,8 @@ option { background: var(--surface2); color: var(--text); }
 .send-fab:disabled { background: var(--surface3); box-shadow: none; color: var(--text3); }
 
 .attach { color: var(--text2) !important; }
+#attachBtn { position: relative; bottom: 1px; } /* поднимаем на 1px */
+#attachBtn i { position: relative; bottom: 1px; }
 
 /* ════════════════════════════════════════════════
    ATTACH MENU  ← КРАСОТА
@@ -1116,6 +1115,26 @@ option { background: var(--surface2); color: var(--text); }
 /* ════════════════════════════════════════════════
    MOBILE  ← УДОБСТВО: mobile-first
 ════════════════════════════════════════════════ */
+
+/* ── AI Model Selector ─────────────────────────────────────── */
+#aiModelSelect {
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+  transition: border-color .2s;
+  appearance: auto;
+  -webkit-appearance: auto;
+  max-width: 110px;
+}
+#aiModelSelect:focus { border-color: var(--accent); }
+
 @media (max-width: 768px) {
   :root { --sb-w: 84vw; }
 
@@ -1836,6 +1855,17 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
     min-height: 42px !important;
     font-size: 16px !important;
     padding: 11px 42px 11px 14px !important;
+  }
+  /* Скрепка на мобиле */
+  #attachBtn { bottom: 0; }
+  /* Поиск на мобиле — убрать kbd точно */
+  .sb-search kbd { display: none !important; }
+  /* AI model selector mobile */
+  #aiModelSelect {
+    font-size: 12px;
+    padding: 5px 8px;
+    max-width: 90px;
+    border-radius: 8px;
   }
 
   /* ── Шапка чата ── */
