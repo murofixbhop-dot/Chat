@@ -1095,13 +1095,15 @@ function addMessage(msg) {
 
   // ── Цитата ответа ──
   if (msg.replyTo) {
-    const rNick = esc(userNicknames?.[msg.replyTo.user] || msg.replyTo.user || '?');
-    const rText = msg.replyTo.text
-      ? esc(msg.replyTo.text.slice(0, 80))
-      : (msg.replyTo.type === 'audio' ? '🎤 Голосовое'
-        : msg.replyTo.type === 'video_circle' ? '📹 Видео'
+    const rt = msg.replyTo;
+    const rNick = esc(userNicknames?.[rt.user] || rt.user || '?');
+    const rText = rt.text
+      ? esc(rt.text.slice(0, 80))
+      : (rt.type === 'audio' ? '🎤 Голосовое'
+        : rt.type === 'video_circle' ? '📹 Видео'
         : '📎 Вложение');
-    inner += `<div class="reply-quote" onclick="scrollToMsg('${msg.replyTo.id}')">
+    const rtId = String(rt.id || '').replace(/'/g, '');
+    inner += `<div class="reply-quote" onclick="scrollToMsg('${rtId}')">
       <span class="rq-name">${rNick}</span>
       <span class="rq-text">${rText}</span>
     </div>`;
@@ -1188,6 +1190,7 @@ function addMessage(msg) {
     if (dx > 55 && dy < 40 && !_didSwipe) {
       _didSwipe = true;
       clearTimeout(_lpt); _lpt = null;
+      _replyStore.set(String(msg.id), msg);
       startReply(msg);
       bub.style.transition = 'transform .18s cubic-bezier(.16,1,.3,1)';
       bub.style.transform = 'translateX(36px)';
@@ -1701,35 +1704,32 @@ function insertEmoji(em) {
 const ctxMenu = $('ctxMenu');
 
 let _replyMsg = null;
+const _replyStore = new Map(); // id -> msg snapshot для ответа
 
 function startReply(msg) {
   _replyMsg = msg;
-  // Убеждаемся что плашка есть в DOM — вставляем перед input-row внутри input-zone
   let bar = document.getElementById('replyBar');
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'replyBar';
+    // Вставляем перед input-row
     const inputRow = document.querySelector('.input-zone .input-row');
     if (inputRow) inputRow.parentElement.insertBefore(bar, inputRow);
-    else {
-      const inputZone = document.querySelector('.input-zone');
-      if (inputZone) inputZone.prepend(bar);
-    }
+    else document.querySelector('.input-zone')?.prepend(bar);
   }
   const nick = userNicknames?.[msg.user] || msg.user;
   const prev = msg.text
     ? msg.text.slice(0, 60)
-    : (msg.type === 'audio' ? '🎤 Голосовое'
-      : msg.type === 'video_circle' ? '📹 Видео' : '📎 Вложение');
-  bar.innerHTML =
-    `<span class="reply-bar-line"></span>
-     <i class="ti ti-arrow-back-up" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
-     <div style="flex:1;min-width:0;overflow:hidden">
-       <div style="color:var(--accent);font-size:11px;font-weight:700;line-height:1.3">${esc(nick)}</div>
-       <div style="color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3">${esc(prev)}</div>
-     </div>
-     <button onclick="cancelReply()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;padding:0 2px;line-height:1;flex-shrink:0"><i class="ti ti-x"></i></button>`;
-  bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 14px;border-left:3px solid var(--accent);margin:0 0 0 0;background:var(--surface2);animation:slideUp .15s ease;';
+    : (msg.type === 'audio' ? '🎤 Голосовое' : msg.type === 'video_circle' ? '📹 Видео' : '📎 Вложение');
+  bar.innerHTML = `
+    <i class="ti ti-arrow-back-up" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
+    <div style="flex:1;min-width:0;overflow:hidden">
+      <div style="color:var(--accent);font-size:11px;font-weight:700;line-height:1.4">${esc(nick)}</div>
+      <div style="color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4">${esc(prev)}</div>
+    </div>
+    <button onclick="cancelReply()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;padding:0 4px;line-height:1;flex-shrink:0"><i class="ti ti-x"></i></button>`;
+  bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 14px;border-left:3px solid var(--accent);background:var(--surface2);';
+  bar.style.display = 'flex';
   document.getElementById('msgInput')?.focus();
 }
 
@@ -1751,7 +1751,15 @@ function scrollToMsg(id) {
   }
 }
 
+// Безопасное хранение msg для ответа (без JSON в атрибутах)
+function _replyFromId(id) {
+  const msg = _replyStore.get(String(id));
+  if (msg) startReply(msg);
+}
+
 function showCtxMsg(e, msg) {
+  // Сохраняем в Map для _replyFromId
+  _replyStore.set(String(msg.id), msg);
   e.preventDefault();
   const own = msg.user === currentUser;
   ctxMenu.innerHTML = `
