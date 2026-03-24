@@ -1093,6 +1093,20 @@ function addMessage(msg) {
 
   let inner = own ? '' : `<div class="msg-sender">${esc(userNicknames[msg.user] || msg.user)}</div>`;
 
+  // ── Цитата ответа ──
+  if (msg.replyTo) {
+    const rNick = esc(userNicknames?.[msg.replyTo.user] || msg.replyTo.user || '?');
+    const rText = msg.replyTo.text
+      ? esc(msg.replyTo.text.slice(0, 80))
+      : (msg.replyTo.type === 'audio' ? '🎤 Голосовое'
+        : msg.replyTo.type === 'video_circle' ? '📹 Видео'
+        : '📎 Вложение');
+    inner += `<div class="reply-quote" onclick="scrollToMsg('${msg.replyTo.id}')">
+      <span class="rq-name">${rNick}</span>
+      <span class="rq-text">${rText}</span>
+    </div>`;
+  }
+
   if (msg.type === 'image') {
     const u = fileUrl(msg.url);
     inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="фото"></div>`;
@@ -1233,7 +1247,11 @@ function refreshSendBtn() {
 function handleSend() {
   const text = msgInput.value.trim();
   if (text) {
-    socket.emit('message', { text, room: currentRoom });
+    const replySnap = _replyMsg
+      ? { id: _replyMsg.id, user: _replyMsg.user, text: _replyMsg.text?.slice(0,100), type: _replyMsg.type }
+      : undefined;
+    cancelReply();
+    socket.emit('message', { text, room: currentRoom, replyTo: replySnap });
     msgInput.value = '';
     autoGrow(msgInput);
   }
@@ -1686,30 +1704,39 @@ let _replyMsg = null;
 
 function startReply(msg) {
   _replyMsg = msg;
+  // Убеждаемся что плашка есть в DOM — вставляем перед input-row внутри input-zone
   let bar = document.getElementById('replyBar');
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'replyBar';
-    const inputZone = document.querySelector('.input-zone') || document.querySelector('.msg-input-wrap') || document.getElementById('inputArea');
-    if (inputZone) inputZone.insertBefore(bar, inputZone.firstChild);
-    else document.body.appendChild(bar);
+    const inputRow = document.querySelector('.input-zone .input-row');
+    if (inputRow) inputRow.parentElement.insertBefore(bar, inputRow);
+    else {
+      const inputZone = document.querySelector('.input-zone');
+      if (inputZone) inputZone.prepend(bar);
+    }
   }
   const nick = userNicknames?.[msg.user] || msg.user;
-  const prev = msg.text ? msg.text.slice(0,60) : (msg.type === 'audio' ? '🎤 Голосовое' : msg.type === 'video_circle' ? '📹 Видео' : '📎 Вложение');
-  bar.innerHTML = `<i class="ti ti-arrow-back-up" style="color:var(--accent);font-size:16px;flex-shrink:0"></i>
-    <div style="flex:1;min-width:0;overflow:hidden">
-      <div style="color:var(--accent);font-size:11px;font-weight:700">${esc(nick)}</div>
-      <div style="color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(prev)}</div>
-    </div>
-    <button onclick="cancelReply()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:0 4px;line-height:1"><i class="ti ti-x"></i></button>`;
-  bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--surface2);border-top:2px solid var(--accent);';
+  const prev = msg.text
+    ? msg.text.slice(0, 60)
+    : (msg.type === 'audio' ? '🎤 Голосовое'
+      : msg.type === 'video_circle' ? '📹 Видео' : '📎 Вложение');
+  bar.innerHTML =
+    `<span class="reply-bar-line"></span>
+     <i class="ti ti-arrow-back-up" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
+     <div style="flex:1;min-width:0;overflow:hidden">
+       <div style="color:var(--accent);font-size:11px;font-weight:700;line-height:1.3">${esc(nick)}</div>
+       <div style="color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3">${esc(prev)}</div>
+     </div>
+     <button onclick="cancelReply()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;padding:0 2px;line-height:1;flex-shrink:0"><i class="ti ti-x"></i></button>`;
+  bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 14px;border-left:3px solid var(--accent);margin:0 0 0 0;background:var(--surface2);animation:slideUp .15s ease;';
   document.getElementById('msgInput')?.focus();
 }
 
 function cancelReply() {
   _replyMsg = null;
   const bar = document.getElementById('replyBar');
-  if (bar) bar.style.display = 'none';
+  if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
 }
 
 function scrollToMsg(id) {
