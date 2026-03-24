@@ -2470,17 +2470,82 @@ let _aiDebugMode = false;
 
 function openAiChat() {
   // Добавляем выбор модели если ещё нет
-  if (!document.getElementById('aiModelSelect')) {
-    // Ищем родителя кнопки отправки — туда вставляем выбор модели
+  if (!document.getElementById('aiModelWrap')) {
     const sendBtn = document.getElementById('aiSendBtn');
     const parent  = sendBtn?.parentElement;
     if (parent) {
-      const sel = document.createElement('select');
-      sel.id = 'aiModelSelect';
-      sel.title = 'Выбор модели';
-      sel.style.cssText = 'border:none;background:var(--surface2);color:var(--text);border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer;outline:none;margin-right:4px;flex-shrink:0;';
-      sel.innerHTML = '<option value="mistral">Mistral</option><option value="minimax">Aura AI</option>';
-      parent.insertBefore(sel, sendBtn);
+      // Кастомный дропдаун вместо нативного select
+      const models = [
+        { value: 'mistral', label: 'Mistral',  icon: '⚡' },
+        { value: 'minimax', label: 'Aura AI',  icon: '✨' },
+      ];
+      let currentModel = 'mistral';
+
+      const wrap = document.createElement('div');
+      wrap.id = 'aiModelWrap';
+      wrap.style.cssText = 'position:relative;flex-shrink:0;bottom:10px;';
+
+      const btn = document.createElement('button');
+      btn.id = 'aiModelBtn';
+      btn.type = 'button';
+      btn.style.cssText = 'display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--surface3);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .2s,background .15s,box-shadow .2s;box-shadow:0 1px 4px rgba(0,0,0,.08);';
+      btn.innerHTML = '<span id="aiModelIcon">⚡</span><span id="aiModelLabel">Mistral</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;margin-left:1px;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>';
+
+      btn.onmouseenter = () => { btn.style.borderColor='var(--accent)'; btn.style.background='var(--surface2)'; btn.style.boxShadow='0 2px 10px rgba(99,102,241,.18)'; };
+      btn.onmouseleave = () => { if (!drop.style.display||drop.style.display==='none') { btn.style.borderColor='var(--border)'; btn.style.background='var(--surface3)'; btn.style.boxShadow='0 1px 4px rgba(0,0,0,.08)'; } };
+
+      const drop = document.createElement('div');
+      drop.id = 'aiModelDrop';
+      drop.style.cssText = 'display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:5px;min-width:130px;box-shadow:0 8px 24px rgba(0,0,0,.18);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:9999;animation:modelDropIn .12s ease;';
+
+      models.forEach(m => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;transition:background .12s;';
+        item.innerHTML = `<span style="font-size:15px">${m.icon}</span><span>${m.label}</span>`;
+        if (m.value === currentModel) item.style.background = 'var(--accent-dim)';
+        item.onmouseenter = () => { item.style.background='var(--surface2)'; };
+        item.onmouseleave = () => { item.style.background = currentModel===m.value ? 'var(--accent-dim)' : ''; };
+        item.onclick = () => {
+          currentModel = m.value;
+          document.getElementById('aiModelIcon').textContent = m.icon;
+          document.getElementById('aiModelLabel').textContent = m.label;
+          drop.style.display = 'none';
+          btn.style.borderColor = 'var(--border)';
+          btn.style.background  = 'var(--surface3)';
+          // Обновляем выделение
+          drop.querySelectorAll('div').forEach(d => d.style.background='');
+          item.style.background = 'var(--accent-dim)';
+          // Скрытый select для совместимости
+          let sel = document.getElementById('aiModelSelect');
+          if (!sel) { sel = document.createElement('select'); sel.id='aiModelSelect'; sel.style.display='none'; document.body.appendChild(sel); sel.innerHTML='<option value="mistral">Mistral</option><option value="minimax">Aura AI</option>'; }
+          sel.value = m.value;
+        };
+        drop.appendChild(item);
+      });
+
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const open = drop.style.display === 'block';
+        drop.style.display = open ? 'none' : 'block';
+        btn.style.borderColor = open ? 'var(--border)' : 'var(--accent)';
+        btn.style.background  = open ? 'var(--surface3)' : 'var(--surface2)';
+      };
+      document.addEventListener('click', () => {
+        drop.style.display='none';
+        btn.style.borderColor='var(--border)';
+        btn.style.background='var(--surface3)';
+      });
+
+      // Скрытый select для получения значения
+      const hidSel = document.createElement('select');
+      hidSel.id = 'aiModelSelect';
+      hidSel.style.display = 'none';
+      hidSel.innerHTML = '<option value="mistral">Mistral</option><option value="minimax">Aura AI</option>';
+
+      wrap.appendChild(drop);
+      wrap.appendChild(btn);
+      wrap.appendChild(hidSel);
+      parent.insertBefore(wrap, sendBtn);
     }
   }
   $('aiChatModal').classList.add('open');
