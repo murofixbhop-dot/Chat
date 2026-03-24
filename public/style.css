@@ -2185,3 +2185,56 @@ video {
   pointer-events: none;
   font-family: -apple-system, sans-serif;
 }
+
+/* ── Reply quote inside bubble ─────────────────────────────── */
+.reply-quote {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 5px 10px; margin-bottom: 6px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  background: rgba(99,102,241,.1);
+  cursor: pointer; max-width: 100%; overflow: hidden;
+  transition: background .15s;
+}
+.reply-quote:hover { background: rgba(99,102,241,.2); }
+.rq-name { font-size: 11px; font-weight: 700; color: var(--accent); }
+.rq-text { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Call record bubble ─────────────────────────────────────── */
+.call-rec-wrap {
+  display: flex; align-items: center; gap: 10px; padding: 2px 0;
+}
+.cr-ico  { font-size: 20px; flex-shrink: 0; }
+.cr-info { display: flex; flex-direction: column; gap: 1px; }
+.cr-lbl  { font-size: 13px; font-weight: 600; color: var(--text); }
+.cr-sub  { font-size: 11px; color: var(--text3); }
+.call-rec-bub {
+  border-left: 3px solid var(--accent) !important;
+  background: var(--surface2) !important;
+  min-width: 180px;
+}
+
+/* ── Unread message badge on contact ─────────────────────── */
+.ci-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(239,68,68,.4);
+}
+
+.chat-item.has-unread .ci-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Call record in chat (no phone emoji version) ──────────── */
+.call-record .cr-icon { font-size: 15px; }
+
