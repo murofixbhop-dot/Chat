@@ -4126,7 +4126,9 @@ io.on('connection', (socket) => {
       user: currentUser,
       text,
       type: 'text',
-      time: new Date().toLocaleTimeString(),
+      time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
+      date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
+      ts:   Date.now(),
       room: room || 'general',
       replyTo: replyTo || undefined
     };
@@ -4146,7 +4148,9 @@ io.on('connection', (socket) => {
       type: mediaData.type,
       url: mediaData.url,
       fileName: mediaData.fileName,
-      time: new Date().toLocaleTimeString(),
+      time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
+      date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
+      ts:   Date.now(),
       room: room || 'general',
       replyTo: data.replyTo || undefined
     };
@@ -4230,7 +4234,7 @@ io.on('connection', (socket) => {
   socket.on('save-call-record', async ({ room, from, to, isVid, isCaller, connected, dur, missed, timestamp }) => {
     if (!room || !from) return;
     const now  = new Date(timestamp || Date.now());
-    const ts   = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
+    const ts   = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' });
     const ds   = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
     const type = isVid ? 'Видеозвонок' : 'Аудиозвонок';
     let label, extra;
