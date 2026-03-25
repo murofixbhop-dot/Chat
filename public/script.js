@@ -1070,7 +1070,14 @@ function fileUrl(url) {
 // Звонок от сервера (из истории или реалтайм)
 socket.on('call-record', msg => {
   if (msg.room !== currentRoom) return;
-  // Рендерим как обычное сообщение с типом call_record
+  // cr_to = кому звонили. Если я — callee, показываем свою метку
+  const isCallee = msg.cr_to === currentUser;
+  if (isCallee && msg.cr_label_callee) {
+    msg = Object.assign({}, msg, {
+      cr_label: msg.cr_label_callee,
+      cr_extra: msg.cr_extra_callee || msg.cr_extra
+    });
+  }
   addMessage(msg);
 });
 
@@ -4817,6 +4824,10 @@ function _showScreenReceived(remoteStream) {
     console.warn('[SS] No activeCallWin for screen receive');
     return;
   }
+
+  // Скрываем аватарку/ник у смотрящего (как у шарера)
+  const cwAudio = document.getElementById('cwAudioContent');
+  if (cwAudio) cwAudio.style.display = 'none';
 
   const scrVid = document.createElement('video');
   scrVid.id = 'rv';
