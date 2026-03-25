@@ -4236,12 +4236,21 @@ io.on('connection', (socket) => {
     const type = isVid ? 'Видеозвонок' : 'Аудиозвонок';
     let label, extra;
     if (missed) {
-      label = `${type} · Пропущенный`;
-      extra = `· ${ds}, ${ts}`;
-    } else {
-      const durStr = dur > 0 ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur%60} сек`) : '';
+      // Тому кому звонили — пропущенный звонок
+      label = `Пропущенный ${type}`;
+      extra = `${ds}, ${ts}`;
+    } else if (isCaller) {
+      // Звонивший: принят или нет ответа
+      const durStr = dur > 0 ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur % 60} сек`) : '';
       label = type;
-      extra = (durStr ? `· ${durStr} · ` : '· Нет ответа · ') + `${ds}, ${ts}`;
+      extra = connected
+        ? (durStr ? `✅ Принят · ${durStr} · ${ds}, ${ts}` : `✅ Принят · ${ds}, ${ts}`)
+        : `Нет ответа · ${ds}, ${ts}`;
+    } else {
+      // Принявший: просто длительность
+      const durStr = dur > 0 ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur % 60} сек`) : '';
+      label = type;
+      extra = durStr ? `${durStr} · ${ds}, ${ts}` : `${ds}, ${ts}`;
     }
     const msg = {
       id:       `cr_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
