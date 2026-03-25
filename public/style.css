@@ -640,6 +640,9 @@ option { background: var(--surface2); color: var(--text); }
   min-height: 62px;
 }
 .hamburger { display: none; }
+@media (max-width: 768px) {
+  .hamburger { display: flex !important; }
+}
 .hdr-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .hdr-txt { min-width: 0; }
 .hdr-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2218,10 +2221,9 @@ video {
 
 
 /* ── Call record ──────────────────────────────── */
-.call-record { display:flex; align-items:center; gap:8px; padding:4px 0; }
-.cr-icon { font-size:18px; flex-shrink:0; }
+.call-record { display:flex; align-items:center; gap:6px; padding:4px 0; }
 .cr-label { font-size:13px; font-weight:600; color:var(--text); }
-.cr-extra { font-size:11px; color:var(--text3); margin-left:4px; }
+.cr-extra { font-size:11px; color:var(--text3); margin-left:2px; }
 .cr-time  { font-size:10px; color:var(--text3); margin-left:auto; }
 
 
