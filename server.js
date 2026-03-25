@@ -786,9 +786,9 @@ app.use(express.json());
 //  AI ЧАТ — Mistral с инструментами, памятью файлов и просмотром изображений
 // ════════════════════════════════════════════════════════════════════════════
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
-// MiniMax (Aura AI) — модель MiniMax-M2.7
+// MiniMax (Aura AI) — MiniMax-M2.5 (самая новая, март 2026)
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''; // Set MINIMAX_API_KEY in Render environment
-const MINIMAX_API_URL = 'https://api.minimax.chat/v1/text/chatcompletion_v2';
+const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions'; // OpenAI-compatible
 const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
 const aiUserFiles     = new Map(); // username -> [{ id, name, content, ttl }]
 const AI_MAX_HISTORY  = 80;
@@ -2609,53 +2609,55 @@ ${text}`;
 // ── /api/ai-chat — основной эндпоинт ─────────────────────────────────────────
 // ── MiniMax (Aura AI) API call ─────────────────────────────────────────────
 async function callMiniMax(messages, onChunk) {
-  // MiniMax API — пробуем несколько endpoint и моделей
+  // MiniMax API — новый OpenAI-совместимый endpoint
+  // Самая новая модель: MiniMax-M2.5 (март 2026)
   const endpoints = [
-    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-M2.7' },
-    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-M2' },
-    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'abab6.5s-chat' },
+    { url: 'https://api.minimax.io/v1/chat/completions', model: 'MiniMax-M2.7' },
+    { url: 'https://api.minimax.io/v1/chat/completions', model: 'MiniMax-M2.5' },
+    { url: 'https://api.minimax.io/v1/chat/completions', model: 'MiniMax-M2' },
   ];
 
   let lastErr = null;
   for (const ep of endpoints) {
     try {
-      // Сначала пробуем без стриминга — надёжнее
+      console.log('[MiniMax] Trying', ep.model, 'at', ep.url);
       const resp = await axios.post(ep.url, {
         model: ep.model,
         messages,
         max_tokens: 2000,
         temperature: 0.7,
-        stream: false,
       }, {
         headers: {
           'Authorization': `Bearer ${MINIMAX_API_KEY}`,
           'Content-Type': 'application/json'
         },
-        timeout: 45000,
+        timeout: 60000,
       });
 
-      // Логируем ответ для отладки
       const data = resp.data;
-      console.log('[MiniMax] model:', ep.model, 'status:', resp.status, 'choices:', data.choices?.length);
+      console.log('[MiniMax] OK model:', ep.model, 'choices:', data.choices?.length);
 
-      const content = data.choices?.[0]?.message?.content
-        || data.choices?.[0]?.messages?.[0]?.text
-        || data.reply
-        || '';
+      const content = data.choices?.[0]?.message?.content || '';
 
       if (content) {
-        // Имитируем стриминг — разбиваем на слова
+        // Имитируем стриминг — побуквенно
         const words = content.split(' ');
         for (const w of words) {
           onChunk?.(w + ' ');
-          await new Promise(r => setTimeout(r, 10));
+          await new Promise(r => setTimeout(r, 12));
         }
         return content;
       }
-      console.warn('[MiniMax] Empty content, raw:', JSON.stringify(data).slice(0,200));
+      console.warn('[MiniMax] Empty content from', ep.model, '— raw:', JSON.stringify(data).slice(0, 300));
     } catch(e) {
       lastErr = e;
-      console.error('[MiniMax] Error with', ep.model, ':', e.response?.status, e.response?.data?.message || e.message);
+      const status = e.response?.status;
+      const msg    = e.response?.data?.error?.message || e.response?.data?.message || e.message;
+      console.error('[MiniMax] Error', ep.model, status, msg);
+      // 401/403 — ключ неверный, не пробуем дальше
+      if (status === 401 || status === 403) {
+        throw new Error(`MiniMax auth failed (${status}): ${msg}`);
+      }
     }
   }
   throw lastErr || new Error('All MiniMax endpoints failed');
