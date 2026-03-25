@@ -2659,9 +2659,17 @@ function _aiAddMessage(role, content, attachment) {
   const ava = document.createElement('div');
   ava.style.cssText = 'width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;';
   if (role === 'user') {
-    ava.style.background = 'linear-gradient(135deg,var(--accent),var(--accent2))';
-    ava.style.color = '#fff';
-    ava.textContent = (userData.nickname || currentUser || '?').charAt(0).toUpperCase();
+    // Показываем настоящую аватарку пользователя
+    const userAv = userAvatars[currentUser];
+    if (userAv) {
+      ava.style.backgroundImage = `url('${userAv}')`;
+      ava.style.backgroundSize = 'cover';
+      ava.style.backgroundPosition = 'center';
+    } else {
+      ava.style.background = 'linear-gradient(135deg,var(--accent),var(--accent2))';
+      ava.style.color = '#fff';
+      ava.textContent = (userData.nickname || currentUser || '?').charAt(0).toUpperCase();
+    }
   } else {
     ava.style.background = 'linear-gradient(135deg,#6366f1,#8b5cf6)';
     ava.style.color = '#fff';
