@@ -2474,79 +2474,87 @@ function openAiChat() {
     const sendBtn = document.getElementById('aiSendBtn');
     const parent  = sendBtn?.parentElement;
     if (parent) {
-      // Кастомный дропдаун вместо нативного select
       const models = [
-        { value: 'mistral', label: 'Mistral',  icon: '⚡' },
-        { value: 'minimax', label: 'Aura AI',  icon: '✨' },
+        { value: 'mistral', label: 'Mistral', icon: '⚡' },
+        { value: 'minimax', label: 'Aura AI', icon: '✨' },
       ];
       let currentModel = 'mistral';
 
       const wrap = document.createElement('div');
       wrap.id = 'aiModelWrap';
-      wrap.style.cssText = 'position:relative;flex-shrink:0;bottom:7px;';
+      wrap.style.cssText = 'position:relative;flex-shrink:0;bottom:4px;';
 
       const btn = document.createElement('button');
-      btn.id = 'aiModelBtn';
+      btn.id   = 'aiModelBtn';
       btn.type = 'button';
-      btn.style.cssText = 'display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--surface3);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .2s,background .15s,box-shadow .2s;box-shadow:0 1px 4px rgba(0,0,0,.08);';
-      btn.innerHTML = '<span id="aiModelIcon">⚡</span><span id="aiModelLabel">Mistral</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;margin-left:1px;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>';
+      btn.style.cssText = 'display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--surface3);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;transition:all .2s;box-shadow:0 1px 4px rgba(0,0,0,.08);';
+      btn.innerHTML = '<span id="aiModelIcon">⚡</span><span id="aiModelLabel" style="margin:0 2px">Mistral</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>';
 
-      btn.onmouseenter = () => { btn.style.borderColor='var(--accent)'; btn.style.background='var(--surface2)'; btn.style.boxShadow='0 2px 10px rgba(99,102,241,.18)'; };
-      btn.onmouseleave = () => { if (!drop.style.display||drop.style.display==='none') { btn.style.borderColor='var(--border)'; btn.style.background='var(--surface3)'; btn.style.boxShadow='0 1px 4px rgba(0,0,0,.08)'; } };
-
+      // Dropdown — position:fixed чтобы не обрезался overflow модала
       const drop = document.createElement('div');
       drop.id = 'aiModelDrop';
-      drop.style.cssText = 'display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:5px;min-width:130px;box-shadow:0 8px 24px rgba(0,0,0,.18);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:9999;animation:modelDropIn .12s ease;';
+      drop.style.cssText = 'display:none;position:fixed;background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:5px;min-width:140px;box-shadow:0 8px 32px rgba(0,0,0,.22);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:99999;';
+
+      function updateDropPos() {
+        const r = btn.getBoundingClientRect();
+        drop.style.left   = r.left + 'px';
+        drop.style.top    = (r.top - drop.offsetHeight - 6) + 'px';
+        // если не помещается сверху — показываем снизу
+        if (r.top - drop.offsetHeight - 6 < 8) {
+          drop.style.top  = (r.bottom + 6) + 'px';
+        }
+      }
+
+      function openDrop() {
+        drop.style.display = 'block';
+        // position after display:block so offsetHeight is real
+        requestAnimationFrame(updateDropPos);
+        drop.style.animation = 'modelDropIn .14s cubic-bezier(.16,1,.3,1)';
+        btn.style.borderColor = 'var(--accent)';
+        btn.style.background  = 'var(--surface2)';
+        btn.style.boxShadow   = '0 2px 10px rgba(99,102,241,.18)';
+      }
+      function closeDrop() {
+        drop.style.display = 'none';
+        btn.style.borderColor = 'var(--border)';
+        btn.style.background  = 'var(--surface3)';
+        btn.style.boxShadow   = '0 1px 4px rgba(0,0,0,.08)';
+      }
 
       models.forEach(m => {
         const item = document.createElement('div');
-        item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;transition:background .12s;';
-        item.innerHTML = `<span style="font-size:15px">${m.icon}</span><span>${m.label}</span>`;
+        item.dataset.val = m.value;
+        item.style.cssText = 'display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;transition:background .1s;color:var(--text);';
+        item.innerHTML = '<span style="font-size:16px;line-height:1">' + m.icon + '</span><span>' + m.label + '</span>';
         if (m.value === currentModel) item.style.background = 'var(--accent-dim)';
-        item.onmouseenter = () => { item.style.background='var(--surface2)'; };
-        item.onmouseleave = () => { item.style.background = currentModel===m.value ? 'var(--accent-dim)' : ''; };
-        item.onclick = () => {
+
+        item.onmouseenter = () => { item.style.background = 'var(--surface2)'; };
+        item.onmouseleave = () => { item.style.background = currentModel === m.value ? 'var(--accent-dim)' : ''; };
+        item.onmousedown  = (e) => {
+          e.preventDefault(); e.stopPropagation();
           currentModel = m.value;
-          document.getElementById('aiModelIcon').textContent = m.icon;
+          document.getElementById('aiModelIcon').textContent  = m.icon;
           document.getElementById('aiModelLabel').textContent = m.label;
-          drop.style.display = 'none';
-          btn.style.borderColor = 'var(--border)';
-          btn.style.background  = 'var(--surface3)';
-          // Обновляем выделение
-          drop.querySelectorAll('div').forEach(d => d.style.background='');
-          item.style.background = 'var(--accent-dim)';
-          // Скрытый select для совместимости
+          drop.querySelectorAll('[data-val]').forEach(d => { d.style.background = d.dataset.val === m.value ? 'var(--accent-dim)' : ''; });
           let sel = document.getElementById('aiModelSelect');
-          if (!sel) { sel = document.createElement('select'); sel.id='aiModelSelect'; sel.style.display='none'; document.body.appendChild(sel); sel.innerHTML='<option value="mistral">Mistral</option><option value="minimax">Aura AI</option>'; }
-          sel.value = m.value;
+          if (sel) sel.value = m.value;
+          closeDrop();
         };
         drop.appendChild(item);
       });
 
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const open = drop.classList.contains('ai-drop-open');
-        if (open) {
-          drop.classList.remove('ai-drop-open');
-          drop.style.display = 'none';
-          btn.style.borderColor = 'var(--border)';
-          btn.style.background  = 'var(--surface3)';
-        } else {
-          drop.classList.add('ai-drop-open');
-          drop.style.display = 'block';
-          btn.style.borderColor = 'var(--accent)';
-          btn.style.background  = 'var(--surface2)';
-        }
-      };
-      drop.addEventListener('click', e => e.stopPropagation());
-      document.addEventListener('click', (e) => {
-        if (!wrap.contains(e.target)) {
-          drop.classList.remove('ai-drop-open');
-          drop.style.display='none';
-          btn.style.borderColor='var(--border)';
-          btn.style.background='var(--surface3)';
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        drop.style.display === 'block' ? closeDrop() : openDrop();
+      });
+
+      document.addEventListener('mousedown', (e) => {
+        if (!wrap.contains(e.target) && e.target !== drop && !drop.contains(e.target)) {
+          closeDrop();
         }
       });
+      window.addEventListener('scroll', closeDrop, true);
+      window.addEventListener('resize', () => { if (drop.style.display==='block') updateDropPos(); });
 
       // Скрытый select для получения значения
       const hidSel = document.createElement('select');
@@ -2554,7 +2562,7 @@ function openAiChat() {
       hidSel.style.display = 'none';
       hidSel.innerHTML = '<option value="mistral">Mistral</option><option value="minimax">Aura AI</option>';
 
-      wrap.appendChild(drop);
+      document.body.appendChild(drop); // append to body, not wrap!
       wrap.appendChild(btn);
       wrap.appendChild(hidSel);
       parent.insertBefore(wrap, sendBtn);
