@@ -787,7 +787,7 @@ app.use(express.json());
 // ════════════════════════════════════════════════════════════════════════════
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
 // MiniMax (Aura AI) — модель MiniMax-M1
-const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || 'sk-cp-qMBs7AEO3Zr356vh-A5IRhi1z4E5H22EEL7YFRs23zb8hffwKzXo6YMcuzxTyunMDkp9J0luUP0M2o9avo262W-NtYGsFJA-ZtkbYZjssw0nQUrLchyztyE';
+const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''; // Set MINIMAX_API_KEY in Render environment
 const MINIMAX_API_URL = 'https://api.minimax.chat/v1/text/chatcompletion_v2';
 const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
 const aiUserFiles     = new Map(); // username -> [{ id, name, content, ttl }]
