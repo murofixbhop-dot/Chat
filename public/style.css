@@ -2323,32 +2323,40 @@ video {
   .sidebar { width: 85vw !important; }
 }
 
+
 /* ══ User Profile Modal ═══════════════════════════════════════ */
 .user-profile-modal-bg {
   display: none;
   position: fixed; inset: 0; z-index: 9200;
-  background: rgba(0,0,0,.5);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  align-items: flex-end;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  align-items: center;
   justify-content: center;
+  padding: 16px;
 }
 .user-profile-modal-bg.open { display: flex; }
+
+@keyframes upmAppear {
+  from { opacity: 0; transform: scale(.92) translateY(12px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0); }
+}
 
 .user-profile-modal {
   position: relative;
   background: var(--surface);
   border: 1px solid var(--border2);
-  border-radius: 24px 24px 0 0;
+  border-radius: 24px;
   width: 100%;
-  max-width: 480px;
+  max-width: 400px;
   max-height: 88dvh;
   overflow-y: auto;
-  padding: 24px 20px 32px;
+  padding: 28px 20px 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  animation: slideUpSheet .25s cubic-bezier(.16,1,.3,1);
+  animation: upmAppear .22s cubic-bezier(.16,1,.3,1);
+  box-shadow: 0 24px 60px rgba(0,0,0,.4);
 }
 
 .upm-close {
@@ -2364,17 +2372,16 @@ video {
 .upm-avatar {
   width: 90px; height: 90px; border-radius: 50%;
   margin-bottom: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.2);
+  box-shadow: 0 4px 20px rgba(0,0,0,.25);
   flex-shrink: 0;
 }
 
-.upm-name     { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
-.upm-username { font-size: 13px; color: var(--text3); margin-bottom: 6px; }
+.upm-name     { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 2px; text-align: center; }
+.upm-username { font-size: 13px; color: var(--text3); margin-bottom: 8px; }
 .upm-status   { font-size: 12px; color: var(--text3); margin-bottom: 20px;
-  padding: 3px 12px; border-radius: 99px; background: var(--surface2); }
-.upm-status.upm-online { color: #22c55e; background: rgba(34,197,94,.1); }
+  padding: 4px 14px; border-radius: 99px; background: var(--surface2); }
+.upm-status.upm-online { color: #22c55e; background: rgba(34,197,94,.12); }
 
-/* Tabs */
 .upm-tabs {
   display: flex; gap: 4px; margin-bottom: 14px;
   background: var(--surface2); border-radius: 12px; padding: 4px;
@@ -2383,12 +2390,16 @@ video {
 .upm-tab {
   flex: 1; padding: 7px 0; border: none; background: none;
   border-radius: 9px; color: var(--text2); font-size: 13px;
-  font-weight: 500; cursor: pointer; transition: background .15s, color .15s;
+  font-weight: 500; cursor: pointer;
+  transition: background .15s, color .15s;
   display: flex; align-items: center; justify-content: center; gap: 5px;
 }
-.upm-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+.upm-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
+}
 
-/* Panes */
 .upm-pane { width: 100%; }
 
 .upm-media-grid {
@@ -2405,18 +2416,18 @@ video {
   transition: transform .2s;
 }
 .upm-media-item:hover img,
-.upm-media-item:hover video { transform: scale(1.05); }
+.upm-media-item:hover video { transform: scale(1.06); }
 .upm-play-ico {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,.35); color: #fff; font-size: 20px;
+  background: rgba(0,0,0,.32); color: #fff; font-size: 20px;
 }
 
 .upm-empty {
   display: flex; flex-direction: column; align-items: center;
   gap: 8px; padding: 28px 0; color: var(--text3); font-size: 13px;
 }
-.upm-empty i { font-size: 28px; }
+.upm-empty i { font-size: 28px; opacity: .5; }
 
 .upm-file-list { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .upm-file-row {
@@ -2429,7 +2440,11 @@ video {
 .upm-file-row:hover { background: var(--surface3); }
 .upm-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-@media (max-width: 768px) {
-  .user-profile-modal { border-radius: 20px 20px 0 0; padding: 20px 16px 28px; }
-  .upm-media-grid { gap: 2px; }
+@media (max-width: 480px) {
+  .user-profile-modal {
+    max-width: 100%;
+    border-radius: 20px;
+    padding: 22px 14px 24px;
+    max-height: 92dvh;
+  }
 }
