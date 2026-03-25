@@ -2448,3 +2448,58 @@ video {
     max-height: 92dvh;
   }
 }
+
+/* ── Group members list ──────────────────────────────────────── */
+.upm-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.upm-member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  background: var(--surface2);
+  transition: background .15s;
+}
+.upm-member-row:hover { background: var(--surface3); }
+.upm-member-ava {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.upm-member-dot {
+  position: absolute;
+  bottom: 1px; right: 1px;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: #6b7280;
+  border: 2px solid var(--surface2);
+}
+.upm-member-dot-on { background: #22c55e; }
+.upm-member-info { flex: 1; min-width: 0; }
+.upm-member-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upm-member-status {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 1px;
+}
+.upm-creator-badge {
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
