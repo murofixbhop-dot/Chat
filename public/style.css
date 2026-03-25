@@ -490,6 +490,9 @@ option { background: var(--surface2); color: var(--text); }
   animation: fadeIn .2s ease;
   background: var(--surface); /* prevents dark gaps at seams */
 }
+@media (max-width: 768px) {
+  .app { overflow: visible; } /* allow sidebar to slide out on mobile */
+}
 
 /* ════════════════════════════════════════════════
    SIDEBAR  ← КРАСОТА + УДОБСТВО
