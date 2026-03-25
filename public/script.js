@@ -1055,6 +1055,7 @@ function _updateChatOnlineStatus() {
 socket.on('history', msgs => {
   _historyLoading = true;
   messagesDiv.innerHTML = '';
+  _lastMsgDate = null;
   if (msgsEmpty) msgsEmpty.style.display = msgs.length ? 'none' : 'flex';
   msgs.forEach(addMessage);
   // После отрисовки истории — разрешаем уведомления для новых сообщений
@@ -1089,8 +1090,25 @@ socket.on('call-record', msg => {
   addMessage(msg);
 });
 
+let _lastMsgDate = null; // Для разделителей по дням
+
 function addMessage(msg) {
   if (msgsEmpty) msgsEmpty.style.display = 'none';
+
+  // ── День-разделитель ──
+  const msgDate = msg.date || (msg.ts
+    ? new Date(msg.ts).toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' })
+    : null);
+  if (msgDate && msgDate !== _lastMsgDate) {
+    _lastMsgDate = msgDate;
+    const sep = document.createElement('div');
+    sep.className = 'msg-day-sep';
+    const today    = new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' });
+    const yesterday = new Date(Date.now()-86400000).toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' });
+    sep.textContent = msgDate === today ? 'Сегодня' : msgDate === yesterday ? 'Вчера' : msgDate;
+    messagesDiv?.appendChild(sep);
+  }
+
   const own = msg.user === currentUser;
   const row = document.createElement('div');
   row.className = `msg-row${own ? ' own' : ''}${_historyLoading ? ' no-anim' : ''}`;
@@ -4140,6 +4158,7 @@ fetchIceServers();
 // State
 let rtcPeer      = null;
 let _callTarget  = null;
+let _callRoom    = null; // комната где начался звонок
 let _callIsVid   = false;
 let _isCaller    = false;
 let _inCall      = false;  // true from invite until cleanup
@@ -4246,7 +4265,7 @@ function openGroupProfile(g) {
         const mAv   = userAvatars[m];
         const mOn   = onlineUsersSet.has(m);
         const avEl  = mAv
-          ? `<div class="upm-member-ava" style="background-image:url('${mAv}');background-size:cover;background-position:center"></div>`
+          ? `<div class="upm-member-ava" style="background-image:url('${mAv}');background-size:cover;background-position:center;cursor:pointer" onclick="viewMedia('${mAv}','image')"></div>`
           : `<div class="upm-member-ava" style="background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:15px">${mNick[0].toUpperCase()}</div>`;
         return `<div class="upm-member-row">
           <div style="position:relative;flex-shrink:0">
@@ -4287,7 +4306,7 @@ function openGroupProfile(g) {
   // Group avatar
   let grpAvHtml;
   if (g.avatar) {
-    grpAvHtml = `<div class="upm-avatar" style="background-image:url('${g.avatar}');background-size:cover;background-position:center;border-radius:20px"></div>`;
+    grpAvHtml = `<div class="upm-avatar" style="background-image:url('${g.avatar}');background-size:cover;background-position:center;border-radius:20px;cursor:pointer" onclick="viewMedia('${g.avatar}','image')"></div>`;
   } else {
     grpAvHtml = `<div class="upm-avatar" style="background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:32px;color:#fff"><i class="ti ti-users"></i></div>`;
   }
@@ -4469,6 +4488,7 @@ async function startCall(isVid) {
     } else {
       // PRIVATE CALL
       _callTarget  = target;
+      _callRoom    = currentRoom; // запоминаем комнату где начался звонок
       _groupCall = false;
       _groupMembers = [];
       socket.emit('call-invite', { to: target, from: currentUser, isVid });
@@ -4626,6 +4646,7 @@ socket.on('call-invite', ({ from, isVid, resumed }) => {
   }
 
   _callTarget = from;
+  _callRoom   = currentRoom; // комната где принят звонок
   _callIsVid  = isVid;
   _isCaller   = false;
   _inCall     = true;
@@ -5495,12 +5516,12 @@ function doLogout() {
 function _cleanup() {
   stopRing();
   // Add call record to chat if call was connected
-  if (_callTarget && currentRoom && !_groupCall) {
+  if (_callTarget && _callRoom && !_groupCall) {
     const dur = _callConnectedTime ? Math.floor((Date.now() - _callConnectedTime) / 1000) : 0;
     // Только звонивший (caller) сохраняет запись — сервер разошлёт обоим
     if (_isCaller) {
       socket.emit('save-call-record', {
-        room: currentRoom, from: currentUser, to: _callTarget,
+        room: _callRoom, from: currentUser, to: _callTarget,
         isVid: _callIsVid, isCaller: true,
         connected: !!_callConnectedTime, dur,
         timestamp: Date.now()
@@ -5508,6 +5529,7 @@ function _cleanup() {
     }
   }
   _callConnectedTime = null;
+  _callRoom = null;
 
   if (_callAutoTimeout) { clearTimeout(_callAutoTimeout); _callAutoTimeout = null; }
   _releaseWakeLock();
