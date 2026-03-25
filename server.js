@@ -2608,48 +2608,57 @@ ${text}`;
 
 // ── /api/ai-chat — основной эндпоинт ─────────────────────────────────────────
 // ── MiniMax (Aura AI) API call ─────────────────────────────────────────────
-async function callMiniMax(messages, stream, onChunk) {
-  const resp = await axios.post(MINIMAX_API_URL, {
-    model: 'MiniMax-M1',
-    messages,
-    max_tokens: 3000,
-    temperature: 0.7,
-    stream: !!stream,
-  }, {
-    headers: {
-      'Authorization': `Bearer ${MINIMAX_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    responseType: stream ? 'stream' : 'json',
-    timeout: 60000,
-  });
+async function callMiniMax(messages, onChunk) {
+  // MiniMax API — пробуем несколько endpoint и моделей
+  const endpoints = [
+    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-M1' },
+    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'abab6.5s-chat' },
+    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'abab5.5s-chat' },
+  ];
 
-  if (!stream) {
-    return resp.data.choices?.[0]?.message?.content || '';
-  }
+  let lastErr = null;
+  for (const ep of endpoints) {
+    try {
+      // Сначала пробуем без стриминга — надёжнее
+      const resp = await axios.post(ep.url, {
+        model: ep.model,
+        messages,
+        max_tokens: 2000,
+        temperature: 0.7,
+        stream: false,
+      }, {
+        headers: {
+          'Authorization': `Bearer ${MINIMAX_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 45000,
+      });
 
-  let reply = '';
-  await new Promise((resolve, reject) => {
-    let buf = '';
-    resp.data.on('data', chunk => {
-      buf += chunk.toString();
-      const lines = buf.split('\n');
-      buf = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]') return resolve();
-        try {
-          const j = JSON.parse(raw);
-          const delta = j.choices?.[0]?.delta?.content || '';
-          if (delta) { reply += delta; onChunk?.(delta); }
-        } catch {}
+      // Логируем ответ для отладки
+      const data = resp.data;
+      console.log('[MiniMax] model:', ep.model, 'status:', resp.status, 'choices:', data.choices?.length);
+
+      const content = data.choices?.[0]?.message?.content
+        || data.choices?.[0]?.messages?.[0]?.text
+        || data.reply
+        || '';
+
+      if (content) {
+        // Имитируем стриминг — разбиваем на слова
+        const words = content.split(' ');
+        for (const w of words) {
+          onChunk?.(w + ' ');
+          await new Promise(r => setTimeout(r, 10));
+        }
+        return content;
       }
-    });
-    resp.data.on('end', resolve);
-    resp.data.on('error', reject);
-  });
-  return reply;
+      console.warn('[MiniMax] Empty content, raw:', JSON.stringify(data).slice(0,200));
+    } catch(e) {
+      lastErr = e;
+      console.error('[MiniMax] Error with', ep.model, ':', e.response?.status, e.response?.data?.message || e.message);
+    }
+  }
+  throw lastErr || new Error('All MiniMax endpoints failed');
 }
 
 app.post('/api/ai-chat', async (req, res) => {
@@ -2710,7 +2719,6 @@ app.post('/api/ai-chat', async (req, res) => {
       try {
         reply = await callMiniMax(
           [{ role: 'system', content: currentSystemPrompt }, ...history],
-          true,
           delta => aiSseEmit(username, 'chunk', { text: delta })
         );
       } catch(mmErr) {
@@ -2787,7 +2795,6 @@ app.post('/api/ai-chat', async (req, res) => {
           // MiniMax (Aura AI)
           reply = await callMiniMax(
             [{ role: 'system', content: currentSystemPrompt }, ...history],
-            true,
             delta => aiSseEmit(username, 'chunk', { text: delta })
           );
           if (!reply) reply = 'Готово';
@@ -3863,14 +3870,13 @@ setInterval(() => {
 function broadcastOnlineCount() {
   const now = Date.now();
   for (let [id, user] of onlineUsers.entries()) {
-    if (now - user.lastSeen > 10000) onlineUsers.delete(id);
+    if (now - user.lastSeen > 25000) onlineUsers.delete(id); // 25s timeout вместо 10s
   }
   io.emit('online-count', onlineUsers.size);
-  // Рассылаем список онлайн пользователей
-  const onlineList = [...onlineUsers.values()].map(u => u.username).filter(Boolean);
+  const onlineList = [...new Set([...onlineUsers.values()].map(u => u.username).filter(Boolean))];
   io.emit('online-users', onlineList);
 }
-setInterval(broadcastOnlineCount, 5000);
+setInterval(broadcastOnlineCount, 8000); // реже чтобы не мигало
 
 io.on('connection', (socket) => {
   let currentUser = null;
