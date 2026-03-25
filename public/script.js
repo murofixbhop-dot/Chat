@@ -988,6 +988,11 @@ function gotoRoom(room) {
     setAvatar(roomAvatar, other, userAvatars[other]);
     if (onlinePill) onlinePill.style.display = 'none';
     hdrRight.innerHTML = callBtnsHtml;
+    // Клик по аватарке/нику → профиль
+    roomAvatar.style.cursor = 'pointer';
+    roomAvatar.onclick = () => openUserProfile(other);
+    roomName.style.cursor = 'pointer';
+    roomName.onclick = () => openUserProfile(other);
   } else if (room.startsWith('group:')) {
     const g = groups.find(g => g.id === room.replace('group:', ''));
     roomName.textContent = g?.name || 'Группа';
@@ -4193,6 +4198,99 @@ function stopRing() {
 }
 
 // ── OUTGOING ────────────────────────────────────────────
+
+// ══════════════════════════════════════════════
+// USER PROFILE MODAL
+// ══════════════════════════════════════════════
+function openUserProfile(username) {
+  const nick = userNicknames[username] || username;
+  const av   = userAvatars[username];
+  const isOn = onlineUsersSet.has(username);
+
+  // Create modal
+  let modal = document.getElementById('userProfileModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'userProfileModal';
+    modal.className = 'user-profile-modal-bg';
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('open'); };
+    document.body.appendChild(modal);
+  }
+
+  // Collect shared media from current chat DOM
+  const msgs = document.getElementById('messages');
+  const images = [], videos = [], files = [];
+  if (msgs) {
+    msgs.querySelectorAll('.msg-row:not(.own)').forEach(row => {
+      row.querySelectorAll('.msg-img').forEach(img => images.push(img.src));
+      row.querySelectorAll('.msg-video').forEach(v => {
+        const src = v.src || v.querySelector('source')?.src;
+        if (src) videos.push(src);
+      });
+      row.querySelectorAll('.msg-square').forEach(v => {
+        const src = v.src || v.querySelector('source')?.src;
+        if (src) videos.push(src);
+      });
+      row.querySelectorAll('.file-dl-btn, .msg-file-row').forEach(f => {
+        const href = f.href || f.dataset.url;
+        const name = f.dataset.name || f.querySelector('.file-name')?.textContent || 'Файл';
+        if (href) files.push({ href, name });
+      });
+    });
+    // Also get file messages
+    msgs.querySelectorAll('.msg-row:not(.own) .file-msg-wrap').forEach(fw => {
+      const a = fw.querySelector('a');
+      if (a) files.push({ href: a.href, name: fw.querySelector('.file-name-txt')?.textContent || 'Файл' });
+    });
+  }
+
+  const imgGrid = images.length
+    ? `<div class="upm-media-grid">${images.map(src => `<div class="upm-media-item" onclick="viewMedia('${src}','image')"><img src="${src}" loading="lazy"></div>`).join('')}</div>`
+    : `<div class="upm-empty"><i class="ti ti-photo-off"></i><span>Нет фото</span></div>`;
+
+  const vidGrid = videos.length
+    ? `<div class="upm-media-grid">${videos.map(src => `<div class="upm-media-item upm-vid" onclick="viewMedia('${src}','video')"><video src="${src}" muted preload="metadata"></video><div class="upm-play-ico"><i class="ti ti-player-play-filled"></i></div></div>`).join('')}</div>`
+    : `<div class="upm-empty"><i class="ti ti-video-off"></i><span>Нет видео</span></div>`;
+
+  const fileList = files.length
+    ? `<div class="upm-file-list">${files.map(f => `<a class="upm-file-row" href="${f.href}" target="_blank" download><i class="ti ti-file"></i><span class="upm-file-name">${esc(f.name)}</span><i class="ti ti-download" style="margin-left:auto;color:var(--text3)"></i></a>`).join('')}</div>`
+    : `<div class="upm-empty"><i class="ti ti-files-off"></i><span>Нет файлов</span></div>`;
+
+  const avHtml = av
+    ? `<div class="upm-avatar" style="background-image:url('${av}');background-size:cover;background-position:center;cursor:pointer" onclick="viewMedia('${av}','image')"></div>`
+    : `<div class="upm-avatar" style="background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:#fff">${nick[0].toUpperCase()}</div>`;
+
+  modal.innerHTML = `
+    <div class="user-profile-modal">
+      <button class="upm-close" onclick="document.getElementById('userProfileModal').classList.remove('open')">
+        <i class="ti ti-x"></i>
+      </button>
+      ${avHtml}
+      <div class="upm-name">${esc(nick)}</div>
+      <div class="upm-username">@${esc(username)}</div>
+      <div class="upm-status ${isOn ? 'upm-online' : ''}">${isOn ? 'В сети' : 'Не в сети'}</div>
+
+      <!-- Tabs -->
+      <div class="upm-tabs">
+        <button class="upm-tab active" onclick="upmTab(this,'upm-photos')"><i class="ti ti-photo"></i> Фото</button>
+        <button class="upm-tab" onclick="upmTab(this,'upm-videos')"><i class="ti ti-video"></i> Видео</button>
+        <button class="upm-tab" onclick="upmTab(this,'upm-files')"><i class="ti ti-files"></i> Файлы</button>
+      </div>
+      <div id="upm-photos" class="upm-pane">${imgGrid}</div>
+      <div id="upm-videos" class="upm-pane" style="display:none">${vidGrid}</div>
+      <div id="upm-files"  class="upm-pane" style="display:none">${fileList}</div>
+    </div>`;
+
+  modal.classList.add('open');
+}
+
+function upmTab(btn, paneId) {
+  btn.closest('.user-profile-modal').querySelectorAll('.upm-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  btn.closest('.user-profile-modal').querySelectorAll('.upm-pane').forEach(p => p.style.display = 'none');
+  document.getElementById(paneId).style.display = '';
+}
+
 // ── Wake Lock: не даём устройству спать во время звонка ─────────────────
 let _wakeLock = null;
 async function _acquireWakeLock() {
