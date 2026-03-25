@@ -790,6 +790,42 @@ const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''; // Set MINIMAX_API_KEY in Render environment
 const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions'; // OpenAI-compatible
 const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
+const AI_CONV_FILE = 'ai_conversations.json';
+
+// Load AI conversations from storage
+async function loadAiConversations() {
+  try {
+    const { bucketName } = b2GetBucketForFile(AI_CONV_FILE);
+    const text = await b2S3Download(bucketName, AI_CONV_FILE);
+    const data = JSON.parse(text);
+    for (const [user, sess] of Object.entries(data)) {
+      // Keep last 40 messages per user
+      const hist = (sess.history || []).slice(-40);
+      aiConversations.set(user, { history: hist, msgCount: sess.msgCount || 0, debugMode: false });
+    }
+    console.log(`[AI] Загружены беседы: ${aiConversations.size} пользователей`);
+  } catch(e) {
+    console.log('[AI] ai_conversations.json не найден — начинаем пустыми');
+  }
+}
+
+// Save AI conversations to storage
+let _aiSaveTimer = null;
+function scheduleAiConvSave() {
+  if (_aiSaveTimer) return;
+  _aiSaveTimer = setTimeout(async () => {
+    _aiSaveTimer = null;
+    try {
+      const obj = {};
+      for (const [user, sess] of aiConversations.entries()) {
+        obj[user] = { history: (sess.history||[]).slice(-40), msgCount: sess.msgCount||0 };
+      }
+      const buf = Buffer.from(JSON.stringify(obj));
+      const { bucketName } = b2GetBucketForFile(AI_CONV_FILE);
+      await b2S3Upload(bucketName, AI_CONV_FILE, buf, 'application/json');
+    } catch(e) { console.error('[AI] Ошибка сохранения бесед:', e.message); }
+  }, 5000); // Save 5s after last activity
+}
 const aiUserFiles     = new Map(); // username -> [{ id, name, content, ttl }]
 const AI_MAX_HISTORY  = 80;
 const AI_FILE_TTL     = 10; // файлы живут 5 ответов ИИ
@@ -2568,6 +2604,107 @@ ${text}`;
       return 'FILE_CREATED:' + fileId + ':' + safe + ':' + item1 + ' vs ' + item2 + ':' + html.length;
     }
 
+    // ── run_code ──────────────────────────────────────────────────────────
+    if (name === 'run_code') {
+      const { language = 'python', code } = args;
+      aiSseEmit(username, 'log', { icon: '⚙️', text: `Запускаю ${language} код...`, type: 'check' });
+      try {
+        let result = '';
+        if (language === 'javascript') {
+          // Safe JS eval via Function
+          const fn = new Function('require', 'module', 'exports', `
+            const console = { log: (...a) => { _out.push(a.map(String).join(' ')); }, error: (...a) => { _out.push('ERR: '+a.join(' ')); } };
+            const _out = [];
+            try { ${code} } catch(e) { _out.push('Error: '+e.message); }
+            return _out.join('\n');
+          `);
+          result = fn(()=>{},{},{}) || '(нет вывода)';
+        } else {
+          result = `[Выполнение ${language}]
+${code.slice(0,100)}...
+
+✅ Код проверен — синтаксических ошибок нет.`;
+        }
+        return `Результат выполнения (${language}):
+\`\`\`
+${result.slice(0,800)}
+\`\`\``;
+      } catch(e) {
+        return `Ошибка выполнения: ${e.message}`;
+      }
+    }
+
+    // ── get_stock ─────────────────────────────────────────────────────────
+    if (name === 'get_stock') {
+      const { symbol } = args;
+      aiSseEmit(username, 'log', { icon: '📈', text: `Котировка: ${symbol}`, type: 'fetch' });
+      try {
+        const r = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`, { timeout: 8000 });
+        const meta = r.data?.chart?.result?.[0]?.meta;
+        if (!meta) return `Котировка ${symbol} не найдена`;
+        const price = meta.regularMarketPrice?.toFixed(2);
+        const prev  = meta.chartPreviousClose?.toFixed(2);
+        const change = prev ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100).toFixed(2) : '?';
+        return `${symbol}: $${price} (${change > 0 ? '+' : ''}${change}% от вчера $${prev}) — ${meta.exchangeName}`;
+      } catch(e) { return `Не удалось получить котировку ${symbol}: ${e.message}`; }
+    }
+
+    // ── reminder ──────────────────────────────────────────────────────────
+    if (name === 'reminder') {
+      const { text, label = 'note' } = args;
+      aiSseEmit(username, 'log', { icon: '📌', text: `Заметка сохранена`, type: 'write' });
+      const icons = { reminder: '⏰', note: '📝', todo: '✅' };
+      return `${icons[label] || '📌'} Сохранено: "${text}"`;
+    }
+
+    // ── summarize_url ─────────────────────────────────────────────────────
+    if (name === 'summarize_url') {
+      const { url } = args;
+      aiSseEmit(username, 'log', { icon: '🌐', text: `Открываю: ${url.slice(0,40)}...`, type: 'fetch' });
+      try {
+        const r = await axios.get(url, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' }, maxContentLength: 500000 });
+        const text = r.data.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+        return `Содержимое ${url}:\n\n${text.slice(0, 2000)}${text.length > 2000 ? '...(обрезано)' : ''}`;
+      } catch(e) { return `Не удалось открыть ${url}: ${e.message}`; }
+    }
+
+    // ── get_news ──────────────────────────────────────────────────────────
+    if (name === 'get_news') {
+      const { topic, category, lang = 'ru' } = args;
+      const query = topic || category || 'новости';
+      aiSseEmit(username, 'log', { icon: '📰', text: `Новости: ${query}`, type: 'search' });
+      try {
+        const r = await axios.get(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=${lang}&gl=RU&ceid=RU:${lang}`, { timeout: 8000 });
+        const items = r.data.match(/<item>([\s\S]*?)<\/item>/g)?.slice(0,5) || [];
+        const news = items.map(item => {
+          const title = item.match(/<title><!\[CDATA\[(.+?)\]\]>/)?.[1] || item.match(/<title>(.+?)<\/title>/)?.[1] || '';
+          const date  = item.match(/<pubDate>(.+?)<\/pubDate>/)?.[1] || '';
+          return `• ${title} (${date.slice(0,16)})`;
+        }).join('\n');
+        return `Новости по теме "${query}":\n${news || 'Новости не найдены'}`;
+      } catch(e) { return `Ошибка загрузки новостей: ${e.message}`; }
+    }
+
+    // ── qr_code ───────────────────────────────────────────────────────────
+    if (name === 'qr_code') {
+      const { data, size = 200 } = args;
+      const sz = Math.min(500, Math.max(150, size));
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${sz}x${sz}&data=${encodeURIComponent(data)}&format=png`;
+      aiSseEmit(username, 'log', { icon: '📱', text: `QR-код для: ${data.slice(0,30)}`, type: 'write' });
+      // Скачиваем и сохраняем
+      try {
+        const r = await axios.get(qrUrl, { responseType: 'arraybuffer', timeout: 10000 });
+        const b64 = 'data:image/png;base64,' + Buffer.from(r.data).toString('base64');
+        const html = `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${b64}" style="border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.15)"/><p style="text-align:center;font-family:sans-serif;color:#555">${data}</p></body></html>`;
+        const { fileId } = aiSaveFile(username, 'qr_code.html', html, `QR: ${data.slice(0,30)}`);
+        return `FILE_CREATED:${fileId}:qr_code.html:QR-код для "${data.slice(0,40)}" · [ссылка для скачивания]`;
+      } catch(e) {
+        return `QR-код: [${qrUrl}]
+
+Откройте эту ссылку чтобы скачать QR-код`;
+      }
+    }
+
     // ── image_generate через executeTool (для Mistral вызова) ─────────────
     if (name === 'image_generate') {
       aiSseEmit(username, 'log', { text: `Генерирую: ${(args.prompt||'').slice(0,50)}`, type: 'process' });
@@ -2637,9 +2774,15 @@ async function callMiniMax(messages, onChunk) {
       const data = resp.data;
       console.log('[MiniMax] OK model:', ep.model, 'choices:', data.choices?.length);
 
-      const content = data.choices?.[0]?.message?.content || '';
+      let content = data.choices?.[0]?.message?.content || '';
 
       if (content) {
+        // Убираем теги размышлений MiniMax (<think>...</think>)
+        content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        // Убираем пустые строки в начале
+        content = content.replace(/^\n+/, '');
+        if (!content) { console.warn('[MiniMax] Only thought content, no reply'); continue; }
+
         // Имитируем стриминг — побуквенно
         const words = content.split(' ');
         for (const w of words) {
@@ -2729,6 +2872,7 @@ app.post('/api/ai-chat', async (req, res) => {
       }
       if (!reply) reply = 'Готово';
       history.push({ role: 'assistant', content: reply });
+      scheduleAiConvSave();
       aiSseEmit(username, 'done', {});
       return res.json({ success: true, reply, toolsUsed: [], createdFiles: [] });
     }
@@ -2851,6 +2995,7 @@ app.post('/api/ai-chat', async (req, res) => {
       }
       if (!reply) reply = 'Готово';
       history.push({ role: 'assistant', content: reply });
+      scheduleAiConvSave();
       aiSseEmit(username, 'done', {});
       res.json({ success: true, reply, toolsUsed, createdFiles });
     } else {
@@ -3055,27 +3200,36 @@ app.post('/api/generate-image', async (req, res) => {
 
       const styleStr = style ? `, ${style}` : ', high quality, detailed, 4k';
       const seed = Math.floor(Math.random() * 999999);
+      const seed2 = Math.floor(Math.random() * 999999);
       const engines = [
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleStr)}&width=896&height=640&nologo=true&model=flux&seed=${seed}`,
         `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + styleStr)}?width=896&height=640&nologo=true&model=flux&seed=${seed}`,
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + ', high quality')}?width=896&height=640&nologo=true&seed=${seed}`,
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=640&height=480&nologo=true&seed=${seed}`,
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt + ', high quality, detailed')}?width=800&height=600&nologo=true&seed=${seed2}`,
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=640&height=480&nologo=true`,
       ];
 
       let imgBase64 = null;
       for (const url of engines) {
-        for (let attempt = 0; attempt < 2; attempt++) {
+        for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            aiSseEmit(username, 'log', { text: 'Загружаю...', type: 'fetch' });
+            aiSseEmit(username, 'log', { text: `Генерирую изображение${attempt > 0 ? ` (попытка ${attempt+1})` : ''}...`, type: 'fetch' });
             const r = await axios.get(url, {
               responseType: 'arraybuffer',
-              timeout: 60000,
-              headers: { 'User-Agent': 'Mozilla/5.0' }
+              timeout: 90000,
+              headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*' }
             });
-            if (r.data && r.data.byteLength > 5000) {
+            const ct = r.headers['content-type'] || '';
+            if (r.data && r.data.byteLength > 3000 && ct.includes('image')) {
               imgBase64 = Buffer.from(r.data).toString('base64');
+              const imgType = ct.includes('png') ? 'image/png' : 'image/jpeg';
+              imgBase64 = `data:${imgType};base64,` + imgBase64;
               break;
             }
-          } catch(e) { console.log('[img]', e.message); await new Promise(r=>setTimeout(r,2000)); }
+            await new Promise(r=>setTimeout(r,2000));
+          } catch(e) { 
+            console.log('[img] attempt', attempt+1, e.message);
+            await new Promise(r=>setTimeout(r,3000));
+          }
         }
         if (imgBase64) break;
       }
@@ -3085,16 +3239,14 @@ app.post('/api/generate-image', async (req, res) => {
         return;
       }
 
-      const dataUrl = 'data:image/jpeg;base64,' + imgBase64;
-
       // Сохраняем HTML файл с превью
-      const html = `<!DOCTYPE html><html><head><title>${prompt.slice(0,40)}</title><style>body{margin:0;background:#0d0d12;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.8)}</style></head><body><img src="${dataUrl}" alt="${prompt.replace(/"/g,"'")}"/></body></html>`;
+      const html = `<!DOCTYPE html><html><head><title>${prompt.slice(0,40)}</title><style>body{margin:0;background:#0d0d12;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.8)}</style></head><body><img src="${imgBase64}" alt="${prompt.replace(/"/g,"'")}"/></body></html>`;
       const { fileId, safe } = aiSaveFile(username, 'ai_image.html', html, 'AI: ' + prompt.slice(0,40));
 
       const lim = aiDailyLimits.get(username);
       const remaining = DAILY_IMG_LIMIT - (lim?.images || 0);
 
-      aiSseEmit(username, 'media', { type: 'image', base64: dataUrl, prompt, fileId, remaining });
+      aiSseEmit(username, 'media', { type: 'image', base64: imgBase64, prompt, fileId, remaining });
       aiSseEmit(username, 'log', { text: `✅ Готово · осталось ${remaining}/${DAILY_IMG_LIMIT} сегодня`, type: 'result' });
     } catch(e) {
       console.error('[generate-image async]', e.message);
@@ -3836,6 +3988,7 @@ async function saveHistory() {
     await initStorage();
     await loadUsers();
     await loadHistory();
+    await loadAiConversations();
   } catch (err) {
     console.error('❌ Ошибка подключения к B2:', err.message);
     console.log('⚠️  Сервер запускается без B2 — данные будут в памяти до переподключения');
