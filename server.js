@@ -4256,7 +4256,6 @@ io.on('connection', (socket) => {
       room,
       user:     from,
       type:     'call_record',
-      cr_icon:  icon,
       cr_label: label,
       cr_extra: extra,
       time:     ts,
