@@ -3220,13 +3220,16 @@ function _aiConnectSse() {
   _aiSse.addEventListener('chunk', (e) => {
     try {
       const { text } = JSON.parse(e.data);
+      // Мысли нейросети → в live log панель, не в bubble
+      if (text && text.startsWith('__THINK__')) {
+        _aiAddLiveLog({ icon: '💭', text: text.slice(9), type: 'think' });
+        return;
+      }
       _aiStreamingStarted = true;
       if (!_aiStreamBubble) {
-        // Создаём bubble для стриминга
         _aiStreamContent = '';
         const { wrap, bubble } = _aiCreateStreamBubble();
         _aiStreamBubble = bubble;
-        // Убираем typing если есть
         document.getElementById('aiTyping')?.remove();
       }
       _aiStreamContent += text;
