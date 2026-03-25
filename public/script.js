@@ -1103,7 +1103,9 @@ function addMessage(msg) {
   const bub = document.createElement('div');
   bub.className = 'msg-bubble';
 
-  let inner = own ? '' : `<div class="msg-sender">${esc(userNicknames[msg.user] || msg.user)}</div>`;
+  // В личных чатах не показываем ник и аватарку собеседника
+  const isPrivateChat = currentRoom?.startsWith('private:');
+  let inner = (!own && !isPrivateChat) ? `<div class="msg-sender">${esc(userNicknames[msg.user] || msg.user)}</div>` : '';
 
   // ── Цитата ответа ──
   if (msg.replyTo) {
@@ -1230,7 +1232,8 @@ function addMessage(msg) {
   }, { passive: true });
   bub.addEventListener('touchend', () => { clearTimeout(_lpt); _lpt = null; }, { passive: true });
 
-  if (!own) row.appendChild(ava);   // no avatar for own messages — no empty gap
+  // В личных чатах не показываем аватарку собеседника
+  if (!own && !isPrivateChat) row.appendChild(ava);
   row.appendChild(bub);
   messagesDiv.appendChild(row);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
