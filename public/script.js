@@ -987,7 +987,10 @@ function gotoRoom(room) {
       ${isOnlineNow ? 'онлайн' : 'не в сети'}</span>`;
     setAvatar(roomAvatar, other, userAvatars[other]);
     if (onlinePill) onlinePill.style.display = 'none';
-    hdrRight.innerHTML = callBtnsHtml;
+    hdrRight.innerHTML = `
+      <button class="icon-btn hdr-delete-chat" title="Удалить переписку" onclick="confirmDeleteChat()">
+        <i class="ti ti-trash" style="color:#ef4444"></i>
+      </button>` + callBtnsHtml;
     // Клик по аватарке/нику → профиль
     roomAvatar.style.cursor = 'pointer';
     roomAvatar.onclick = () => openUserProfile(other);
@@ -1821,38 +1824,70 @@ function showCtxMsg(e, msg) {
   _replyStore.set(String(msg.id), msg);
   e.preventDefault();
   const own = msg.user === currentUser;
+  const msgId = String(msg.id).replace(/'/g,'');
   ctxMenu.innerHTML = `
-    <div class="ctx-item" onclick="_replyFromId('${String(msg.id).replace(/'/g,'')}');closeCtx()"><i class="ti ti-arrow-back-up"></i> Ответить</div>
+    <div class="ctx-item" onclick="_replyFromId('${msgId}');closeCtx()"><i class="ti ti-arrow-back-up"></i> Ответить</div>
     <div class="ctx-item" onclick="copyMsgText('${msg.id}')"><i class="ti ti-copy"></i> Копировать текст</div>
-    ${own ? `
     <div class="ctx-sep"></div>
-    <div class="ctx-item danger" onclick="deleteMsg('${msg.id}')"><i class="ti ti-trash"></i> Удалить сообщение</div>
-    ` : ''}`;
+    ${own ? `
+      <div class="ctx-item danger" onclick="deleteMsgForAll('${msgId}')"><i class="ti ti-trash"></i> Удалить у всех</div>
+      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}')"><i class="ti ti-trash" style="opacity:.6"></i> Удалить у себя</div>
+    ` : `
+      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}')"><i class="ti ti-trash"></i> Удалить у себя</div>
+    `}`;
   showCtx(e);
 }
 
-async function deleteMsg(id) {
+async function deleteMsgForAll(id) {
   closeCtx();
   const ok = await dialog({
     icon: 'ti-trash', iconType: 'error',
-    title: 'Удалить сообщение?',
-    msg: 'Сообщение будет удалено у всех участников чата.',
+    title: 'Удалить у всех?',
+    msg: 'Сообщение исчезнет у всех участников чата.',
     ok: 'Удалить', cancel: 'Отмена', danger: true
   });
   if (!ok) return;
-
   try {
     const r = await fetch('/api/delete-message', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messageId: id, username: currentUser })
+      body: JSON.stringify({ messageId: id, username: currentUser, forAll: true })
     });
     const d = await r.json();
     if (!d.success) toast(d.error || 'Ошибка удаления', 'error');
-    // UI update handled by socket event 'message-deleted'
-  } catch {
-    toast('Ошибка соединения', 'error');
-  }
+  } catch { toast('Ошибка соединения', 'error'); }
 }
+
+async function deleteMsgForMe(id) {
+  closeCtx();
+  // Просто скрываем из DOM локально — не отправляем на сервер
+  const row = document.querySelector(`[data-id="${id}"]`);
+  if (row) {
+    row.style.transition = 'opacity .2s, transform .2s';
+    row.style.opacity = '0';
+    row.style.transform = 'scale(.95)';
+    setTimeout(() => row.remove(), 200);
+  }
+  // Сохраняем id в localStorage чтобы не показывать после перезагрузки
+  try {
+    const hidden = JSON.parse(localStorage.getItem('aura_hidden_msgs') || '[]');
+    hidden.push(String(id));
+    localStorage.setItem('aura_hidden_msgs', JSON.stringify(hidden.slice(-500)));
+  } catch {}
+}
+
+// При загрузке истории — скрываем удалённые у себя
+function _applyHiddenMessages() {
+  try {
+    const hidden = new Set(JSON.parse(localStorage.getItem('aura_hidden_msgs') || '[]'));
+    if (!hidden.size) return;
+    document.querySelectorAll('[data-id]').forEach(row => {
+      if (hidden.has(row.dataset.id)) row.remove();
+    });
+  } catch {}
+}
+
+// Старая функция для совместимости
+async function deleteMsg(id) { return deleteMsgForAll(id); }
 
 // Real-time deletion from server
 socket.on('message-deleted', ({ messageId }) => {
@@ -4343,6 +4378,31 @@ function upmGTab(btn, paneId) {
   btn.classList.add('active');
   modal.querySelectorAll('.upm-pane').forEach(p => p.style.display = 'none');
   document.getElementById(paneId).style.display = '';
+}
+
+
+async function confirmDeleteChat() {
+  const ok = await dialog({
+    icon: 'ti-trash', iconType: 'error',
+    title: 'Вы точно хотите удалить всю переписку?',
+    msg: 'Переписка удалится только у вас. Это действие нельзя будет отменить.',
+    ok: 'Удалить', cancel: 'Отмена', danger: true
+  });
+  if (!ok) return;
+
+  // Скрываем все сообщения локально
+  const msgs = document.getElementById('messages');
+  if (msgs) {
+    const ids = [...msgs.querySelectorAll('[data-id]')].map(r => r.dataset.id);
+    try {
+      const hidden = JSON.parse(localStorage.getItem('aura_hidden_msgs') || '[]');
+      const newHidden = [...new Set([...hidden, ...ids])].slice(-2000);
+      localStorage.setItem('aura_hidden_msgs', JSON.stringify(newHidden));
+    } catch {}
+    msgs.innerHTML = '';
+    if (msgsEmpty) msgsEmpty.style.display = '';
+  }
+  toast('Переписка удалена у вас', 'success', 2500);
 }
 
 function openUserProfile(username) {
