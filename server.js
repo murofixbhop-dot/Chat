@@ -786,7 +786,7 @@ app.use(express.json());
 //  AI ЧАТ — Mistral с инструментами, памятью файлов и просмотром изображений
 // ════════════════════════════════════════════════════════════════════════════
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
-// MiniMax (Aura AI) — модель MiniMax-M1
+// MiniMax (Aura AI) — модель MiniMax-M2.7
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''; // Set MINIMAX_API_KEY in Render environment
 const MINIMAX_API_URL = 'https://api.minimax.chat/v1/text/chatcompletion_v2';
 const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
@@ -2611,9 +2611,9 @@ ${text}`;
 async function callMiniMax(messages, onChunk) {
   // MiniMax API — пробуем несколько endpoint и моделей
   const endpoints = [
-    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-M1' },
+    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-M2.7' },
+    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'MiniMax-M2' },
     { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'abab6.5s-chat' },
-    { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'abab5.5s-chat' },
   ];
 
   let lastErr = null;
@@ -3876,7 +3876,7 @@ function broadcastOnlineCount() {
   const onlineList = [...new Set([...onlineUsers.values()].map(u => u.username).filter(Boolean))];
   io.emit('online-users', onlineList);
 }
-setInterval(broadcastOnlineCount, 8000); // реже чтобы не мигало
+setInterval(broadcastOnlineCount, 10000); // 10s - стабильно, без мигания // реже чтобы не мигало
 
 io.on('connection', (socket) => {
   let currentUser = null;
