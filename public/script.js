@@ -4207,7 +4207,6 @@ function openUserProfile(username) {
   const av   = userAvatars[username];
   const isOn = onlineUsersSet.has(username);
 
-  // Create modal
   let modal = document.getElementById('userProfileModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -4217,43 +4216,51 @@ function openUserProfile(username) {
     document.body.appendChild(modal);
   }
 
-  // Collect shared media from current chat DOM
+  // Собираем медиа ОБОИХ сторон из DOM
   const msgs = document.getElementById('messages');
   const images = [], videos = [], files = [];
   if (msgs) {
-    msgs.querySelectorAll('.msg-row:not(.own)').forEach(row => {
-      row.querySelectorAll('.msg-img').forEach(img => images.push(img.src));
-      row.querySelectorAll('.msg-video').forEach(v => {
-        const src = v.src || v.querySelector('source')?.src;
-        if (src) videos.push(src);
+    // Все строки (own + not own)
+    msgs.querySelectorAll('.msg-row').forEach(row => {
+      // Фото
+      row.querySelectorAll('.msg-img').forEach(img => {
+        if (img.src) images.push(img.src);
       });
-      row.querySelectorAll('.msg-square').forEach(v => {
-        const src = v.src || v.querySelector('source')?.src;
-        if (src) videos.push(src);
+      // Видео (обычное + квадратное)
+      row.querySelectorAll('.msg-video, .msg-square').forEach(v => {
+        const src = v.src || v.getAttribute('src');
+        if (src && !src.startsWith('blob:') && src !== window.location.href) videos.push(src);
       });
-      row.querySelectorAll('.file-dl-btn, .msg-file-row').forEach(f => {
-        const href = f.href || f.dataset.url;
-        const name = f.dataset.name || f.querySelector('.file-name')?.textContent || 'Файл';
-        if (href) files.push({ href, name });
+      // Файлы
+      row.querySelectorAll('.msg-file').forEach(a => {
+        const name = a.querySelector('.msg-file-name')?.textContent || 'Файл';
+        if (a.href) files.push({ href: a.href, name });
       });
-    });
-    // Also get file messages
-    msgs.querySelectorAll('.msg-row:not(.own) .file-msg-wrap').forEach(fw => {
-      const a = fw.querySelector('a');
-      if (a) files.push({ href: a.href, name: fw.querySelector('.file-name-txt')?.textContent || 'Файл' });
     });
   }
 
   const imgGrid = images.length
-    ? `<div class="upm-media-grid">${images.map(src => `<div class="upm-media-item" onclick="viewMedia('${src}','image')"><img src="${src}" loading="lazy"></div>`).join('')}</div>`
+    ? `<div class="upm-media-grid">${images.map(src =>
+        `<div class="upm-media-item" onclick="viewMedia('${src.replace(/'/g,'')}','image')">
+          <img src="${src}" loading="lazy">
+        </div>`).join('')}</div>`
     : `<div class="upm-empty"><i class="ti ti-photo-off"></i><span>Нет фото</span></div>`;
 
   const vidGrid = videos.length
-    ? `<div class="upm-media-grid">${videos.map(src => `<div class="upm-media-item upm-vid" onclick="viewMedia('${src}','video')"><video src="${src}" muted preload="metadata"></video><div class="upm-play-ico"><i class="ti ti-player-play-filled"></i></div></div>`).join('')}</div>`
+    ? `<div class="upm-media-grid">${videos.map(src =>
+        `<div class="upm-media-item upm-vid" onclick="viewMedia('${src.replace(/'/g,'')}','video')">
+          <video src="${src}" muted preload="metadata"></video>
+          <div class="upm-play-ico"><i class="ti ti-player-play-filled"></i></div>
+        </div>`).join('')}</div>`
     : `<div class="upm-empty"><i class="ti ti-video-off"></i><span>Нет видео</span></div>`;
 
   const fileList = files.length
-    ? `<div class="upm-file-list">${files.map(f => `<a class="upm-file-row" href="${f.href}" target="_blank" download><i class="ti ti-file"></i><span class="upm-file-name">${esc(f.name)}</span><i class="ti ti-download" style="margin-left:auto;color:var(--text3)"></i></a>`).join('')}</div>`
+    ? `<div class="upm-file-list">${files.map(f =>
+        `<a class="upm-file-row" href="${f.href}" target="_blank" download>
+          <i class="ti ti-file"></i>
+          <span class="upm-file-name">${esc(f.name)}</span>
+          <i class="ti ti-download" style="margin-left:auto;color:var(--text3)"></i>
+        </a>`).join('')}</div>`
     : `<div class="upm-empty"><i class="ti ti-files-off"></i><span>Нет файлов</span></div>`;
 
   const avHtml = av
@@ -4268,9 +4275,7 @@ function openUserProfile(username) {
       ${avHtml}
       <div class="upm-name">${esc(nick)}</div>
       <div class="upm-username">@${esc(username)}</div>
-      <div class="upm-status ${isOn ? 'upm-online' : ''}">${isOn ? 'В сети' : 'Не в сети'}</div>
-
-      <!-- Tabs -->
+      <div class="upm-status ${isOn ? 'upm-online' : ''}">${isOn ? '● В сети' : '● Не в сети'}</div>
       <div class="upm-tabs">
         <button class="upm-tab active" onclick="upmTab(this,'upm-photos')"><i class="ti ti-photo"></i> Фото</button>
         <button class="upm-tab" onclick="upmTab(this,'upm-videos')"><i class="ti ti-video"></i> Видео</button>
