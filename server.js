@@ -4251,15 +4251,29 @@ io.on('connection', (socket) => {
       label = type;
       extra = durStr ? `${durStr} · ${ds}, ${ts}` : `${ds}, ${ts}`;
     }
+    // Метка для звонимого (callee) — отдельная чтобы каждый видел своё
+    let labelCallee, extraCallee;
+    if (missed) {
+      labelCallee = `Пропущенный ${type}`;
+      extraCallee = `${ds}, ${ts}`;
+    } else {
+      const durStr2 = dur > 0 ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur % 60} сек`) : '';
+      labelCallee = type;
+      extraCallee = durStr2 ? `${durStr2} · ${ds}, ${ts}` : `${ds}, ${ts}`;
+    }
+
     const msg = {
-      id:       `cr_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+      id:             `cr_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
       room,
-      user:     from,
-      type:     'call_record',
-      cr_label: label,
-      cr_extra: extra,
-      time:     ts,
-      timestamp: timestamp || Date.now()
+      user:           from,
+      type:           'call_record',
+      cr_label:       label,        // для звонившего (caller)
+      cr_extra:       extra,
+      cr_label_callee: labelCallee, // для принявшего/пропустившего
+      cr_extra_callee: extraCallee,
+      cr_to:          to,           // кому звонили
+      time:           ts,
+      timestamp:      timestamp || Date.now()
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
