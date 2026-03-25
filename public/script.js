@@ -1018,17 +1018,21 @@ function gotoRoom(room) {
 // MESSAGES  ← КРАСОТА + УДОБСТВО
 // ══════════════════════════════════════════════
 socket.on('online-count', n => { if (onlineCount) onlineCount.textContent = n; });
+let _onlineUpdateTimer = null;
 socket.on('online-users', users => {
   onlineUsersSet.clear();
   users.forEach(u => onlineUsersSet.add(u));
-  // Обновляем индикаторы онлайна в списке контактов
-  document.querySelectorAll('[data-online-for]').forEach(dot => {
-    const u = dot.dataset.onlineFor;
-    dot.style.background = onlineUsersSet.has(u) ? '#22c55e' : '#6b7280';
-    dot.title = onlineUsersSet.has(u) ? 'Онлайн' : 'Не в сети';
-  });
-  // В шапке открытого чата
-  _updateChatOnlineStatus();
+  // Дебаунс — обновляем DOM не чаще 1 раза в 2 секунды
+  clearTimeout(_onlineUpdateTimer);
+  _onlineUpdateTimer = setTimeout(() => {
+    document.querySelectorAll('[data-online-for]').forEach(dot => {
+      const u = dot.dataset.onlineFor;
+      const isOn = onlineUsersSet.has(u);
+      dot.style.background = isOn ? '#22c55e' : '#6b7280';
+      dot.title = isOn ? 'Онлайн' : 'Не в сети';
+    });
+    _updateChatOnlineStatus();
+  }, 2000);
 });
 
 function _updateChatOnlineStatus() {
@@ -4561,11 +4565,9 @@ socket.on('call-end', () => {
 // Caller started screen share (replaceTrack path — no ontrack fired)
 socket.on('screen-share-started', ({ from }) => {
   console.log('[SS] screen-share-started from', from);
-  // Скрываем своё имя/аватар при демонстрации экрана
-  if (from === currentUser) {
-    const cwAudio = document.getElementById('cwAudioContent');
-    if (cwAudio) cwAudio.style.display = 'none';
-  }
+  // Скрываем аватар/имя у ОБОИХ — у шарера и у смотрящего
+  const cwAudio = document.getElementById('cwAudioContent');
+  if (cwAudio) cwAudio.style.display = 'none';
   // The video track was already replaced in peer connection
   // Just update the video element to show the new stream
   const rv = document.querySelector('#rv');
@@ -4592,10 +4594,9 @@ socket.on('screen-share-started', ({ from }) => {
 
 // Caller stopped screen share
 socket.on('screen-share-stopped', ({ from }) => {
-  if (from === currentUser) {
-    const cwAudio = document.getElementById('cwAudioContent');
-    if (cwAudio) cwAudio.style.display = '';
-  }
+  // Восстанавливаем у обоих
+  const cwAudio = document.getElementById('cwAudioContent');
+  if (cwAudio) cwAudio.style.display = '';
   document.querySelector('#rv')?.remove();
   document.querySelector('#screenReceiveOverlay')?.remove();
   const win = document.getElementById('activeCallWin');
