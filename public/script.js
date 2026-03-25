@@ -959,6 +959,7 @@ function getRoomId(friend) {
 
 function gotoPrivate(friend) {
   gotoRoom(getRoomId(friend));
+  if (window.innerWidth <= 768) closeSidebarMobile();
 }
 
 function gotoRoom(room) {
@@ -1111,6 +1112,26 @@ function addMessage(msg) {
       <span class="rq-name">${rNick}</span>
       <span class="rq-text">${rText}</span>
     </div>`;
+  }
+
+  // ── Запись о звонке (из истории) ───────────────────────
+  if (msg.type === 'call_record') {
+    const crIcon = (msg.cr_label || '').includes('Видео') ? '🎬' : '🎙';
+    const crLabel = msg.cr_label || 'Звонок';
+    const crExtra = msg.cr_extra || '';
+    bub.classList.add('call-rec-bub');
+    inner = `<div class="call-rec-wrap">
+      <span class="cr-ico">${crIcon}</span>
+      <div class="cr-info">
+        <div class="cr-lbl">${esc(crLabel)}</div>
+        <div class="cr-sub">${esc(crExtra)}</div>
+      </div>
+    </div>`;
+    bub.innerHTML = inner;
+    row.appendChild(bub);
+    messagesDiv?.appendChild(row);
+    if (messagesDiv) messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    return;
   }
 
   if (msg.type === 'image') {
@@ -4563,7 +4584,7 @@ socket.on('call-end', () => {
     const ds  = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
     const icon = _callIsVid ? '📹' : '📞';
     const type = _callIsVid ? 'Видеозвонок' : 'Аудиозвонок';
-    addCallRecord(`${type} · Пропущенный`, ` · ${ds}, ${ts}`, ts);
+    addCallRecord(`Пропущенный ${type}`, `${ds}, ${ts}`, ts);
     socket.emit('save-call-record', {
       room: currentRoom, from: _callTarget, to: currentUser,
       isVid: _callIsVid, isCaller: false, connected: false,
@@ -5247,8 +5268,17 @@ function _cleanup() {
     const timeStr = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
     const dateStr = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
     const typeStr = _callIsVid ? 'Видеозвонок' : 'Аудиозвонок';
-    const durLabel = durStr ? ` · ${durStr}` : ' · Нет ответа';
-    addCallRecord(typeStr, `${durLabel} · ${dateStr}, ${timeStr}`, timeStr);
+    let label, extra;
+    if (_isCaller) {
+      // Я звонил
+      label = typeStr;
+      extra = durStr ? `✅ Принят · ${durStr} · ${dateStr}, ${timeStr}` : `Нет ответа · ${dateStr}, ${timeStr}`;
+    } else {
+      // Мне звонили и я принял
+      label = typeStr;
+      extra = durStr ? `${durStr} · ${dateStr}, ${timeStr}` : `${dateStr}, ${timeStr}`;
+    }
+    addCallRecord(label, extra, timeStr);
     // Сохраняем на сервере — не исчезнет при перезагрузке
     socket.emit('save-call-record', {
       room: currentRoom, from: currentUser, to: _callTarget,
@@ -5686,7 +5716,8 @@ function toggleSidebar() {
   }
 }
 function closeSidebarMobile() {
-  if (window.innerWidth <= 768) { sidebar.classList.remove('open'); sidebarOverlay?.classList.remove('open'); }
+  sidebar.classList.remove('open');
+  sidebarOverlay?.classList.remove('open');
 }
 
 // Swipe to close sidebar on mobile
