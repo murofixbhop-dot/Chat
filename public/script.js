@@ -4584,12 +4584,7 @@ socket.on('call-ice', async ({ from, candidate }) => {
 socket.on('call-end', () => {
   // Callee side: если нам звонили но мы не приняли → пропущенный
   if (_inCall && !_connected && !_isCaller && _callTarget && currentRoom) {
-    const now = new Date();
-    const ts  = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
-    const ds  = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
-    const icon = _callIsVid ? '📹' : '📞';
-    const type = _callIsVid ? 'Видеозвонок' : 'Аудиозвонок';
-    // Missed: also let server handle it to avoid duplicate
+    // Пропущенный: callee сообщает серверу (caller уже offline)
     socket.emit('save-call-record', {
       room: currentRoom, from: _callTarget, to: currentUser,
       isVid: _callIsVid, isCaller: false, connected: false,
@@ -5272,14 +5267,15 @@ function _cleanup() {
   // Add call record to chat if call was connected
   if (_callTarget && currentRoom && !_groupCall) {
     const dur = _callConnectedTime ? Math.floor((Date.now() - _callConnectedTime) / 1000) : 0;
-    // Отправляем на сервер — он сохранит и разошлёт обеим сторонам
-    // (не добавляем локально чтобы не дублировать)
-    socket.emit('save-call-record', {
-      room: currentRoom, from: currentUser, to: _callTarget,
-      isVid: _callIsVid, isCaller: _isCaller,
-      connected: !!_callConnectedTime, dur,
-      timestamp: Date.now()
-    });
+    // Только звонивший (caller) сохраняет запись — сервер разошлёт обоим
+    if (_isCaller) {
+      socket.emit('save-call-record', {
+        room: currentRoom, from: currentUser, to: _callTarget,
+        isVid: _callIsVid, isCaller: true,
+        connected: !!_callConnectedTime, dur,
+        timestamp: Date.now()
+      });
+    }
   }
   _callConnectedTime = null;
 
