@@ -1116,12 +1116,10 @@ function addMessage(msg) {
 
   // ── Запись о звонке (из истории) ───────────────────────
   if (msg.type === 'call_record') {
-    const crIcon = (msg.cr_label || '').includes('Видео') ? '🎬' : '🎙';
     const crLabel = msg.cr_label || 'Звонок';
     const crExtra = msg.cr_extra || '';
     bub.classList.add('call-rec-bub');
     inner = `<div class="call-rec-wrap">
-      <span class="cr-ico">${crIcon}</span>
       <div class="cr-info">
         <div class="cr-lbl">${esc(crLabel)}</div>
         <div class="cr-sub">${esc(crExtra)}</div>
@@ -4584,7 +4582,7 @@ socket.on('call-end', () => {
     const ds  = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
     const icon = _callIsVid ? '📹' : '📞';
     const type = _callIsVid ? 'Видеозвонок' : 'Аудиозвонок';
-    addCallRecord(`Пропущенный ${type}`, `${ds}, ${ts}`, ts);
+    // Missed: also let server handle it to avoid duplicate
     socket.emit('save-call-record', {
       room: currentRoom, from: _callTarget, to: currentUser,
       isVid: _callIsVid, isCaller: false, connected: false,
@@ -4717,9 +4715,11 @@ function _createPeer() {
 
     if (!_connected && track.kind === 'audio') {
       _connected = true;
+      _callConnectedTime = Date.now();
       _showCallWindow(remoteStream);
     } else if (!_connected && track.kind === 'video' && _callIsVid) {
       _connected = true;
+      _callConnectedTime = Date.now();
       _showCallWindow(remoteStream);
     }
   };
@@ -5260,26 +5260,9 @@ function _cleanup() {
   stopRing();
   // Add call record to chat if call was connected
   if (_callTarget && currentRoom && !_groupCall) {
-    const now = new Date();
     const dur = _callConnectedTime ? Math.floor((Date.now() - _callConnectedTime) / 1000) : 0;
-    const durStr = dur > 0
-      ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur%60} сек`)
-      : '';
-    const timeStr = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
-    const dateStr = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
-    const typeStr = _callIsVid ? 'Видеозвонок' : 'Аудиозвонок';
-    let label, extra;
-    if (_isCaller) {
-      // Я звонил
-      label = typeStr;
-      extra = durStr ? `✅ Принят · ${durStr} · ${dateStr}, ${timeStr}` : `Нет ответа · ${dateStr}, ${timeStr}`;
-    } else {
-      // Мне звонили и я принял
-      label = typeStr;
-      extra = durStr ? `${durStr} · ${dateStr}, ${timeStr}` : `${dateStr}, ${timeStr}`;
-    }
-    addCallRecord(label, extra, timeStr);
-    // Сохраняем на сервере — не исчезнет при перезагрузке
+    // Отправляем на сервер — он сохранит и разошлёт обеим сторонам
+    // (не добавляем локально чтобы не дублировать)
     socket.emit('save-call-record', {
       room: currentRoom, from: currentUser, to: _callTarget,
       isVid: _callIsVid, isCaller: _isCaller,
@@ -5314,11 +5297,9 @@ let _callNoCamera = false;
 let _callAutoTimeout = null; // авто-сброс через 60с если не ответили
 
 function addCallRecord(label, extra, time) {
-  const icon = label.includes('Видео') ? '🎬' : '🎙';
   const row = document.createElement('div');
   row.className = 'call-record';
   row.innerHTML = `
-    <span class="cr-icon">${icon}</span>
     <span class="cr-label">${label}</span>
     <span class="cr-extra">${extra}</span>
     <span class="cr-time">${time}</span>`;
