@@ -4232,22 +4232,21 @@ io.on('connection', (socket) => {
     const now  = new Date(timestamp || Date.now());
     const ts   = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
     const ds   = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
-    const icon = isVid ? '📹' : '📞';
     const type = isVid ? 'Видеозвонок' : 'Аудиозвонок';
     let label, extra;
     if (missed) {
-      // Тому кому звонили — пропущенный звонок
+      // Кому звонили — пропущенный
       label = `Пропущенный ${type}`;
       extra = `${ds}, ${ts}`;
     } else if (isCaller) {
-      // Звонивший: принят или нет ответа
+      // Звонивший — принят или нет ответа
       const durStr = dur > 0 ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur % 60} сек`) : '';
       label = type;
       extra = connected
-        ? (durStr ? `✅ Принят · ${durStr} · ${ds}, ${ts}` : `✅ Принят · ${ds}, ${ts}`)
+        ? (durStr ? `Принят · ${durStr} · ${ds}, ${ts}` : `Принят · ${ds}, ${ts}`)
         : `Нет ответа · ${ds}, ${ts}`;
     } else {
-      // Принявший: просто длительность
+      // Принявший — длительность
       const durStr = dur > 0 ? (dur < 60 ? `${dur} сек` : `${Math.floor(dur/60)} мин ${dur % 60} сек`) : '';
       label = type;
       extra = durStr ? `${durStr} · ${ds}, ${ts}` : `${ds}, ${ts}`;
