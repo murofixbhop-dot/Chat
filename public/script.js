@@ -997,7 +997,6 @@ function gotoRoom(room) {
     const g = groups.find(g => g.id === room.replace('group:', ''));
     roomName.textContent = g?.name || 'Группа';
     roomSub.textContent  = g ? `${(g.members||[]).length} участников` : 'Группа';
-    // Показываем аватарку группы если есть
     if (g?.avatar) {
       setAvatar(roomAvatar, `group:${g.id}`, g.avatar);
     } else {
@@ -1007,7 +1006,11 @@ function gotoRoom(room) {
     }
     roomAvatar.style.borderRadius = '12px';
     if (onlinePill) onlinePill.style.display = 'none';
-    // Кнопка редактирования группы для создателя
+    // Клик по аватарке/названию → профиль группы
+    roomAvatar.style.cursor = 'pointer';
+    roomAvatar.onclick = () => g && openGroupProfile(g);
+    roomName.style.cursor = 'pointer';
+    roomName.onclick = () => g && openGroupProfile(g);
     const isCreator = g?.creator === currentUser;
     const editBtn = isCreator
       ? `<button class="icon-btn" title="Редактировать группу" onclick="openGroupEdit('${g.id}')"><i class="ti ti-settings"></i></button>`
@@ -4202,6 +4205,127 @@ function stopRing() {
 // ══════════════════════════════════════════════
 // USER PROFILE MODAL
 // ══════════════════════════════════════════════
+
+// ══════════════════════════════════════════════
+// GROUP PROFILE MODAL
+// ══════════════════════════════════════════════
+function openGroupProfile(g) {
+  let modal = document.getElementById('groupProfileModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'groupProfileModal';
+    modal.className = 'user-profile-modal-bg';
+    modal.onclick = (e) => { if (e.target === modal) closeGroupProfile(); };
+    document.body.appendChild(modal);
+  }
+
+  // Collect media from ALL messages in this group
+  const msgs = document.getElementById('messages');
+  const images = [], videos = [], files = [];
+  if (msgs) {
+    msgs.querySelectorAll('.msg-row').forEach(row => {
+      row.querySelectorAll('.msg-img').forEach(img => {
+        if (img.src) images.push(img.src);
+      });
+      row.querySelectorAll('.msg-video, .msg-square').forEach(v => {
+        const src = v.src || v.getAttribute('src');
+        if (src && !src.startsWith('blob:') && src !== window.location.href) videos.push(src);
+      });
+      row.querySelectorAll('.msg-file').forEach(a => {
+        const name = a.querySelector('.msg-file-name')?.textContent || 'Файл';
+        if (a.href) files.push({ href: a.href, name });
+      });
+    });
+  }
+
+  const members = g.members || [];
+  const membersHtml = `
+    <div class="upm-members-list">
+      ${members.map(m => {
+        const mNick = userNicknames[m] || m;
+        const mAv   = userAvatars[m];
+        const mOn   = onlineUsersSet.has(m);
+        const avEl  = mAv
+          ? `<div class="upm-member-ava" style="background-image:url('${mAv}');background-size:cover;background-position:center"></div>`
+          : `<div class="upm-member-ava" style="background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:15px">${mNick[0].toUpperCase()}</div>`;
+        return `<div class="upm-member-row">
+          <div style="position:relative;flex-shrink:0">
+            ${avEl}
+            <span class="upm-member-dot ${mOn ? 'upm-member-dot-on' : ''}"></span>
+          </div>
+          <div class="upm-member-info">
+            <div class="upm-member-name">${esc(mNick)}</div>
+            <div class="upm-member-status">${mOn ? 'В сети' : 'Не в сети'}</div>
+          </div>
+          ${m === g.creator ? '<span class="upm-creator-badge">создатель</span>' : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  const imgGrid = images.length
+    ? `<div class="upm-media-grid">${images.map(src =>
+        `<div class="upm-media-item" onclick="viewMedia('${src.replace(/'/g,'')}','image')"><img src="${src}" loading="lazy"></div>`).join('')}</div>`
+    : `<div class="upm-empty"><i class="ti ti-photo-off"></i><span>Нет фото</span></div>`;
+
+  const vidGrid = videos.length
+    ? `<div class="upm-media-grid">${videos.map(src =>
+        `<div class="upm-media-item upm-vid" onclick="viewMedia('${src.replace(/'/g,'')}','video')">
+          <video src="${src}" muted preload="metadata"></video>
+          <div class="upm-play-ico"><i class="ti ti-player-play-filled"></i></div>
+        </div>`).join('')}</div>`
+    : `<div class="upm-empty"><i class="ti ti-video-off"></i><span>Нет видео</span></div>`;
+
+  const fileList = files.length
+    ? `<div class="upm-file-list">${files.map(f =>
+        `<a class="upm-file-row" href="${f.href}" target="_blank" download>
+          <i class="ti ti-file"></i>
+          <span class="upm-file-name">${esc(f.name)}</span>
+          <i class="ti ti-download" style="margin-left:auto;color:var(--text3)"></i>
+        </a>`).join('')}</div>`
+    : `<div class="upm-empty"><i class="ti ti-files-off"></i><span>Нет файлов</span></div>`;
+
+  // Group avatar
+  let grpAvHtml;
+  if (g.avatar) {
+    grpAvHtml = `<div class="upm-avatar" style="background-image:url('${g.avatar}');background-size:cover;background-position:center;border-radius:20px"></div>`;
+  } else {
+    grpAvHtml = `<div class="upm-avatar" style="background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:32px;color:#fff"><i class="ti ti-users"></i></div>`;
+  }
+
+  modal.innerHTML = `
+    <div class="user-profile-modal">
+      <button class="upm-close" onclick="closeGroupProfile()"><i class="ti ti-x"></i></button>
+      ${grpAvHtml}
+      <div class="upm-name">${esc(g.name || 'Группа')}</div>
+      <div class="upm-username">${members.length} участников</div>
+
+      <div class="upm-tabs">
+        <button class="upm-tab active" onclick="upmGTab(this,'ugm-members')"><i class="ti ti-users"></i> Участники</button>
+        <button class="upm-tab" onclick="upmGTab(this,'ugm-photos')"><i class="ti ti-photo"></i> Фото</button>
+        <button class="upm-tab" onclick="upmGTab(this,'ugm-videos')"><i class="ti ti-video"></i> Видео</button>
+        <button class="upm-tab" onclick="upmGTab(this,'ugm-files')"><i class="ti ti-files"></i> Файлы</button>
+      </div>
+      <div id="ugm-members" class="upm-pane">${membersHtml}</div>
+      <div id="ugm-photos"  class="upm-pane" style="display:none">${imgGrid}</div>
+      <div id="ugm-videos"  class="upm-pane" style="display:none">${vidGrid}</div>
+      <div id="ugm-files"   class="upm-pane" style="display:none">${fileList}</div>
+    </div>`;
+
+  modal.classList.add('open');
+}
+
+function closeGroupProfile() {
+  document.getElementById('groupProfileModal')?.classList.remove('open');
+}
+
+function upmGTab(btn, paneId) {
+  const modal = btn.closest('.user-profile-modal');
+  modal.querySelectorAll('.upm-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  modal.querySelectorAll('.upm-pane').forEach(p => p.style.display = 'none');
+  document.getElementById(paneId).style.display = '';
+}
+
 function openUserProfile(username) {
   const nick = userNicknames[username] || username;
   const av   = userAvatars[username];
