@@ -5074,6 +5074,50 @@ function _showGroupCallUI(groupName, members) {
   win.style.setProperty('--gp-cols', totalSlots <= 2 ? 2 : 3);
 }
 
+
+// Входящий групповой звонок
+function _showGroupIncomingUI(from, isVid, group) {
+  if (_inCall) { socket.emit('call-busy', { to: from, from: currentUser }); return; }
+  _callTarget = from;
+  _callRoom   = `group:${group.id}`;
+  _callIsVid  = isVid;
+  _isCaller   = false;
+  _inCall     = true;
+  _groupCall  = true;
+  _groupMembers = group.members.filter(m => m !== currentUser);
+
+  const fromNick = userNicknames[from] || from;
+  setAvatar(callAva, `group:${group.id}`, group.avatar);
+  callNm.textContent = group.name;
+  callSt.textContent = `${fromNick} начал${isVid ? ' видео' : ''}звонок`;
+  callAct.innerHTML = `
+    <button class="call-btn call-ans" onclick="answerGroupCall()">
+      <i class="ti ti-phone"></i>
+    </button>
+    <button class="call-btn call-end" onclick="declineCall()">
+      <i class="ti ti-phone-off"></i>
+    </button>`;
+  callModal.classList.add('open');
+  ringBeep();
+}
+
+async function answerGroupCall() {
+  stopRing();
+  callModal.classList.remove('open');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: _callIsVid ? { facingMode:'user' } : false });
+    localStream = stream;
+    _showGroupCallUI(_callTarget, _groupMembers);
+    // Connect back to each group member
+    for (const member of _groupMembers) {
+      await _initiateGroupPeer(member);
+    }
+  } catch(e) {
+    toast('Нет доступа к микрофону', 'error');
+    _cleanup();
+  }
+}
+
 function _showOutgoingUI(target, isVid) {
   setAvatar(callAva, target, userAvatars[target]);
   callNm.textContent = userNicknames[target] || target;
@@ -5098,9 +5142,20 @@ socket.on('call-invite', ({ from, isVid, resumed }) => {
     );
   }
 
-  // Групповой звонок
-  if (groupPeers.has(from) && _groupCall) {
-    _handleGroupAnswer(from, isVid);
+  // Проверяем - это звонок из группы?
+  // Если звонящий находится в общей группе с нами - показываем групповой UI
+  const callerGroup = groups.find(g => g.members.includes(from) && g.members.includes(currentUser));
+  if (callerGroup && !_inCall) {
+    // Групповой входящий — спецUIq
+    _showGroupIncomingUI(from, isVid, callerGroup);
+    return;
+  }
+
+  // Уже в групповом звонке — добавляем участника
+  if (_groupCall) {
+    if (groupPeers.has(from)) { _handleGroupAnswer(from, isVid); return; }
+    // Новый участник присоединяется
+    _initiateGroupPeer(from);
     return;
   }
 
