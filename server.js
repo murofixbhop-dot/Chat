@@ -795,6 +795,79 @@ app.get('/api/ice-servers', async (req, res) => {
     { urls: 'turn:a.relay.metered.ca:80?transport=tcp',    username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
     { urls: 'turn:a.relay.metered.ca:443',                 username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
     { urls: 'turns:a.relay.metered.ca:443?transport=tcp',  username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
+
+    // ── Xirsys global network ─────────────────────────────────────────────
+    { urls: 'stun:ss-turn1.xirsys.com' },
+    { urls: 'stun:ss-turn2.xirsys.com' },
+    { urls: 'turn:ss-turn1.xirsys.com:80',                  username: 'aura', credential: 'aura2024' },
+    { urls: 'turn:ss-turn1.xirsys.com:3478',                username: 'aura', credential: 'aura2024' },
+    { urls: 'turn:ss-turn1.xirsys.com:443?transport=tcp',   username: 'aura', credential: 'aura2024' },
+    { urls: 'turns:ss-turn1.xirsys.com:443',                username: 'aura', credential: 'aura2024' },
+    { urls: 'turn:ss-turn2.xirsys.com:80',                  username: 'aura', credential: 'aura2024' },
+    { urls: 'turn:ss-turn2.xirsys.com:3478',                username: 'aura', credential: 'aura2024' },
+    { urls: 'turn:ss-turn2.xirsys.com:443?transport=tcp',   username: 'aura', credential: 'aura2024' },
+    { urls: 'turns:ss-turn2.xirsys.com:443',                username: 'aura', credential: 'aura2024' },
+
+    // ── expressturn (free TURN) ───────────────────────────────────────────
+    { urls: 'turn:relay1.expressturn.com:3478',             username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
+    { urls: 'turn:relay1.expressturn.com:3480',             username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
+
+    // ── twilio global edge (public stun) ─────────────────────────────────
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:regional.stun.twilio.com:3478' },
+
+    // ── coturn public ─────────────────────────────────────────────────────
+    { urls: 'stun:turn.matrix.org' },
+    { urls: 'turn:turn.matrix.org',                         username: 'aura', credential: 'aura' },
+
+    // ── Mozilla public STUN ───────────────────────────────────────────────
+    { urls: 'stun:stun.services.mozilla.com:3478' },
+
+    // ── openrelay extra ports ────────────────────────────────────────────
+    { urls: 'turn:openrelay.metered.ca:80?transport=tcp',   username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+
+    // ── icetest & misc ────────────────────────────────────────────────────
+    { urls: 'stun:stun.3cx.com:3478' },
+    { urls: 'stun:stun.acrobits.cz:3478' },
+    { urls: 'stun:stun.altar.com.pl:3478' },
+    { urls: 'stun:stun.avigora.fr:3478' },
+    { urls: 'stun:stun.b2b2c.ca:3478' },
+    { urls: 'stun:stun.cablenet-as.net:3478' },
+    { urls: 'stun:stun.callromania.ro:3478' },
+    { urls: 'stun:stun.callwithus.com:3478' },
+    { urls: 'stun:stun.cheapvoip.com:3478' },
+    { urls: 'stun:stun.cloopen.com:3478' },
+    { urls: 'stun:stun.commpeak.com:3478' },
+    { urls: 'stun:stun.cope.es:3478' },
+    { urls: 'stun:stun.cu-tme.net:3478' },
+    { urls: 'stun:stun.dcalling.de:3478' },
+    { urls: 'stun:stun.demos.ru:3478' },
+    { urls: 'stun:stun.develz.org:3478' },
+    { urls: 'stun:stun.dialog.lk:3478' },
+    { urls: 'stun:stun.doublerobotics.com:3478' },
+    { urls: 'stun:stun.drogon.net:3478' },
+    { urls: 'stun:stun.easybell.de:3478' },
+    { urls: 'stun:stun.easter-eggs.com:3478' },
+    { urls: 'stun:stun.ekiga.net:3478' },
+    { urls: 'stun:stun.futurasp.es:3478' },
+    { urls: 'stun:stun.gmx.de:3478' },
+    { urls: 'stun:stun.halonet.pl:3478' },
+    { urls: 'stun:stun.hicare.net:3478' },
+    { urls: 'stun:stun.hosteurope.de:3478' },
+    { urls: 'stun:stun.internetcalls.com:3478' },
+    { urls: 'stun:stun.ipfire.org:3478' },
+    { urls: 'stun:stun.ippi.fr:3478' },
+    { urls: 'stun:stun.ipshka.com:3478' },
+    { urls: 'stun:stun.it1.hr:3478' },
+    { urls: 'stun:stun.ivao.aero:3478' },
+    { urls: 'stun:stun.jumblo.com:3478' },
+    { urls: 'stun:stun.justvoip.com:3478' },
+    { urls: 'stun:stun.l.google.com:5349' },
+    { urls: 'stun:stun1.l.google.com:5349' },
+    { urls: 'stun:stun2.l.google.com:5349' },
+    { urls: 'stun:stun3.l.google.com:5349' },
+    { urls: 'stun:stun4.l.google.com:5349' },
   ]);
 });
 
