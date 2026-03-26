@@ -1301,9 +1301,39 @@ function addMessage(msg) {
     a.replaceWith(vp);
   });
 
-  // ← УДОБСТВО: right-click (desktop) + long-press (mobile)
-  bub.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMsg(e, msg); });
-  // Long press + swipe-right для мобильного
+  // ── Правая кнопка — контекстное меню ──────────────────────────
+  bub.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (_selectMode) {
+      // В режиме выделения — контекст для выделенных
+      _toggleMsgSelect(String(msg.id), row);
+    } else {
+      showCtxMsg(e, msg);
+    }
+  });
+
+  // ── Зажатие левой кнопки мыши — начало выделения (desktop) ───
+  let _mholdTimer = null;
+  bub.addEventListener('mousedown', e => {
+    if (e.button !== 0) return; // только левая кнопка
+    if (_selectMode) return;    // уже в режиме — клик обработает onclick
+    _mholdTimer = setTimeout(() => {
+      _mholdTimer = null;
+      startMsgSelect(String(msg.id));
+    }, 500);
+  });
+  bub.addEventListener('mouseup',   () => { clearTimeout(_mholdTimer); _mholdTimer = null; });
+  bub.addEventListener('mouseleave',() => { clearTimeout(_mholdTimer); _mholdTimer = null; });
+
+  // ── Клик в режиме выделения ───────────────────────────────────
+  bub.addEventListener('click', e => {
+    if (_selectMode) {
+      e.stopPropagation();
+      _toggleMsgSelect(String(msg.id), row);
+    }
+  });
+
+  // ── Touch: long-press (mobile) + swipe-right → ответить ──────
   let _lpt = null, _tx0 = 0, _ty0 = 0, _didSwipe = false;
   bub.addEventListener('touchstart', e => {
     _tx0 = e.touches[0].clientX; _ty0 = e.touches[0].clientY; _didSwipe = false;
@@ -1311,14 +1341,18 @@ function addMessage(msg) {
       if (!_didSwipe) {
         _lpt = null;
         const t = e.touches[0];
-        showCtxMsg({ clientX: t.clientX, clientY: t.clientY, preventDefault:()=>{} }, msg);
+        if (_selectMode) {
+          _toggleMsgSelect(String(msg.id), row);
+        } else {
+          startMsgSelect(String(msg.id));
+        }
       }
-    }, 600);
+    }, 500);
   }, { passive: true });
   bub.addEventListener('touchmove', e => {
     const dx = e.touches[0].clientX - _tx0;
     const dy = Math.abs(e.touches[0].clientY - _ty0);
-    if (dx > 55 && dy < 40 && !_didSwipe) {
+    if (dx > 55 && dy < 40 && !_didSwipe && !_selectMode) {
       _didSwipe = true;
       clearTimeout(_lpt); _lpt = null;
       _replyStore.set(String(msg.id), msg);
@@ -1432,7 +1466,8 @@ function _showSelectBar() {
       <span class="msb-count">1 выбрано</span>
       <div style="flex:1"></div>
       <button class="msb-btn" title="Копировать" onclick="copySelectedMsgs()"><i class="ti ti-copy"></i></button>
-      <button class="msb-btn danger" title="Удалить у себя" onclick="deleteSelectedMsgs()"><i class="ti ti-trash"></i></button>
+      <button class="msb-btn danger" title="Удалить у всех" onclick="deleteSelectedMsgsAll()"><i class="ti ti-trash"></i><span style="font-size:10px;margin-left:2px">всем</span></button>
+      <button class="msb-btn danger" title="Удалить у себя" onclick="deleteSelectedMsgs()"><i class="ti ti-trash" style="opacity:.6"></i></button>
     `;
     document.getElementById('chatArea')?.appendChild(bar) || document.querySelector('.main')?.appendChild(bar);
   }
@@ -1460,6 +1495,24 @@ function copySelectedMsgs() {
   });
   navigator.clipboard?.writeText(texts.join('\n---\n')).then(() => toast('Скопировано', 'success', 1500));
   cancelMsgSelect();
+}
+
+async function deleteSelectedMsgsAll() {
+  const ids = [..._selectedMsgs];
+  cancelMsgSelect();
+  // Delete for all — only own messages
+  for (const id of ids) {
+    const row = document.querySelector(`[data-id="${id}"]`);
+    const isOwn = row?.classList.contains('own');
+    if (isOwn) {
+      try {
+        await fetch('/api/delete-message', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ messageId: id, username: currentUser, forAll: true })
+        });
+      } catch {}
+    }
+  }
 }
 
 async function deleteSelectedMsgs() {
@@ -1995,10 +2048,26 @@ function showCtxMsg(e, msg) {
   e.preventDefault();
   const own = msg.user === currentUser;
   const msgId = String(msg.id).replace(/'/g,'');
+  // В режиме выделения — показываем действия для всех выделенных
+  if (_selectMode && _selectedMsgs.size > 0) {
+    ctxMenu.innerHTML = `
+      <div class="ctx-item" style="font-size:11px;color:var(--text3);pointer-events:none;padding:4px 14px">
+        ${_selectedMsgs.size} выбрано
+      </div>
+      <div class="ctx-sep"></div>
+      <div class="ctx-item" onclick="copySelectedMsgs();closeCtx()"><i class="ti ti-copy"></i> Копировать</div>
+      <div class="ctx-sep"></div>
+      <div class="ctx-item danger" onclick="deleteSelectedMsgsAll();closeCtx()"><i class="ti ti-trash"></i> Удалить у всех</div>
+      <div class="ctx-item danger" onclick="deleteSelectedMsgs();closeCtx()"><i class="ti ti-trash" style="opacity:.6"></i> Удалить у себя</div>
+      <div class="ctx-sep"></div>
+      <div class="ctx-item" onclick="cancelMsgSelect();closeCtx()"><i class="ti ti-x"></i> Отменить выбор</div>
+    `;
+    showCtx(e);
+    return;
+  }
   ctxMenu.innerHTML = `
     <div class="ctx-item" onclick="_replyFromId('${msgId}');closeCtx()"><i class="ti ti-arrow-back-up"></i> Ответить</div>
     <div class="ctx-item" onclick="copyMsgText('${msg.id}')"><i class="ti ti-copy"></i> Копировать текст</div>
-    <div class="ctx-item" onclick="startMsgSelect('${msgId}');closeCtx()"><i class="ti ti-checkbox"></i> Выбрать</div>
     <div class="ctx-sep"></div>
     ${own ? `
       <div class="ctx-item danger" onclick="deleteMsgForAll('${msgId}')"><i class="ti ti-trash"></i> Удалить у всех</div>
@@ -2748,7 +2817,19 @@ async function openAiChat() {
       if (d.history?.length) {
         const welcome = msgs.querySelector('.ai-welcome');
         if (welcome) welcome.remove();
-        d.history.forEach(m => _aiAddMessage(m.role === 'user' ? 'user' : 'assistant', m.content));
+        d.history.forEach(m => {
+          if (m.role === 'user') {
+            _aiAddMessage('user', m.content);
+          } else if (m.role === 'assistant' && m.content) {
+            _aiAddMessage('assistant', m.content);
+          }
+        });
+        // Restore file cards from saved files
+        if (d.files?.length) {
+          d.files.forEach(f => {
+            if (!_aiShownFileIds.has(f.id)) _aiAddFileCard(f);
+          });
+        }
         setTimeout(() => { if (msgs) msgs.scrollTop = msgs.scrollHeight; }, 50);
       }
     } catch {}
