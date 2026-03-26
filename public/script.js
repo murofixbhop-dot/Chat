@@ -1234,6 +1234,14 @@ function addMessage(msg) {
       </div>
     </div>`;
     bub.innerHTML = inner;
+    // Контекстное меню для записи звонка (удалить у себя / выбрать)
+    bub.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMsg(e, msg); });
+    let _crLpt = null;
+    bub.addEventListener('touchstart', e => {
+      _crLpt = setTimeout(() => { _crLpt = null; const t = e.touches[0]; showCtxMsg({ clientX:t.clientX, clientY:t.clientY, preventDefault:()=>{} }, msg); }, 500);
+    }, { passive:true });
+    bub.addEventListener('touchend', () => { clearTimeout(_crLpt); _crLpt = null; }, { passive:true });
+    bub.addEventListener('click', e => { if (_selectMode) { e.stopPropagation(); _toggleMsgSelect(String(msg.id), row); } });
     row.appendChild(bub);
     messagesDiv?.appendChild(row);
     if (messagesDiv) messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -3588,15 +3596,21 @@ function _aiConnectSse() {
       const { text } = JSON.parse(e.data);
       // Мысли нейросети → в live log панель, не в bubble
       if (text && text.startsWith('__THINK__')) {
+        // Мысли → только в live log, НЕ в bubble
+        document.getElementById('aiTyping')?.remove(); // убираем анимацию пока думает
         _aiAddLiveLog({ icon: '💭', text: text.slice(9), type: 'think' });
         return;
+      }
+      // Первый текстовый чанк = конец размышлений, начало ответа
+      if (!_aiStreamingStarted) {
+        // Убираем typing indicator
+        document.getElementById('aiTyping')?.remove();
       }
       _aiStreamingStarted = true;
       if (!_aiStreamBubble) {
         _aiStreamContent = '';
         const { wrap, bubble } = _aiCreateStreamBubble();
         _aiStreamBubble = bubble;
-        document.getElementById('aiTyping')?.remove();
       }
       _aiStreamContent += text;
       _aiStreamBubble.innerHTML = _aiRenderMarkdown(_aiStreamContent) + '<span class="ai-cursor">▋</span>';
@@ -3632,6 +3646,17 @@ function _aiConnectSse() {
       const d = JSON.parse(e.data);
       document.getElementById('aiTyping')?.remove();
       _aiShowQuestion(d);
+    } catch {}
+  });
+
+  // Файлы приходят через SSE сразу при создании
+  _aiSse.addEventListener('file_created', (e) => {
+    try {
+      const f = JSON.parse(e.data);
+      if (!_aiShownFileIds.has(f.id)) {
+        _aiAddFileCard(f);
+        aiRefreshFileBadge();
+      }
     } catch {}
   });
 
