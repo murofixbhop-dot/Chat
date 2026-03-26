@@ -4147,6 +4147,22 @@ io.on('connection', (socket) => {
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
     saveHistory();
     io.to(msg.room).emit('message', msg);
+
+    // Уведомление получателю даже если он не в этой комнате
+    if (msg.room.startsWith('private:')) {
+      const parts = msg.room.split(':').slice(1);
+      const recipientName = parts.find(u => u !== currentUser);
+      if (recipientName) {
+        const recipientSid = userSockets.get(recipientName);
+        if (recipientSid) {
+          const recipientSocket = io.sockets.sockets.get(recipientSid);
+          // Шлём только если получатель НЕ в этой комнате
+          if (recipientSocket && ![...recipientSocket.rooms].includes(msg.room)) {
+            recipientSocket.emit('message', msg);
+          }
+        }
+      }
+    }
   });
 
   socket.on('media-message', (data) => {
@@ -4169,6 +4185,21 @@ io.on('connection', (socket) => {
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
     saveHistory();
     io.to(msg.room).emit('message', msg);
+
+    // Уведомление получателю даже если он не в этой комнате
+    if (msg.room.startsWith('private:')) {
+      const parts = msg.room.split(':').slice(1);
+      const recipientName = parts.find(u => u !== currentUser);
+      if (recipientName) {
+        const recipientSid = userSockets.get(recipientName);
+        if (recipientSid) {
+          const recipientSocket = io.sockets.sockets.get(recipientSid);
+          if (recipientSocket && ![...recipientSocket.rooms].includes(msg.room)) {
+            recipientSocket.emit('message', msg);
+          }
+        }
+      }
+    }
   });
 
   // Обработчик обновления аватара
