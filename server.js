@@ -2936,8 +2936,13 @@ app.post('/api/ai-chat', async (req, res) => {
           // Парсим вопрос для отправки клиенту
           pendingAskUser = JSON.parse(result.slice('ASK_USER:'.length));
         } else if (result.startsWith('FILE_CREATED:')) {
-          const parts = result.split(':');
-          const fileId = parts[1], name2 = parts[2], desc = parts[3];
+          // Format: FILE_CREATED:fileId:filename:desc:size
+          const colonIdx1 = result.indexOf(':', 'FILE_CREATED:'.length);
+          const colonIdx2 = result.indexOf(':', colonIdx1 + 1);
+          const colonIdx3 = result.indexOf(':', colonIdx2 + 1);
+          const fileId = result.slice('FILE_CREATED:'.length, colonIdx1);
+          const name2  = result.slice(colonIdx1 + 1, colonIdx2);
+          const desc   = colonIdx3 > 0 ? result.slice(colonIdx2 + 1, colonIdx3) : result.slice(colonIdx2 + 1);
           const fileObj = (aiUserFiles.get(username) || []).find(f => f.id === fileId);
           if (fileObj) createdFiles.push({ id: fileId, name: name2, content: fileObj.content, description: desc });
           toolResults.push({ role: 'tool', tool_call_id: tc.id, content: `Файл "${name2}" создан и будет отправлен пользователю.` });
@@ -2953,6 +2958,9 @@ app.post('/api/ai-chat', async (req, res) => {
       // Если есть pending вопрос — возвращаем его без второго запроса
       if (pendingAskUser) {
         history.push({ role: 'assistant', content: `Вопрос: ${pendingAskUser.question}` });
+        // Отправляем через SSE чтобы клиент успел обработать до HTTP ответа
+        aiSseEmit(username, 'ask_user', pendingAskUser);
+        aiSseEmit(username, 'done', {});
         return res.json({ success: true, reply: '', toolsUsed, createdFiles, askUser: pendingAskUser });
       }
 
