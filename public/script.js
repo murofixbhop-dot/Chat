@@ -657,9 +657,9 @@ async function loadUserData() {
       emailField.value = userData.recoveryEmail || '';
     }
 
-    // Refresh avatars for all friends
+    // Загружаем аватарки только тех кто ещё не был загружен
     friends.forEach(f => {
-      if (!userAvatars[f]) fetchUserAvatar(f);
+      if (userAvatars[f] === undefined || userNicknames[f] === undefined) fetchUserAvatar(f);
     });
   } catch(e) {
     console.warn('loadUserData error:', e);
@@ -815,11 +815,9 @@ function renderFriends(filter = '') {
   // Убираем пустой-стейт li если он есть
   ul.querySelectorAll('li.msgs-empty').forEach(li => li.remove());
 
-  // Загружаем аватарки разово — без сброса кэша (не вызываем re-render)
+  // Загружаем аватарки только для тех кто ещё не загружен
   list.forEach(f => {
-    if (!userAvatars[f] || !userNicknames[f]) {
-      fetchUserAvatar(f); // использует уже существующую функцию с дедупликацией
-    }
+    if (userAvatars[f] === undefined || userNicknames[f] === undefined) fetchUserAvatar(f);
   });
 }
 
@@ -2239,9 +2237,12 @@ socket.on('avatar-updated', ({ username, avatar }) => {
 });
 
 // Fetch avatar + nickname — если уже есть в кэше (localStorage), не делаем запрос
+const _fetchingUsers = new Set(); // дедупликация одновременных запросов
 async function fetchUserAvatar(username) {
-  // Оба уже есть в кэше → ничего не делаем
+  // Уже в процессе загрузки или оба есть в кэше → ничего не делаем
+  if (_fetchingUsers.has(username)) return;
   if (userAvatars[username] !== undefined && userNicknames[username] !== undefined) return;
+  _fetchingUsers.add(username);
   try {
     const r = await fetch('/api/get-avatar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4583,50 +4584,40 @@ function _getAudioCtx() {
   return _audioCtx;
 }
 
-function playCallSound(type) {
+function _playTone(freq, delay, dur, vol=0.2, type='sine') {
   try {
     const ctx = _getAudioCtx();
     if (ctx.state === 'suspended') ctx.resume();
-
     const now = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, now + delay);
+    g.gain.linearRampToValueAtTime(vol, now + delay + 0.015);
+    g.gain.setValueAtTime(vol, now + delay + dur - 0.05);
+    g.gain.linearRampToValueAtTime(0, now + delay + dur);
+    o.start(now + delay); o.stop(now + delay + dur + 0.02);
+  } catch {}
+}
 
+function playCallSound(type) {
+  try {
     if (type === 'connect') {
-      // Два мелодичных тона — "подключено"
-      [[660, 0, 0.12], [880, 0.15, 0.12]].forEach(([freq, delay, dur]) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.connect(g); g.connect(ctx.destination);
-        o.type = 'sine'; o.frequency.value = freq;
-        g.gain.setValueAtTime(0, now + delay);
-        g.gain.linearRampToValueAtTime(0.18, now + delay + 0.02);
-        g.gain.linearRampToValueAtTime(0, now + delay + dur);
-        o.start(now + delay); o.stop(now + delay + dur + 0.05);
-      });
+      // Мелодичный аккорд подключения — как в Telegram
+      _playTone(523, 0,    0.10, 0.15); // C5
+      _playTone(659, 0.08, 0.10, 0.15); // E5
+      _playTone(784, 0.16, 0.15, 0.18); // G5
     } else if (type === 'end') {
-      // Нисходящий тон — "завершено"
-      [[440, 0, 0.1], [330, 0.12, 0.15]].forEach(([freq, delay, dur]) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.connect(g); g.connect(ctx.destination);
-        o.type = 'sine'; o.frequency.value = freq;
-        g.gain.setValueAtTime(0, now + delay);
-        g.gain.linearRampToValueAtTime(0.15, now + delay + 0.02);
-        g.gain.linearRampToValueAtTime(0, now + delay + dur);
-        o.start(now + delay); o.stop(now + delay + dur + 0.05);
-      });
+      // Плавное завершение — два нисходящих тона
+      _playTone(440, 0,    0.12, 0.15); // A4
+      _playTone(349, 0.14, 0.18, 0.12); // F4
     } else if (type === 'message') {
-      // Короткий pop
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.type = 'sine'; o.frequency.setValueAtTime(900, now);
-      o.frequency.linearRampToValueAtTime(700, now + 0.07);
-      g.gain.setValueAtTime(0, now);
-      g.gain.linearRampToValueAtTime(0.12, now + 0.01);
-      g.gain.linearRampToValueAtTime(0, now + 0.1);
-      o.start(now); o.stop(now + 0.15);
+      // Чистый pop — как iOS iMessage
+      _playTone(1046, 0,    0.04, 0.10); // C6 attack
+      _playTone(880,  0.03, 0.07, 0.08); // A5 decay
     }
-  } catch(e) { /* тихо игнорируем если AudioContext недоступен */ }
+  } catch {}
 }
 
 async function startCall(isVid) {
