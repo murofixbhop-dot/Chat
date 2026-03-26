@@ -1382,6 +1382,103 @@ function refreshSendBtn() {
   }
 }
 
+
+// ══════════════════════════════════════════════
+// MESSAGE SELECTION
+// ══════════════════════════════════════════════
+let _selectedMsgs = new Set();
+let _selectMode = false;
+
+function startMsgSelect(id) {
+  _selectMode = true;
+  _selectedMsgs.clear();
+  _selectedMsgs.add(String(id));
+  _renderSelectMode();
+  // Показываем панель выделения
+  _showSelectBar();
+}
+
+function _renderSelectMode() {
+  // Каждое сообщение — кликабельно для выделения
+  document.querySelectorAll('.msg-row').forEach(row => {
+    const id = row.dataset.id;
+    if (!id) return;
+    row.classList.toggle('msg-selected', _selectedMsgs.has(id));
+    row.onclick = _selectMode ? (e) => { e.stopPropagation(); _toggleMsgSelect(id, row); } : null;
+  });
+}
+
+function _toggleMsgSelect(id, row) {
+  if (_selectedMsgs.has(id)) {
+    _selectedMsgs.delete(id);
+    row.classList.remove('msg-selected');
+  } else {
+    _selectedMsgs.add(id);
+    row.classList.add('msg-selected');
+  }
+  const bar = document.getElementById('msgSelectBar');
+  if (bar) bar.querySelector('.msb-count').textContent = `${_selectedMsgs.size} выбрано`;
+  if (_selectedMsgs.size === 0) cancelMsgSelect();
+}
+
+function _showSelectBar() {
+  let bar = document.getElementById('msgSelectBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'msgSelectBar';
+    bar.className = 'msg-select-bar';
+    bar.innerHTML = `
+      <button class="msb-btn" onclick="cancelMsgSelect()"><i class="ti ti-x"></i></button>
+      <span class="msb-count">1 выбрано</span>
+      <div style="flex:1"></div>
+      <button class="msb-btn" title="Копировать" onclick="copySelectedMsgs()"><i class="ti ti-copy"></i></button>
+      <button class="msb-btn danger" title="Удалить у себя" onclick="deleteSelectedMsgs()"><i class="ti ti-trash"></i></button>
+    `;
+    document.getElementById('chatArea')?.appendChild(bar) || document.querySelector('.main')?.appendChild(bar);
+  }
+  bar.querySelector('.msb-count').textContent = `${_selectedMsgs.size} выбрано`;
+  bar.style.display = 'flex';
+}
+
+function cancelMsgSelect() {
+  _selectMode = false;
+  _selectedMsgs.clear();
+  document.querySelectorAll('.msg-row').forEach(row => {
+    row.classList.remove('msg-selected');
+    row.onclick = null;
+  });
+  const bar = document.getElementById('msgSelectBar');
+  if (bar) bar.style.display = 'none';
+}
+
+function copySelectedMsgs() {
+  const texts = [];
+  _selectedMsgs.forEach(id => {
+    const row = document.querySelector(`[data-id="${id}"]`);
+    const bub = row?.querySelector('.msg-text,.msg-bubble');
+    if (bub) texts.push(bub.innerText.trim());
+  });
+  navigator.clipboard?.writeText(texts.join('\n---\n')).then(() => toast('Скопировано', 'success', 1500));
+  cancelMsgSelect();
+}
+
+async function deleteSelectedMsgs() {
+  const ids = [..._selectedMsgs];
+  cancelMsgSelect();
+  // Delete for me (local only)
+  const key = 'aura_hidden:' + (currentRoom || 'all');
+  try {
+    const hidden = JSON.parse(localStorage.getItem(key) || '[]');
+    const newHidden = [...new Set([...hidden, ...ids])].slice(-2000);
+    localStorage.setItem(key, JSON.stringify(newHidden));
+  } catch {}
+  ids.forEach(id => {
+    const row = document.querySelector(`[data-id="${id}"]`);
+    if (row) { row.style.transition = 'opacity .2s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 200); }
+  });
+  toast(`Удалено ${ids.length} сообщений`, 'success', 2000);
+}
+
 function handleSend() {
   const text = msgInput.value.trim();
   if (text) {
@@ -1901,6 +1998,7 @@ function showCtxMsg(e, msg) {
   ctxMenu.innerHTML = `
     <div class="ctx-item" onclick="_replyFromId('${msgId}');closeCtx()"><i class="ti ti-arrow-back-up"></i> Ответить</div>
     <div class="ctx-item" onclick="copyMsgText('${msg.id}')"><i class="ti ti-copy"></i> Копировать текст</div>
+    <div class="ctx-item" onclick="startMsgSelect('${msgId}');closeCtx()"><i class="ti ti-checkbox"></i> Выбрать</div>
     <div class="ctx-sep"></div>
     ${own ? `
       <div class="ctx-item danger" onclick="deleteMsgForAll('${msgId}')"><i class="ti ti-trash"></i> Удалить у всех</div>
@@ -2640,7 +2738,22 @@ let _aiAttachment = null; // { type:'image'|'file', data, mimeType, name, previe
 
 let _aiDebugMode = false;
 
-function openAiChat() {
+async function openAiChat() {
+  // Загружаем историю из сервера если messages пусты
+  const msgs = document.getElementById('aiMessages');
+  if (msgs && msgs.children.length <= 1 && currentUser) {
+    try {
+      const r = await fetch(`/api/ai-history/${encodeURIComponent(currentUser)}`);
+      const d = await r.json();
+      if (d.history?.length) {
+        const welcome = msgs.querySelector('.ai-welcome');
+        if (welcome) welcome.remove();
+        d.history.forEach(m => _aiAddMessage(m.role === 'user' ? 'user' : 'assistant', m.content));
+        setTimeout(() => { if (msgs) msgs.scrollTop = msgs.scrollHeight; }, 50);
+      }
+    } catch {}
+  }
+
   // Добавляем выбор модели если ещё нет
   if (!document.getElementById('aiModelWrap')) {
     const sendBtn = document.getElementById('aiSendBtn');
@@ -3256,7 +3369,8 @@ async function _aiSubmitAnswers() {
   _aiAddMessage('user', summaryMsg);
 
   const sendBtn = $('aiSendBtn');
-  if (sendBtn) sendBtn.disabled = true;
+  _aiLocked = true;
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '0.5'; }
   const typing = _aiAddTyping();
 
   try {
@@ -3284,7 +3398,8 @@ async function _aiSubmitAnswers() {
     if (typing) typing.remove();
     _aiAddMessage('assistant', '⚠️ Нет соединения.');
   } finally {
-    if (sendBtn) sendBtn.disabled = false;
+    _aiLocked = false;
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = ''; }
     $('aiInput')?.focus();
   }
 }
@@ -3715,7 +3830,10 @@ function _aiRenderMarkdown(text) {
     .replace(/\n/g, '<br>');
 }
 
+let _aiLocked = false; // блокировка пока идёт ответ
+
 async function aiSend() {
+  if (_aiLocked) return; // не отправляем пока идёт ответ
   const inp = $('aiInput');
   if (!inp) return;
   const text = inp.value.trim();
