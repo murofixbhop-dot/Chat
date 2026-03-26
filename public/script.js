@@ -2077,13 +2077,14 @@ function showCtxMsg(e, msg) {
   }
   ctxMenu.innerHTML = `
     <div class="ctx-item" onclick="_replyFromId('${msgId}');closeCtx()"><i class="ti ti-arrow-back-up"></i> Ответить</div>
-    <div class="ctx-item" onclick="copyMsgText('${msg.id}')"><i class="ti ti-copy"></i> Копировать текст</div>
+    <div class="ctx-item" onclick="copyMsgText('${msg.id}');closeCtx()"><i class="ti ti-copy"></i> Копировать текст</div>
+    <div class="ctx-item" onclick="startMsgSelect('${msgId}');closeCtx()"><i class="ti ti-checkbox"></i> Выбрать</div>
     <div class="ctx-sep"></div>
     ${own ? `
-      <div class="ctx-item danger" onclick="deleteMsgForAll('${msgId}')"><i class="ti ti-trash"></i> Удалить у всех</div>
-      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}')"><i class="ti ti-trash" style="opacity:.6"></i> Удалить у себя</div>
+      <div class="ctx-item danger" onclick="deleteMsgForAll('${msgId}');closeCtx()"><i class="ti ti-trash"></i> Удалить у всех</div>
+      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}');closeCtx()"><i class="ti ti-trash" style="opacity:.6"></i> Удалить у себя</div>
     ` : `
-      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}')"><i class="ti ti-trash"></i> Удалить у себя</div>
+      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}');closeCtx()"><i class="ti ti-trash"></i> Удалить у себя</div>
     `}`;
   showCtx(e);
 }
