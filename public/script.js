@@ -4607,46 +4607,91 @@ function _releaseWakeLock() {
 // ══════════════════════════════════════════════
 // CALL SOUNDS — Web Audio API (без файлов)
 // ══════════════════════════════════════════════
+// ── Audio system ─────────────────────────────────────────────
 let _audioCtx = null;
+let _audioReady = false;
+
 function _getAudioCtx() {
-  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!_audioCtx) {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
   return _audioCtx;
 }
 
-function _playTone(freq, delay, dur, vol=0.2, type='sine') {
+// Прогреваем AudioContext при первом касании/клике — убирает задержку
+function _warmAudio() {
+  if (_audioReady) return;
   try {
     const ctx = _getAudioCtx();
-    if (ctx.state === 'suspended') ctx.resume();
-    const now = ctx.currentTime;
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(0, now + delay);
-    g.gain.linearRampToValueAtTime(vol, now + delay + 0.015);
-    g.gain.setValueAtTime(vol, now + delay + dur - 0.05);
-    g.gain.linearRampToValueAtTime(0, now + delay + dur);
-    o.start(now + delay); o.stop(now + delay + dur + 0.02);
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => { _audioReady = true; });
+    } else {
+      _audioReady = true;
+    }
+    // Тихий пустой буфер — активирует контекст
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
   } catch {}
 }
+// Вешаем на первое взаимодействие
+['touchstart','mousedown','keydown'].forEach(ev =>
+  document.addEventListener(ev, _warmAudio, { once: true, passive: true })
+);
 
 function playCallSound(type) {
   try {
-    if (type === 'connect') {
-      // Мелодичный аккорд подключения — как в Telegram
-      _playTone(523, 0,    0.10, 0.15); // C5
-      _playTone(659, 0.08, 0.10, 0.15); // E5
-      _playTone(784, 0.16, 0.15, 0.18); // G5
-    } else if (type === 'end') {
-      // Плавное завершение — два нисходящих тона
-      _playTone(440, 0,    0.12, 0.15); // A4
-      _playTone(349, 0.14, 0.18, 0.12); // F4
-    } else if (type === 'message') {
-      // Чистый pop — как iOS iMessage
-      _playTone(1046, 0,    0.04, 0.10); // C6 attack
-      _playTone(880,  0.03, 0.07, 0.08); // A5 decay
+    const ctx = _getAudioCtx();
+    // Если suspended — resume и играем через 50мс (минимальная задержка)
+    const doPlay = () => {
+      const now = ctx.currentTime;
+      // Компрессор для громкости и чёткости
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -20;
+      comp.knee.value = 6;
+      comp.ratio.value = 4;
+      comp.attack.value = 0.003;
+      comp.release.value = 0.1;
+      comp.connect(ctx.destination);
+
+      const tone = (freq, t, dur, vol, type = 'sine') => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(comp);
+        o.type = type;
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0, now + t);
+        g.gain.linearRampToValueAtTime(vol, now + t + 0.008); // быстрая атака
+        g.gain.setValueAtTime(vol, now + t + dur * 0.7);
+        g.gain.linearRampToValueAtTime(0, now + t + dur);
+        o.start(now + t);
+        o.stop(now + t + dur + 0.01);
+      };
+
+      if (type === 'message') {
+        // Telegram-style: два быстрых тона, громко и чётко
+        tone(1318, 0,     0.07, 0.55, 'sine'); // E6
+        tone(1047, 0.075, 0.10, 0.45, 'sine'); // C6
+      } else if (type === 'connect') {
+        // Три восходящих тона — подключение
+        tone(523, 0,    0.09, 0.4); // C5
+        tone(659, 0.1,  0.09, 0.4); // E5
+        tone(784, 0.2,  0.13, 0.5); // G5
+      } else if (type === 'end') {
+        // Два нисходящих — завершение
+        tone(523, 0,    0.10, 0.4); // C5
+        tone(392, 0.12, 0.16, 0.35); // G4
+      }
+    };
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(doPlay);
+    } else {
+      doPlay();
     }
-  } catch {}
+  } catch(e) {}
 }
 
 async function startCall(isVid) {
