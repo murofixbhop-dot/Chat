@@ -2576,48 +2576,15 @@ video {
   border-color: rgba(239,68,68,.5);
 }
 
-/* ── Message selection ──────────────────────────────────────── */
+
+/* ── Message selection highlight ───────────────────────────── */
 .msg-row.msg-selected .msg-bubble,
 .msg-row.msg-selected .call-rec-bub {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 14px;
 }
 .msg-row.msg-selected {
-  background: rgba(99,102,241,.08);
+  background: rgba(99,102,241,.07);
   border-radius: 10px;
   cursor: pointer;
 }
-
-.msg-select-bar {
-  position: sticky;
-  bottom: 0;
-  left: 0; right: 0;
-  display: none;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  z-index: 200;
-  animation: fadeUp .18s ease;
-}
-.msb-count {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-.msb-btn {
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: var(--surface2);
-  color: var(--text);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
-  transition: background .15s;
-}
-.msb-btn:hover { background: var(--surface3); }
-.msb-btn.danger { color: #ef4444; }
-.msb-btn.danger:hover { background: rgba(239,68,68,.1); }
