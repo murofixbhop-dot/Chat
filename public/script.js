@@ -102,8 +102,10 @@ let userData       = { nickname:'', avatar:null, theme:'dark' };
 let currentRoom    = null;
 let _chatPartner    = null;
 const onlineUsersSet = new Set(); // кто сейчас онлайн
-const unreadCounts = new Map(); // username -> кол-во непрочитанных
-const _chatOrder   = [];        // порядок чатов по активности
+const unreadCounts      = new Map(); // username -> кол-во непрочитанных
+const groupUnreadCounts = new Map(); // groupId -> кол-во непрочитанных
+const _chatOrder        = [];        // порядок чатов по активности
+const _groupOrder       = [];        // порядок групп по активности
 let friends        = [];
 let groups         = [];
 let friendRequests = [];
@@ -694,6 +696,12 @@ function _moveChatToTop(username) {
   _chatOrder.unshift(username);
 }
 
+function _moveGroupToTop(gid) {
+  const idx = _groupOrder.indexOf(gid);
+  if (idx > -1) _groupOrder.splice(idx, 1);
+  _groupOrder.unshift(gid);
+}
+
 function renderFriends(filter = '') {
   const ul = friendsList;
   const list = filter
@@ -833,10 +841,6 @@ function renderFriends(filter = '') {
 
 function renderGroups() {
   const ul = groupsList;
-  const newKey = groups.map(g => g.id + g.name + (g.avatar || '')).join('|') + '|' + (currentRoom || '');
-  if (ul._lastKey === newKey) return;
-  ul._lastKey = newKey;
-
   if (!groups.length) {
     ul.innerHTML = `<li class="msgs-empty" style="padding:24px;font-size:13px;">
       <i class="ti ti-users"></i><p>Нет групп</p></li>`;
@@ -845,7 +849,21 @@ function renderGroups() {
   const existing = {};
   ul.querySelectorAll('li[data-group]').forEach(li => { existing[li.dataset.group] = li; });
 
-  groups.forEach((g, idx) => {
+  // Сортируем группы по активности
+  const sortedGroups = [...groups].sort((a, b) => {
+    const ai = _groupOrder.indexOf(a.id);
+    const bi = _groupOrder.indexOf(b.id);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+  // Обновляем ключ с учётом непрочитанных
+  const gUnreadKey = [...groupUnreadCounts.entries()].map(([k,v])=>k+':'+v).join(',');
+  const newGKey = sortedGroups.map(g => g.id + g.name).join('|') + '|' + (currentRoom||'') + '|' + gUnreadKey;
+  if (ul._lastKey === newGKey) return;
+  ul._lastKey = newGKey;
+  sortedGroups.forEach((g, idx) => {
     const isActive = currentRoom === `group:${g.id}`;
     let li = existing[g.id];
     if (!li) {
@@ -864,9 +882,20 @@ function renderGroups() {
       li.innerHTML = `<div class="ci-body">
         <span class="ci-name">${esc(g.name)}</span>
         <span class="ci-sub">${(g.members||[]).length} участников</span>
-      </div>`;
+      </div>
+      <div class="ci-badge" id="gbadge_${g.id}" style="display:none"></div>`;
       li.prepend(avaEl);
-      li.onclick = () => { gotoRoom(`group:${g.id}`); closeSidebarMobile(); };
+      li.onclick = () => {
+      if (groupUnreadCounts.has(g.id)) {
+        groupUnreadCounts.delete(g.id);
+        // Обновим бейдж немедленно
+        const badge = li.querySelector('.ci-badge');
+        if (badge) { badge.style.display = 'none'; }
+        li.classList.remove('has-unread');
+      }
+      gotoRoom(`group:${g.id}`);
+      closeSidebarMobile();
+    };
     } else {
       li.classList.toggle('active', isActive);
       // Обновляем аватарку если изменилась
@@ -958,6 +987,11 @@ function getRoomId(friend) {
 }
 
 function gotoPrivate(friend) {
+  // Сброс непрочитанных при открытии чата
+  if (unreadCounts.has(friend)) {
+    unreadCounts.delete(friend);
+    renderFriends();
+  }
   gotoRoom(getRoomId(friend));
   if (window.innerWidth <= 768) closeSidebarMobile();
 }
@@ -1065,7 +1099,29 @@ socket.on('history', msgs => {
   });
 });
 
-socket.on('message', addMessage);
+socket.on('message', msg => {
+  // Трекинг непрочитанных + сортировка чатов
+  if (msg.user && msg.user !== currentUser && msg.room !== currentRoom) {
+    const room = msg.room;
+    // Для личных чатов
+    if (room && room.startsWith('private:')) {
+      const partner = friends.find(f => getRoomId(f) === room);
+      if (partner) {
+        unreadCounts.set(partner, (unreadCounts.get(partner) || 0) + 1);
+        _moveChatToTop(partner);
+        renderFriends();
+      }
+    }
+    // Для групп
+    if (room && room.startsWith('group:')) {
+      const gid = room.replace('group:', '');
+      groupUnreadCounts.set(gid, (groupUnreadCounts.get(gid) || 0) + 1);
+      _moveGroupToTop(gid);
+      renderGroups();
+    }
+  }
+  addMessage(msg);
+});
 socket.on('system', addSystem);
 
 // Конвертирует B2 URL в прокси /api/dl?f=... чтобы токены всегда были свежими
