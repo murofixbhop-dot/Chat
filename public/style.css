@@ -2589,118 +2589,174 @@ video {
   cursor: pointer;
 }
 
-/* ══ GROUP CALL WINDOW ════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════
+   GROUP CALL WINDOW — full redesign
+══════════════════════════════════════════════════════════════ */
 .group-call-win {
   position: fixed;
   inset: 0;
-  background: #0a0a10;
-  z-index: 8000;
+  z-index: 8500;
+  background: #0d0d14;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  user-select: none;
 }
 
-.gcw-header {
+/* Background blur overlay */
+.gcw-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 30% 20%, rgba(99,102,241,.15), transparent 60%),
+              radial-gradient(ellipse at 70% 80%, rgba(139,92,246,.12), transparent 60%);
+  pointer-events: none;
+}
+
+/* Top bar */
+.gcw-top {
+  position: relative;
+  z-index: 2;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  background: rgba(255,255,255,.04);
+  padding: 18px 16px 10px;
   flex-shrink: 0;
 }
-.gcw-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
+.gcw-group-name {
+  font-size: 17px;
   font-weight: 700;
   color: #fff;
+  letter-spacing: -.2px;
+}
+.gcw-timer {
+  font-size: 13px;
+  color: rgba(255,255,255,.55);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
 .gcw-status {
-  font-size: 12px;
-  color: rgba(255,255,255,.5);
+  font-size: 11px;
+  color: rgba(255,255,255,.4);
+  margin-top: 2px;
 }
 
-/* Grid of participants */
+/* Participants grid */
 .gcw-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(var(--gp-cols, 2), 1fr);
-  gap: 4px;
-  padding: 4px;
+  gap: 6px;
+  padding: 6px;
   overflow: hidden;
+  position: relative;
+  z-index: 2;
 }
 
-.group-participant {
+/* Participant tile */
+.gp-tile {
   position: relative;
-  background: #1a1a28;
-  border-radius: 12px;
+  background: rgba(255,255,255,.05);
+  border-radius: 16px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 8px;
-  min-height: 120px;
+  min-height: 0;
+  border: 1.5px solid rgba(255,255,255,.06);
+  transition: border-color .3s;
 }
-.gp-avatar {
-  width: 56px;
-  height: 56px;
+.gp-tile.speaking {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34,197,94,.3);
+}
+
+.gp-ava-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.gp-ava {
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg,var(--accent),var(--accent2));
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
   flex-shrink: 0;
 }
-.gp-name {
-  font-size: 12px;
-  color: rgba(255,255,255,.8);
-  font-weight: 500;
-  text-align: center;
-}
-.gp-video {
+
+.gp-vid {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: none;
-  border-radius: 12px;
+  border-radius: 16px;
 }
-.gp-video:not([src=""]) { display: block; }
 
-/* Local preview (picture-in-picture) */
-.gcw-local-preview {
+.gp-info {
   position: absolute;
-  bottom: 90px;
-  right: 14px;
-  width: 90px;
-  height: 120px;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #111;
-  border: 2px solid rgba(255,255,255,.15);
-  z-index: 10;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 7px;
+  background: linear-gradient(to top, rgba(0,0,0,.75), transparent);
 }
-.gcw-local-preview video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1);
+.gp-name-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gp-mic-ico {
+  font-size: 13px;
+  color: rgba(255,255,255,.7);
+}
+.gp-mic-ico.muted { color: #ef4444; }
+
+.gp-self-label {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(99,102,241,.8);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 99px;
 }
 
-/* Controls */
+/* Local preview (self tile = part of grid) */
+
+/* Bottom controls */
+.gcw-bottom {
+  position: relative;
+  z-index: 2;
+  padding: 12px 16px 20px;
+  background: rgba(0,0,0,.5);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  flex-shrink: 0;
+}
 .gcw-controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 16px;
-  background: rgba(0,0,0,.4);
-  flex-shrink: 0;
-  backdrop-filter: blur(10px);
+  gap: 14px;
 }
+
 .gcw-btn {
-  width: 52px;
-  height: 52px;
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -2709,15 +2765,25 @@ video {
   justify-content: center;
   font-size: 20px;
   color: #fff;
-  transition: transform .15s, opacity .15s;
+  transition: transform .12s, opacity .2s, background .2s;
+  -webkit-tap-highlight-color: transparent;
 }
-.gcw-btn:active { transform: scale(.92); }
-.gcw-mute { background: rgba(255,255,255,.15); }
-.gcw-mute.muted { background: rgba(239,68,68,.7); }
-.gcw-end  { background: #ef4444; }
-.gcw-vid  { background: rgba(255,255,255,.15); }
+.gcw-btn:active { transform: scale(.88); }
+.gcw-mute  { background: rgba(255,255,255,.15); }
+.gcw-mute:hover { background: rgba(255,255,255,.22); }
+.gcw-mute.muted  { background: rgba(239,68,68,.75); }
+.gcw-vid   { background: rgba(255,255,255,.15); }
+.gcw-vid:hover { background: rgba(255,255,255,.22); }
+.gcw-vid.muted  { background: rgba(239,68,68,.75); }
+.gcw-flip  { background: rgba(255,255,255,.1); font-size:17px; }
+.gcw-flip:hover { background: rgba(255,255,255,.18); }
+.gcw-end   { background: #ef4444; width: 62px; height: 62px; font-size:24px; }
+.gcw-end:hover { background: #dc2626; }
 
 @media (max-width: 600px) {
-  .gcw-grid { grid-template-columns: repeat(2, 1fr); }
-  .gcw-local-preview { width: 72px; height: 96px; bottom: 82px; }
+  .gcw-top    { padding: 14px 12px 8px; }
+  .gcw-bottom { padding: 10px 12px env(safe-area-inset-bottom, 16px); }
+  .gcw-btn    { width: 48px; height: 48px; font-size: 18px; }
+  .gcw-end    { width: 56px; height: 56px; font-size: 22px; }
+  .gp-ava     { width: 48px; height: 48px; }
 }
