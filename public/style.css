@@ -2530,3 +2530,48 @@ video {
   transition: opacity .2s;
 }
 .hdr-delete-chat:hover { opacity: 1; }
+
+/* ── Delete chat button in profile ────────────────────────── */
+.upm-delete-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 9px 20px;
+  background: rgba(239,68,68,.1);
+  color: #ef4444;
+  border: 1.5px solid rgba(239,68,68,.25);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.upm-delete-chat-btn:hover {
+  background: rgba(239,68,68,.18);
+  border-color: rgba(239,68,68,.5);
+}
+
+
+/* ── Delete chat button in profile ────────────────────────── */
+.upm-delete-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 9px 20px;
+  background: rgba(239,68,68,.1);
+  color: #ef4444;
+  border: 1.5px solid rgba(239,68,68,.25);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.upm-delete-chat-btn:hover {
+  background: rgba(239,68,68,.18);
+  border-color: rgba(239,68,68,.5);
+}
