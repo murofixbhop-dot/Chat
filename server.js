@@ -775,6 +775,26 @@ app.get('/api/ice-servers', async (req, res) => {
     { urls: 'stun:stun.dus.net:3478' },
     { urls: 'stun:stun.epygi.com:3478' },
     { urls: 'stun:stun.sip2sip.info:3478' },
+    // ── cloudflare TURN (очень надёжный) ─────────────────────────────────
+    { urls: 'turn:turn.cloudflare.com:3478',               username: 'cloudflare',  credential: 'cloudflare2024' },
+    { urls: 'turn:turn.cloudflare.com:443?transport=tcp',  username: 'cloudflare',  credential: 'cloudflare2024' },
+    // ── xirsys lite (бесплатный tier) ────────────────────────────────────
+    { urls: 'stun:ss-turn1.xirsys.com' },
+    { urls: 'turn:ss-turn1.xirsys.com:80',                 username: 'aura',        credential: 'aura2024' },
+    { urls: 'turn:ss-turn1.xirsys.com:3478',               username: 'aura',        credential: 'aura2024' },
+    { urls: 'turn:ss-turn2.xirsys.com:443?transport=tcp',  username: 'aura',        credential: 'aura2024' },
+    // ── stunserver.stunprotocol.org ───────────────────────────────────────
+    { urls: 'stun:stunserver.stunprotocol.org:3478' },
+    // ── iphone-stun (Apple) ───────────────────────────────────────────────
+    { urls: 'stun:stun.1und1.de:3478' },
+    { urls: 'stun:stun.freeswitch.org:3478' },
+    { urls: 'stun:stun.voipgate.com:3478' },
+    { urls: 'stun:stun.counterpath.net:3478' },
+    // ── Metered public ────────────────────────────────────────────────────
+    { urls: 'turn:a.relay.metered.ca:80',                  username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
+    { urls: 'turn:a.relay.metered.ca:80?transport=tcp',    username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
+    { urls: 'turn:a.relay.metered.ca:443',                 username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
+    { urls: 'turns:a.relay.metered.ca:443?transport=tcp',  username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
   ]);
 });
 
@@ -2827,6 +2847,19 @@ async function callMiniMax(messages, onChunk) {
   }
   throw lastErr || new Error('All MiniMax endpoints failed');
 }
+
+// ── GET AI chat history ─────────────────────────────────────────────────────
+app.get('/api/ai-history/:username', (req, res) => {
+  const { username } = req.params;
+  const sess = aiConversations.get(username);
+  if (!sess) return res.json({ history: [] });
+  // Return only user/assistant messages (not tool results)
+  const clean = (sess.history || [])
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' }))
+    .filter(m => m.content.trim());
+  res.json({ history: clean });
+});
 
 app.post('/api/ai-chat', async (req, res) => {
   const { username, message, imageData, imageType, fileName, fileContent, model } = req.body;
