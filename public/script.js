@@ -5017,25 +5017,12 @@ async function _initiateGroupPeer(member) {
 }
 
 function _addGroupParticipantStream(member, remoteStream) {
-  const win = document.getElementById('groupCallWin');
-  if (!win) return;
-  let participantEl = win.querySelector(`[data-participant="${member}"]`);
-  if (!participantEl) {
-    participantEl = document.createElement('div');
-    participantEl.className = 'group-participant';
-    participantEl.dataset.participant = member;
-    participantEl.innerHTML = `
-      <div class="gp-avatar" id="gp_ava_${member}"></div>
-      <div class="gp-name">${member}</div>
-      <video class="gp-video" id="gp_vid_${member}" autoplay playsinline></video>`;
-    win.querySelector('.gp-grid').appendChild(participantEl);
-    setAvatar(document.getElementById('gp_ava_' + member), member, userAvatars[member]);
-  }
-  const vid = document.getElementById('gp_vid_' + member);
-  if (vid) {
-    vid.srcObject = remoteStream;
-    vid.play().catch(() => {});
-  }
+  const grid = document.getElementById('gcwGrid');
+  if (!grid) return;
+  _addGroupParticipantTile(grid, member, remoteStream, false);
+  // Обновляем число колонок
+  const count = grid.querySelectorAll('.gp-tile').length;
+  _updateGcwGrid(count);
   _updateGroupCallStatus();
 }
 
@@ -5049,29 +5036,149 @@ function _updateGroupCallStatus() {
   }
 }
 
+let _gcwTimer = null; // таймер длительности звонка
+let _gcwStartTime = null;
+
+function _gcwFormatTime(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
 function _showGroupCallUI(groupName, members) {
-  document.querySelectorAll('.group-call-win').forEach(w => w.remove());
+  document.querySelectorAll('.group-call-win').forEach(w => { if(w._timer) clearInterval(w._timer); w.remove(); });
+
   const win = document.createElement('div');
   win.className = 'group-call-win';
   win.id = 'groupCallWin';
+
+  // Выводим самого пользователя + участников
+  const allMembers = [currentUser, ...members];
+
   win.innerHTML = `
-    <div class="gcw-header">
-      <div class="gcw-title"><i class="ti ti-users"></i> ${esc(groupName)}</div>
-      <div class="gcw-status" id="gcStatus">Соединение...</div>
+    <div class="gcw-bg" id="gcwBg"></div>
+    <div class="gcw-top">
+      <div class="gcw-group-name">${esc(groupName)}</div>
+      <div class="gcw-timer" id="gcwTimer">00:00</div>
+      <div class="gcw-status" id="gcStatus">Соединение…</div>
     </div>
-    <div class="gcw-grid gp-grid"></div>
-    <div class="gcw-local-preview" id="gcwLocalPreview">
-      <video id="gcwLocalVid" autoplay playsinline muted></video>
-    </div>
-    <div class="gcw-controls">
-      <button class="gcw-btn gcw-mute" id="gcwMuteBtn" onclick="toggleGroupMute()"><i class="ti ti-microphone"></i></button>
-      <button class="gcw-btn gcw-end" onclick="endCall()"><i class="ti ti-phone-off"></i></button>
+    <div class="gcw-grid gp-grid" id="gcwGrid"></div>
+    <div class="gcw-bottom">
+      <div class="gcw-controls">
+        <button class="gcw-btn gcw-mute" id="gcwMuteBtn" onclick="toggleGroupMute()" title="Микрофон">
+          <i class="ti ti-microphone"></i>
+        </button>
+        ${_callIsVid ? `<button class="gcw-btn gcw-vid" id="gcwVidBtn" onclick="toggleGroupCamera()" title="Камера">
+          <i class="ti ti-video"></i>
+        </button>` : ''}
+        <button class="gcw-btn gcw-flip" onclick="flipGroupCamera()" title="Перевернуть камеру" style="${_callIsVid?'':'display:none'}">
+          <i class="ti ti-rotate"></i>
+        </button>
+        <button class="gcw-btn gcw-end" onclick="endCall()" title="Завершить">
+          <i class="ti ti-phone-off"></i>
+        </button>
+      </div>
     </div>`;
+
   document.body.appendChild(win);
-  const localVid = win.querySelector('#gcwLocalVid');
-  if (localVid && localStream) localVid.srcObject = localStream;
-  const totalSlots = Math.max(members.length + 1, 2);
-  win.style.setProperty('--gp-cols', totalSlots <= 2 ? 2 : 3);
+
+  // Добавляем плитку для себя
+  _addGroupParticipantTile(win.querySelector('#gcwGrid'), currentUser, localStream, true);
+
+  // Обновляем сетку по числу участников
+  _updateGcwGrid(allMembers.length);
+
+  // Таймер звонка
+  _gcwStartTime = Date.now();
+  _gcwTimer = setInterval(() => {
+    const el = document.getElementById('gcwTimer');
+    if (el) el.textContent = _gcwFormatTime(Math.floor((Date.now() - _gcwStartTime) / 1000));
+  }, 1000);
+  win._timer = _gcwTimer;
+}
+
+function _updateGcwGrid(count) {
+  const win = document.getElementById('groupCallWin');
+  if (!win) return;
+  const cols = count <= 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
+  win.querySelector('#gcwGrid')?.style.setProperty('--gp-cols', cols) ||
+  win.style.setProperty('--gp-cols', cols);
+  const grid = document.getElementById('gcwGrid');
+  if (grid) grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+}
+
+function _addGroupParticipantTile(grid, member, stream, isLocal) {
+  const isSelf = member === currentUser;
+  const nick = userNicknames[member] || member;
+  const av = userAvatars[member];
+
+  let tile = document.querySelector(`[data-participant="${member}"]`);
+  if (!tile) {
+    tile = document.createElement('div');
+    tile.className = 'gp-tile' + (isSelf ? ' gp-self' : '');
+    tile.dataset.participant = member;
+    tile.innerHTML = `
+      <video class="gp-vid" id="gp_vid_${member}" autoplay playsinline ${isLocal?'muted':''}></video>
+      <div class="gp-ava-wrap" id="gp_ava_wrap_${member}">
+        <div class="gp-ava" id="gp_ava_${member}"></div>
+      </div>
+      <div class="gp-info">
+        <span class="gp-name-label">${esc(nick)}</span>
+        <span class="gp-mic-ico" id="gp_mic_${member}"><i class="ti ti-microphone"></i></span>
+      </div>
+      ${isSelf ? '<div class="gp-self-label">Вы</div>' : ''}`;
+    grid?.appendChild(tile);
+    // Set avatar
+    const avaEl = document.getElementById('gp_ava_' + member);
+    if (avaEl) setAvatar(avaEl, member, av);
+  }
+
+  const vid = document.getElementById('gp_vid_' + member);
+  if (vid && stream) {
+    vid.srcObject = stream;
+    vid.play().catch(()=>{});
+    // Показываем видео только если есть видеодорожка
+    const hasVideo = stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled;
+    const avaWrap = document.getElementById('gp_ava_wrap_' + member);
+    if (hasVideo) { vid.style.display = 'block'; if(avaWrap) avaWrap.style.display = 'none'; }
+    else          { vid.style.display = 'none';  if(avaWrap) avaWrap.style.display = 'flex'; }
+  }
+  return tile;
+}
+
+function toggleGroupCamera() {
+  const tracks = localStream?.getVideoTracks();
+  if (!tracks?.length) return;
+  const enabled = !tracks[0].enabled;
+  tracks[0].enabled = enabled;
+  const btn = document.getElementById('gcwVidBtn');
+  if (btn) { btn.querySelector('i').className = enabled ? 'ti ti-video' : 'ti ti-video-off'; btn.classList.toggle('muted', !enabled); }
+  // Обновляем плитку себя
+  const vid = document.getElementById('gp_vid_' + currentUser);
+  const avaWrap = document.getElementById('gp_ava_wrap_' + currentUser);
+  if (vid) { vid.style.display = enabled ? 'block' : 'none'; }
+  if (avaWrap) avaWrap.style.display = enabled ? 'none' : 'flex';
+}
+
+let _gcwFacingMode = 'user';
+async function flipGroupCamera() {
+  _gcwFacingMode = _gcwFacingMode === 'user' ? 'environment' : 'user';
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: _gcwFacingMode }, audio: false });
+    const newVid = newStream.getVideoTracks()[0];
+    localStream?.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); });
+    localStream?.addTrack(newVid);
+    // Replace in all peers
+    groupPeers.forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) sender.replaceTrack(newVid);
+    });
+    // Update local tile
+    const vid = document.getElementById('gp_vid_' + currentUser);
+    if (vid) vid.srcObject = localStream;
+  } catch {}
 }
 
 
