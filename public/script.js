@@ -987,10 +987,7 @@ function gotoRoom(room) {
       ${isOnlineNow ? 'онлайн' : 'не в сети'}</span>`;
     setAvatar(roomAvatar, other, userAvatars[other]);
     if (onlinePill) onlinePill.style.display = 'none';
-    hdrRight.innerHTML = `
-      <button class="icon-btn hdr-delete-chat" title="Удалить переписку" onclick="confirmDeleteChat()">
-        <i class="ti ti-trash" style="color:#ef4444"></i>
-      </button>` + callBtnsHtml;
+    hdrRight.innerHTML = callBtnsHtml;
     // Клик по аватарке/нику → профиль
     roomAvatar.style.cursor = 'pointer';
     roomAvatar.onclick = () => openUserProfile(other);
@@ -1062,7 +1059,10 @@ socket.on('history', msgs => {
   if (msgsEmpty) msgsEmpty.style.display = msgs.length ? 'none' : 'flex';
   msgs.forEach(addMessage);
   // После отрисовки истории — разрешаем уведомления для новых сообщений
-  requestAnimationFrame(() => { _historyLoading = false; });
+  requestAnimationFrame(() => {
+    _historyLoading = false;
+    _applyHiddenMessages(); // скрываем удалённые у себя
+  });
 });
 
 socket.on('message', addMessage);
@@ -1869,16 +1869,18 @@ async function deleteMsgForMe(id) {
   }
   // Сохраняем id в localStorage чтобы не показывать после перезагрузки
   try {
-    const hidden = JSON.parse(localStorage.getItem('aura_hidden_msgs') || '[]');
+    const key = 'aura_hidden:' + (currentRoom || 'all');
+    const hidden = JSON.parse(localStorage.getItem(key) || '[]');
     hidden.push(String(id));
-    localStorage.setItem('aura_hidden_msgs', JSON.stringify(hidden.slice(-500)));
+    localStorage.setItem(key, JSON.stringify(hidden.slice(-500)));
   } catch {}
 }
 
 // При загрузке истории — скрываем удалённые у себя
 function _applyHiddenMessages() {
   try {
-    const hidden = new Set(JSON.parse(localStorage.getItem('aura_hidden_msgs') || '[]'));
+    const key = 'aura_hidden:' + (currentRoom || 'all');
+    const hidden = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
     if (!hidden.size) return;
     document.querySelectorAll('[data-id]').forEach(row => {
       if (hidden.has(row.dataset.id)) row.remove();
@@ -3351,6 +3353,14 @@ function _aiConnectSse() {
     } catch(err) { console.error('SSE media err', err); }
   });
 
+  _aiSse.addEventListener('ask_user', (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      document.getElementById('aiTyping')?.remove();
+      _aiShowQuestion(d);
+    } catch {}
+  });
+
   _aiSse.addEventListener('done', () => {
     if (_aiStreamBubble) {
       // Убираем курсор
@@ -4395,9 +4405,10 @@ async function confirmDeleteChat() {
   if (msgs) {
     const ids = [...msgs.querySelectorAll('[data-id]')].map(r => r.dataset.id);
     try {
-      const hidden = JSON.parse(localStorage.getItem('aura_hidden_msgs') || '[]');
+      const key = 'aura_hidden:' + (currentRoom || 'all');
+      const hidden = JSON.parse(localStorage.getItem(key) || '[]');
       const newHidden = [...new Set([...hidden, ...ids])].slice(-2000);
-      localStorage.setItem('aura_hidden_msgs', JSON.stringify(newHidden));
+      localStorage.setItem(key, JSON.stringify(newHidden));
     } catch {}
     msgs.innerHTML = '';
     if (msgsEmpty) msgsEmpty.style.display = '';
@@ -4479,6 +4490,9 @@ function openUserProfile(username) {
       <div class="upm-name">${esc(nick)}</div>
       <div class="upm-username">@${esc(username)}</div>
       <div class="upm-status ${isOn ? 'upm-online' : ''}">${isOn ? '● В сети' : '● Не в сети'}</div>
+      <button class="upm-delete-chat-btn" onclick="confirmDeleteChat()">
+        <i class="ti ti-trash"></i> Удалить переписку
+      </button>
       <div class="upm-tabs">
         <button class="upm-tab active" onclick="upmTab(this,'upm-photos')"><i class="ti ti-photo"></i> Фото</button>
         <button class="upm-tab" onclick="upmTab(this,'upm-videos')"><i class="ti ti-video"></i> Видео</button>
