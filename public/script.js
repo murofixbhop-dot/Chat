@@ -815,26 +815,10 @@ function renderFriends(filter = '') {
   // Убираем пустой-стейт li если он есть
   ul.querySelectorAll('li.msgs-empty').forEach(li => li.remove());
 
-  // Загружаем аватарки/ники для тех у кого нет (тихо, без ре-рендера)
+  // Загружаем аватарки разово — без сброса кэша (не вызываем re-render)
   list.forEach(f => {
     if (!userAvatars[f] || !userNicknames[f]) {
-      fetch('/api/get-avatar', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: f })
-      }).then(r => r.json()).then(d => {
-        let changed = false;
-        if (d.avatar && !userAvatars[f]) {
-          userAvatars[f] = d.avatar;
-          ul.querySelectorAll(`.ci-ava[data-user="${f}"]`).forEach(el => setAvatar(el, f, d.avatar));
-          changed = true;
-        }
-        if (d.nickname && !userNicknames[f]) {
-          userNicknames[f] = d.nickname;
-          ul.querySelectorAll(`li[data-friend="${f}"] .ci-name`).forEach(el => { el.textContent = d.nickname; });
-          changed = true;
-        }
-        if (changed) ul._lastKey = ''; // сбрасываем кэш чтобы следующий вызов обновил
-      }).catch(() => {});
+      fetchUserAvatar(f); // использует уже существующую функцию с дедупликацией
     }
   });
 }
@@ -1100,23 +1084,26 @@ socket.on('history', msgs => {
 });
 
 socket.on('message', msg => {
-  // Трекинг непрочитанных + сортировка чатов
+  // Трекинг непрочитанных — только не наши сообщения, не в текущей комнате
   if (msg.user && msg.user !== currentUser && msg.room !== currentRoom) {
-    const room = msg.room;
-    // Для личных чатов
-    if (room && room.startsWith('private:')) {
-      const partner = friends.find(f => getRoomId(f) === room);
-      if (partner) {
+    const room = msg.room || '';
+
+    if (room.startsWith('private:')) {
+      // Извлекаем партнёра прямо из строки комнаты
+      const parts = room.split(':').slice(1); // ['user1','user2']
+      const partner = parts.find(p => p !== currentUser);
+      if (partner && friends.includes(partner)) {
         unreadCounts.set(partner, (unreadCounts.get(partner) || 0) + 1);
         _moveChatToTop(partner);
+        // Сбрасываем кэш и перерисовываем
+        if (friendsList) friendsList._lastKey = '';
         renderFriends();
       }
-    }
-    // Для групп
-    if (room && room.startsWith('group:')) {
-      const gid = room.replace('group:', '');
+    } else if (room.startsWith('group:')) {
+      const gid = room.slice(6); // убираем 'group:'
       groupUnreadCounts.set(gid, (groupUnreadCounts.get(gid) || 0) + 1);
       _moveGroupToTop(gid);
+      if (groupsList) groupsList._lastKey = '';
       renderGroups();
     }
   }
@@ -1323,6 +1310,9 @@ function addMessage(msg) {
   messagesDiv.appendChild(row);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
   // Уведомление только для реально новых сообщений (не при загрузке истории)
+  if (!_historyLoading && msg.user !== currentUser && msg.room !== currentRoom) {
+    playCallSound('message');
+  }
   if (!_historyLoading && msg.user !== currentUser && document.visibilityState !== 'visible') {
     const nick = userNicknames[msg.user] || msg.user;
     const txt  = msg.type === 'text' ? msg.text : (msg.type === 'audio' ? 'Голосовое сообщение' : 'Медиафайл');
@@ -4583,6 +4573,62 @@ function _releaseWakeLock() {
   if (_wakeLock) { _wakeLock.release(); _wakeLock = null; }
 }
 
+
+// ══════════════════════════════════════════════
+// CALL SOUNDS — Web Audio API (без файлов)
+// ══════════════════════════════════════════════
+let _audioCtx = null;
+function _getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+
+function playCallSound(type) {
+  try {
+    const ctx = _getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const now = ctx.currentTime;
+
+    if (type === 'connect') {
+      // Два мелодичных тона — "подключено"
+      [[660, 0, 0.12], [880, 0.15, 0.12]].forEach(([freq, delay, dur]) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0, now + delay);
+        g.gain.linearRampToValueAtTime(0.18, now + delay + 0.02);
+        g.gain.linearRampToValueAtTime(0, now + delay + dur);
+        o.start(now + delay); o.stop(now + delay + dur + 0.05);
+      });
+    } else if (type === 'end') {
+      // Нисходящий тон — "завершено"
+      [[440, 0, 0.1], [330, 0.12, 0.15]].forEach(([freq, delay, dur]) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0, now + delay);
+        g.gain.linearRampToValueAtTime(0.15, now + delay + 0.02);
+        g.gain.linearRampToValueAtTime(0, now + delay + dur);
+        o.start(now + delay); o.stop(now + delay + dur + 0.05);
+      });
+    } else if (type === 'message') {
+      // Короткий pop
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'sine'; o.frequency.setValueAtTime(900, now);
+      o.frequency.linearRampToValueAtTime(700, now + 0.07);
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.12, now + 0.01);
+      g.gain.linearRampToValueAtTime(0, now + 0.1);
+      o.start(now); o.stop(now + 0.15);
+    }
+  } catch(e) { /* тихо игнорируем если AudioContext недоступен */ }
+}
+
 async function startCall(isVid) {
   const target = callTarget();
   if (!target) { toast('Открой чат для звонка', 'warning'); return; }
@@ -5099,10 +5145,12 @@ function _createPeer() {
     if (!_connected && track.kind === 'audio') {
       _connected = true;
       _callConnectedTime = Date.now();
+      playCallSound('connect');
       _showCallWindow(remoteStream);
     } else if (!_connected && track.kind === 'video' && _callIsVid) {
       _connected = true;
       _callConnectedTime = Date.now();
+      playCallSound('connect');
       _showCallWindow(remoteStream);
     }
   };
@@ -5644,6 +5692,7 @@ function doLogout() {
 }
 
 function _cleanup() {
+  if (_connected) playCallSound('end'); // звук только если звонок был принят
   stopRing();
   // Add call record to chat if call was connected
   if (_callTarget && _callRoom && !_groupCall) {
