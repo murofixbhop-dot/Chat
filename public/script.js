@@ -969,11 +969,13 @@ function getRoomId(friend) {
 }
 
 function gotoPrivate(friend) {
-  // Сброс непрочитанных при открытии чата
-  if (unreadCounts.has(friend)) {
-    unreadCounts.delete(friend);
-    renderFriends();
-  }
+  // Сброс бейджа напрямую в DOM
+  unreadCounts.delete(friend);
+  const badge = document.getElementById('badge_' + friend)
+             || friendsList?.querySelector(`li[data-friend="${friend}"] .ci-badge`);
+  if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+  const li = friendsList?.querySelector(`li[data-friend="${friend}"]`);
+  if (li) li.classList.remove('has-unread');
   gotoRoom(getRoomId(friend));
   if (window.innerWidth <= 768) closeSidebarMobile();
 }
@@ -1082,27 +1084,54 @@ socket.on('history', msgs => {
 });
 
 socket.on('message', msg => {
-  // Трекинг непрочитанных — только не наши сообщения, не в текущей комнате
-  if (msg.user && msg.user !== currentUser && msg.room !== currentRoom) {
-    const room = msg.room || '';
+  const room = msg.room || '';
+  const isOwn = msg.user === currentUser;
+  const isActive = room === currentRoom;
 
+  if (!isOwn && !isActive && !_historyLoading) {
     if (room.startsWith('private:')) {
-      // Извлекаем партнёра прямо из строки комнаты
-      const parts = room.split(':').slice(1); // ['user1','user2']
-      const partner = parts.find(p => p !== currentUser);
-      if (partner && friends.includes(partner)) {
-        unreadCounts.set(partner, (unreadCounts.get(partner) || 0) + 1);
+      const partner = room.split(':').slice(1).find(p => p !== currentUser);
+      if (partner) {
+        // Обновляем счётчик
+        const cnt = (unreadCounts.get(partner) || 0) + 1;
+        unreadCounts.set(partner, cnt);
         _moveChatToTop(partner);
-        // Сбрасываем кэш и перерисовываем
-        if (friendsList) friendsList._lastKey = '';
-        renderFriends();
+
+        // Обновляем бейдж НАПРЯМУЮ в DOM — без renderFriends
+        const badge = document.getElementById('badge_' + partner)
+                   || friendsList?.querySelector(`li[data-friend="${partner}"] .ci-badge`);
+        if (badge) {
+          badge.textContent = cnt > 99 ? '99+' : cnt;
+          badge.style.display = 'flex';
+          badge.closest('li')?.classList.add('has-unread');
+        }
+
+        // Поднимаем чат наверх — переставляем li
+        const li = friendsList?.querySelector(`li[data-friend="${partner}"]`);
+        if (li && friendsList?.firstChild !== li) {
+          friendsList.prepend(li);
+        }
       }
     } else if (room.startsWith('group:')) {
-      const gid = room.slice(6); // убираем 'group:'
-      groupUnreadCounts.set(gid, (groupUnreadCounts.get(gid) || 0) + 1);
+      const gid = room.slice(6);
+      const cnt2 = (groupUnreadCounts.get(gid) || 0) + 1;
+      groupUnreadCounts.set(gid, cnt2);
       _moveGroupToTop(gid);
-      if (groupsList) groupsList._lastKey = '';
-      renderGroups();
+
+      // Обновляем бейдж группы НАПРЯМУЮ
+      const gbadge = document.getElementById('gbadge_' + gid)
+                  || groupsList?.querySelector(`li[data-group="${gid}"] .ci-badge`);
+      if (gbadge) {
+        gbadge.textContent = cnt2 > 99 ? '99+' : cnt2;
+        gbadge.style.display = 'flex';
+        gbadge.closest('li')?.classList.add('has-unread');
+      }
+
+      // Поднимаем группу наверх
+      const gli = groupsList?.querySelector(`li[data-group="${gid}"]`);
+      if (gli && groupsList?.firstChild !== gli) {
+        groupsList.prepend(gli);
+      }
     }
   }
   addMessage(msg);
