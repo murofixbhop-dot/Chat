@@ -1305,8 +1305,9 @@ function addMessage(msg) {
   bub.addEventListener('contextmenu', e => {
     e.preventDefault();
     if (_selectMode) {
-      // В режиме выделения — контекст для выделенных
+      // В режиме выделения — добавляем к выделенным и показываем меню выделения
       _toggleMsgSelect(String(msg.id), row);
+      showCtxMsg(e, msg); // меню покажет действия для всех выделенных
     } else {
       showCtxMsg(e, msg);
     }
@@ -1315,11 +1316,15 @@ function addMessage(msg) {
   // ── Зажатие левой кнопки мыши — начало выделения (desktop) ───
   let _mholdTimer = null;
   bub.addEventListener('mousedown', e => {
-    if (e.button !== 0) return; // только левая кнопка
-    if (_selectMode) return;    // уже в режиме — клик обработает onclick
+    if (e.button !== 0) return;
     _mholdTimer = setTimeout(() => {
       _mholdTimer = null;
-      startMsgSelect(String(msg.id));
+      // Зажатие левой кнопки — начинаем/добавляем к выделению (тихо, без меню)
+      if (_selectMode) {
+        _toggleMsgSelect(String(msg.id), row);
+      } else {
+        startMsgSelect(String(msg.id));
+      }
     }, 500);
   });
   bub.addEventListener('mouseup',   () => { clearTimeout(_mholdTimer); _mholdTimer = null; });
@@ -1341,11 +1346,9 @@ function addMessage(msg) {
       if (!_didSwipe) {
         _lpt = null;
         const t = e.touches[0];
-        if (_selectMode) {
-          _toggleMsgSelect(String(msg.id), row);
-        } else {
-          startMsgSelect(String(msg.id));
-        }
+        navigator.vibrate?.(30);
+        // Зажатие на мобиле = правая кнопка: открываем контекстное меню
+        showCtxMsg({ clientX: t.clientX, clientY: t.clientY, preventDefault: ()=>{} }, msg);
       }
     }, 500);
   }, { passive: true });
@@ -1450,29 +1453,29 @@ function _toggleMsgSelect(id, row) {
     _selectedMsgs.add(id);
     row.classList.add('msg-selected');
   }
-  const bar = document.getElementById('msgSelectBar');
-  if (bar) bar.querySelector('.msb-count').textContent = `${_selectedMsgs.size} выбрано`;
+  _updateSelectCount();
   if (_selectedMsgs.size === 0) cancelMsgSelect();
 }
 
 function _showSelectBar() {
-  let bar = document.getElementById('msgSelectBar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'msgSelectBar';
-    bar.className = 'msg-select-bar';
-    bar.innerHTML = `
-      <button class="msb-btn" onclick="cancelMsgSelect()"><i class="ti ti-x"></i></button>
-      <span class="msb-count">1 выбрано</span>
-      <div style="flex:1"></div>
-      <button class="msb-btn" title="Копировать" onclick="copySelectedMsgs()"><i class="ti ti-copy"></i></button>
-      <button class="msb-btn danger" title="Удалить у всех" onclick="deleteSelectedMsgsAll()"><i class="ti ti-trash"></i><span style="font-size:10px;margin-left:2px">всем</span></button>
-      <button class="msb-btn danger" title="Удалить у себя" onclick="deleteSelectedMsgs()"><i class="ti ti-trash" style="opacity:.6"></i></button>
-    `;
-    document.getElementById('chatArea')?.appendChild(bar) || document.querySelector('.main')?.appendChild(bar);
+  // Панель не нужна — действия через правую кнопку мыши / контекстное меню
+  // Показываем лёгкий счётчик в заголовке чата
+  const sub = document.getElementById('roomSub');
+  if (sub) sub.dataset.origText = sub.dataset.origText || sub.textContent;
+  _updateSelectCount();
+}
+
+function _updateSelectCount() {
+  const sub = document.getElementById('roomSub');
+  if (!sub) return;
+  if (_selectMode && _selectedMsgs.size > 0) {
+    sub.textContent = `Выбрано: ${_selectedMsgs.size}`;
+    sub.style.color = 'var(--accent)';
+  } else if (!_selectMode) {
+    sub.textContent = sub.dataset.origText || '';
+    sub.style.color = '';
+    delete sub.dataset.origText;
   }
-  bar.querySelector('.msb-count').textContent = `${_selectedMsgs.size} выбрано`;
-  bar.style.display = 'flex';
 }
 
 function cancelMsgSelect() {
@@ -1482,8 +1485,7 @@ function cancelMsgSelect() {
     row.classList.remove('msg-selected');
     row.onclick = null;
   });
-  const bar = document.getElementById('msgSelectBar');
-  if (bar) bar.style.display = 'none';
+  _updateSelectCount();
 }
 
 function copySelectedMsgs() {
