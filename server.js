@@ -847,6 +847,39 @@ function scheduleAiConvSave() {
   }, 5000); // Save 5s after last activity
 }
 const aiUserFiles     = new Map(); // username -> [{ id, name, content, ttl }]
+const AI_FILES_FILE   = 'ai_files.json';
+
+async function loadAiFiles() {
+  try {
+    const { bucketName } = b2GetBucketForFile(AI_FILES_FILE);
+    const text = await b2S3Download(bucketName, AI_FILES_FILE);
+    const data = JSON.parse(text);
+    for (const [user, files] of Object.entries(data)) {
+      if (Array.isArray(files) && files.length) {
+        aiUserFiles.set(user, files.slice(-50));
+      }
+    }
+    console.log(`[AI] Загружены файлы: ${aiUserFiles.size} пользователей`);
+  } catch { console.log('[AI] ai_files.json не найден — начинаем без файлов'); }
+}
+
+let _aiFilesSaveTimer = null;
+function scheduleAiFilesSave() {
+  if (_aiFilesSaveTimer) return;
+  _aiFilesSaveTimer = setTimeout(async () => {
+    _aiFilesSaveTimer = null;
+    try {
+      const obj = {};
+      for (const [user, files] of aiUserFiles.entries()) {
+        // Сохраняем только последние 20 файлов, без TTL сброса
+        obj[user] = files.slice(-20).map(f => ({ ...f, ttl: AI_FILE_TTL }));
+      }
+      const buf = Buffer.from(JSON.stringify(obj));
+      const { bucketName } = b2GetBucketForFile(AI_FILES_FILE);
+      await b2S3Upload(bucketName, AI_FILES_FILE, buf, 'application/json');
+    } catch(e) { console.error('[AI] Ошибка сохранения файлов:', e.message); }
+  }, 4000);
+}
 const AI_MAX_HISTORY  = 80;
 const AI_FILE_TTL     = 10; // файлы живут 5 ответов ИИ
 
@@ -1419,6 +1452,7 @@ function aiSaveFile(username, filename, content, description) {
   const safe   = filename.replace(/[^a-zA-Z0-9._\-а-яёА-ЯЁ]/gi, '_');
   files.push({ id: fileId, name: safe, content, ttl: AI_FILE_TTL, description: description || '', created: new Date().toISOString() });
   aiUserFiles.set(username, files);
+  scheduleAiFilesSave(); // сохраняем файлы после добавления
   return { fileId, safe };
 }
 
@@ -2793,46 +2827,84 @@ async function callMiniMax(messages, onChunk) {
   for (const ep of endpoints) {
     try {
       console.log('[MiniMax] Trying', ep.model, 'at', ep.url);
+      // Используем стриминг чтобы мысли показывались сразу
       const resp = await axios.post(ep.url, {
         model: ep.model,
         messages,
         max_tokens: 2000,
         temperature: 0.7,
+        stream: true,
       }, {
         headers: {
           'Authorization': `Bearer ${MINIMAX_API_KEY}`,
           'Content-Type': 'application/json'
         },
-        timeout: 60000,
+        timeout: 90000,
+        responseType: 'stream',
       });
 
-      const data = resp.data;
-      console.log('[MiniMax] OK model:', ep.model, 'choices:', data.choices?.length);
+      console.log('[MiniMax] Streaming started, model:', ep.model);
+      let fullContent = '';
+      let inThink = false;
+      let thinkBuf = '';
+      let answerBuf = '';
 
-      let content = data.choices?.[0]?.message?.content || '';
+      await new Promise((resolve, reject) => {
+        resp.data.on('data', (chunk) => {
+          const lines = chunk.toString().split('\n').filter(l => l.trim());
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') { resolve(); return; }
+            try {
+              const j = JSON.parse(raw);
+              const delta = j.choices?.[0]?.delta?.content || '';
+              if (!delta) continue;
+              fullContent += delta;
 
-      if (content) {
-        // Убираем теги размышлений MiniMax (<think>...</think>)
-        // Извлекаем мысли и показываем в live log
-        const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/i);
-        if (thinkMatch) {
-          const thoughtLines = thinkMatch[1].trim().split('\n').filter(l => l.trim().length > 5).slice(0, 6);
-          for (const line of thoughtLines) {
-            onChunk?.('__THINK__' + line.trim().slice(0, 120));
-            await new Promise(r => setTimeout(r, 60));
+              // Разбираем поток посимвольно: <think>...</think> → лог, остальное → bubble
+              for (const ch of delta) {
+                if (!inThink && thinkBuf === '' && ch === '<') {
+                  thinkBuf = '<';
+                } else if (thinkBuf && !inThink) {
+                  thinkBuf += ch;
+                  if (thinkBuf === '<think>') { inThink = true; thinkBuf = ''; }
+                  else if (!'<think>'.startsWith(thinkBuf)) {
+                    // Не тег — сбрасываем в ответ
+                    onChunk?.(thinkBuf);
+                    thinkBuf = '';
+                  }
+                } else if (inThink) {
+                  answerBuf += ch;
+                  // Отправляем мысль сразу когда строка закончена
+                  if (ch === '\n' && answerBuf.trim().length > 3) {
+                    const ln = answerBuf.trim();
+                    if (!ln.endsWith('</think>')) {
+                      onChunk?.('__THINK__' + ln.slice(0, 150));
+                    }
+                    answerBuf = '';
+                  }
+                  if (answerBuf.endsWith('</think>')) {
+                    // Финальная строка мыслей если нет переноса
+                    const thought = answerBuf.slice(0, -8).trim();
+                    if (thought.length > 3) onChunk?.('__THINK__' + thought.slice(0, 150));
+                    inThink = false;
+                    answerBuf = '';
+                  }
+                } else {
+                  onChunk?.(ch);
+                }
+              }
+            } catch {}
           }
-        }
-        // Убираем теги мыслей из ответа
-        content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim().replace(/^\n+/, '');
-        if (!content) { console.warn('[MiniMax] Only thought, no reply'); continue; }
+        });
+        resp.data.on('end', resolve);
+        resp.data.on('error', reject);
+      });
 
-        const words = content.split(' ');
-        for (const w of words) {
-          onChunk?.(w + ' ');
-          await new Promise(r => setTimeout(r, 12));
-        }
-        return content;
-      }
+      const finalContent = fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      if (!finalContent) { console.warn('[MiniMax] Only thought, no reply'); continue; }
+      return finalContent;
       console.warn('[MiniMax] Empty content from', ep.model, '— raw:', JSON.stringify(data).slice(0, 300));
     } catch(e) {
       lastErr = e;
@@ -2852,13 +2924,13 @@ async function callMiniMax(messages, onChunk) {
 app.get('/api/ai-history/:username', (req, res) => {
   const { username } = req.params;
   const sess = aiConversations.get(username);
-  if (!sess) return res.json({ history: [] });
-  // Return only user/assistant messages (not tool results)
+  const files = aiUserFiles.get(username) || [];
+  if (!sess) return res.json({ history: [], files: [] });
   const clean = (sess.history || [])
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' }))
     .filter(m => m.content.trim());
-  res.json({ history: clean });
+  res.json({ history: clean, files: files.map(f => ({ id: f.id, name: f.name, description: f.description, content: f.content })) });
 });
 
 app.post('/api/ai-chat', async (req, res) => {
@@ -2977,7 +3049,11 @@ app.post('/api/ai-chat', async (req, res) => {
           const name2  = result.slice(colonIdx1 + 1, colonIdx2);
           const desc   = colonIdx3 > 0 ? result.slice(colonIdx2 + 1, colonIdx3) : result.slice(colonIdx2 + 1);
           const fileObj = (aiUserFiles.get(username) || []).find(f => f.id === fileId);
-          if (fileObj) createdFiles.push({ id: fileId, name: name2, content: fileObj.content, description: desc });
+          if (fileObj) {
+            createdFiles.push({ id: fileId, name: name2, content: fileObj.content, description: desc });
+            // Extend TTL so file persists across sessions
+            fileObj.ttl = 999999;
+          }
           toolResults.push({ role: 'tool', tool_call_id: tc.id, content: `Файл "${name2}" создан и будет отправлен пользователю.` });
           toolsUsed.push(toolName);
         } else {
@@ -4055,6 +4131,7 @@ async function saveHistory() {
     await loadUsers();
     await loadHistory();
     await loadAiConversations();
+    await loadAiFiles();
   } catch (err) {
     console.error('❌ Ошибка подключения к B2:', err.message);
     console.log('⚠️  Сервер запускается без B2 — данные будут в памяти до переподключения');
