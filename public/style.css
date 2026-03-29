@@ -2787,3 +2787,22 @@ video {
   .gcw-end    { width: 56px; height: 56px; font-size: 22px; }
   .gp-ava     { width: 48px; height: 48px; }
 }
+
+/* ── Message status ticks ───────────────────────────────── */
+.msg-status {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: rgba(255,255,255,.55);
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.msg-tick-2 {
+  color: #60a5fa; /* синие = прочитано */
+}
+.msg-row.own .msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
