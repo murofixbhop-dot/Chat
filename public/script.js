@@ -57,10 +57,10 @@ document.addEventListener('visibilitychange', () => {
       socket.emit('identify', currentUser);
       if (currentRoom) socket.emit('join-room', currentRoom);
     }
-    // Не перезагружаем данные если идёт звонок (может сбросить состояние)
     if (!_inCall) loadUserData();
+    // Вернулись на вкладку с открытым чатом — отмечаем как прочитанное
+    if (currentRoom) _sendReadReceipt(currentRoom);
   }
-  // Звонок продолжается в фоне — ничего не делаем
 });
 socket.on('connect_error', () => {
   if (splashText) splashText.textContent = 'Ошибка соединения…';
@@ -1341,14 +1341,23 @@ function addMessage(msg) {
   }
 
   // Точки статуса (только для своих сообщений в личных чатах)
-  const isPriv = (msg.room||'').startsWith('private:');
+  const isPriv  = (msg.room||'').startsWith('private:');
+  const isGroup = (msg.room||'').startsWith('group:');
   let statusHtml = '';
+
   if (own && isPriv) {
-    // Прочитано если readBy содержит партнёра ИЛИ партнёр сейчас в этом чате
     const partner = (msg.room||'').split(':').slice(1).find(p => p !== currentUser);
     const isReadByPartner = Array.isArray(msg.readBy) && partner && msg.readBy.includes(partner);
+    // Партнёр в этом чате и вкладка видима = считается прочитанным
     const partnerInChat = partner && onlineUsersSet.has(partner) && _chatPartner === partner && !document.hidden;
     const isRead = isReadByPartner || partnerInChat;
+    statusHtml = `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
+      <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-1'}"></span>
+      <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-grey'}"></span>
+    </span>`;
+  } else if (own && isGroup) {
+    // В группе: синие точки если хотя бы один участник прочитал
+    const isRead = Array.isArray(msg.readBy) && msg.readBy.length > 0;
     statusHtml = `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
       <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-1'}"></span>
       <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-grey'}"></span>
