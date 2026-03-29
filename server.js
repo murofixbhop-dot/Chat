@@ -4363,10 +4363,12 @@ app.post('/api/clear-group', async (req, res) => {
   const { groupId, username } = req.body;
   if (!groupId || !username) return res.status(400).json({ error: 'Нет данных' });
 
-  // Проверяем что username — создатель группы
-  const group = groups.find(g => g.id === groupId);
+  // Ищем группу в данных пользователя
+  const userData = users.get(username);
+  if (!userData) return res.status(404).json({ error: 'Пользователь не найден' });
+  const group = (userData.groups || []).find(g => g.id === groupId);
   if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.creator !== username) return res.status(403).json({ error: 'Только создатель может очищать группу' });
+  if (group.creator !== username) return res.status(403).json({ error: 'Только создатель может очищать' });
 
   const room = `group:${groupId}`;
   const before = messageHistory.length;
