@@ -4451,7 +4451,7 @@ const activeCalls    = new Map(); // callee_username -> { from, isVid, startTime
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of activeCalls.entries()) {
-    if (now - v.startTime > 60000) activeCalls.delete(k);
+    if (now - v.startTime > 30000) activeCalls.delete(k);
   }
 }, 30000);
 
@@ -4654,16 +4654,16 @@ io.on('connection', (socket) => {
     }
   }
   socket.on('call-invite', data => {
-    // Проверяем — не занят ли получатель уже звонком
-    if (!data.resumed && activeCalls.has(data.from)) {
-      // Caller is already in another call — send busy back
-      const callerSid = userSockets.get(data.from);
-      if (callerSid) io.to(callerSid).emit('call-busy', { from: data.to });
-      return;
-    }
-    // Проверяем — занят ли адресат
     if (!data.resumed) {
-      // Store as active ring so reconnecting user gets notified
+      // Проверяем занят ли ПОЛУЧАТЕЛЬ (не звонящий)
+      const calleeEntry = activeCalls.get(data.to);
+      if (calleeEntry && calleeEntry.from !== data.from) {
+        // Получатель уже в звонке с кем-то другим → занят
+        const callerSid = userSockets.get(data.from);
+        if (callerSid) io.to(callerSid).emit('call-busy', { from: data.to });
+        return;
+      }
+      // Регистрируем звонок (с коротким TTL)
       activeCalls.set(data.to, { from: data.from, isVid: data.isVid, startTime: Date.now() });
     }
     relayTo('call-invite', data);
@@ -4769,23 +4769,13 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 // ── Периодическая переавторизация B2 (токен живёт 24ч — обновляем каждые 20ч) ──
 setInterval(async () => {
-  console.log('[B2] Плановая переавторизация всех слотов...');
-  for (let i = 0; i < b2Slots.length; i++) {
-    const slot = b2Slots[i];
-    if (!slot.accountId) continue;
-    try {
-      slot.auth     = await authorizeB2Slot(slot.accountId, slot.appKey);
-      slot.bucketId = await getBucketId(slot.bucketName, slot.auth);
-      slot.active   = true;
-      console.log(`[B2] Слот [${i}] "${slot.bucketName}" переавторизован`);
-    } catch(e) {
-      console.warn(`[B2] Слот [${i}] не доступен: ${e.message}`);
-      slot.active = false;
-    }
+  try {
+    console.log('[B2] Плановая переавторизация...');
+    await authorizeB2();
+    console.log('[B2] Переавторизация успешна');
+  } catch(e) {
+    console.warn('[B2] Ошибка переавторизации:', e.message);
   }
-  // Обновляем активный слот
-  const firstActive = b2Slots.findIndex(s => s.active);
-  if (firstActive !== -1) setB2Slot(firstActive);
 }, 20 * 60 * 60 * 1000); // 20 часов
 
 server.listen(PORT, () => {
