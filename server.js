@@ -4480,9 +4480,9 @@ setInterval(() => {
 }, 30000);
 
 function broadcastOnlineCount() {
-  const now = Date.now();
-  for (let [id, user] of onlineUsers.entries()) {
-    if (now - user.lastSeen > 25000) onlineUsers.delete(id); // 25s timeout вместо 10s
+  // Удаляем только тех у кого нет активного сокета — не по таймауту
+  for (const [id] of onlineUsers.entries()) {
+    if (!io.sockets.sockets.has(id)) onlineUsers.delete(id);
   }
   io.emit('online-count', onlineUsers.size);
   const onlineList = [...new Set([...onlineUsers.values()].map(u => u.username).filter(Boolean))];
@@ -4560,13 +4560,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('ping', () => {
+    // Просто обновляем lastSeen, онлайн-статус теперь по сокету
     if (onlineUsers.has(socket.id)) {
-      const user = onlineUsers.get(socket.id);
-      onlineUsers.delete(socket.id);
-      const onlineList3 = [...onlineUsers.values()].map(u => u.username).filter(Boolean);
-      io.emit('online-users', onlineList3);
-      user.lastSeen = Date.now();
-      onlineUsers.set(socket.id, user);
+      onlineUsers.get(socket.id).lastSeen = Date.now();
     }
   });
 
