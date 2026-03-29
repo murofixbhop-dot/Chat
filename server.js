@@ -4728,6 +4728,12 @@ io.on('connection', (socket) => {
     io.to(room).emit('call-record', msg);
   });
 
+  // ── Read receipts ─────────────────────────────────────────────────────
+  socket.on('messages-read', ({ room, by }) => {
+    // Оповещаем всех в комнате (кроме читающего)
+    if (room && by) socket.to(room).emit('messages-read', { room, by });
+  });
+
   socket.on('call-end', data => {
     // Очищаем активный звонок
     activeCalls.delete(data.to);
