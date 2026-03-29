@@ -4514,6 +4514,7 @@ let _connected   = false;  // true once ICE connected
 let _muted       = false;
 let _screenSharing = false;
 let screenStream = null;
+let _partnerSharing = false; // партнёр тоже шарит экран
 let _groupCall   = false;   // true if in a group call
 let _groupMembers = [];      // members in group call
 let groupPeers   = new Map(); // member -> RTCPeerConnection
@@ -5468,6 +5469,7 @@ socket.on('call-end', () => {
 // Caller started screen share (replaceTrack path — no ontrack fired)
 socket.on('screen-share-started', ({ from }) => {
   console.log('[SS] screen-share-started from', from);
+  _partnerSharing = true; // партнёр начал шарить
   // Скрываем аватар/имя у ОБОИХ — у шарера и у смотрящего
   const cwAudio = document.getElementById('cwAudioContent');
   if (cwAudio) cwAudio.style.display = 'none';
@@ -5497,17 +5499,16 @@ socket.on('screen-share-started', ({ from }) => {
 
 // Caller stopped screen share
 socket.on('screen-share-stopped', ({ from }) => {
-  // Восстанавливаем только если ТОТ, кто остановил, был нашим шарером
-  // (не трогаем #rv если мы сами шарим или if someone else was sharing)
+  _partnerSharing = false; // партнёр остановил шаринг
+  // Убираем видео партнёра
   const rv = document.querySelector('#rv');
-  // rv существует и это стрим от партнёра который остановил демку
   if (rv) {
     rv.remove();
     document.querySelector('#screenReceiveOverlay')?.remove();
     const win = document.getElementById('activeCallWin');
     if (win) win.style.height = '';
   }
-  // Восстанавливаем cwAudioContent только если МЫ сами не шарим
+  // Восстанавливаем cwAudioContent только если МЫ ТОЖЕ не шарим
   if (!_screenSharing) {
     const cwAudio = document.getElementById('cwAudioContent');
     if (cwAudio) cwAudio.style.display = '';
@@ -6059,13 +6060,23 @@ async function switchToScreenShare() {
     if (ac) { ac.style.display = ''; ac.style.pointerEvents = ''; }
     // Убираем свой PIP превью экрана
     const lv = document.getElementById('activeCallWin')?.querySelector('#lv');
-    if (lv) { lv.srcObject = null; }
+    if (lv) {
+      lv.srcObject = null;
+      lv.style.display = 'none'; // скрываем pip превью своей демки
+    }
     // Если это был аудиозвонок — убираем видео элемент
     const win2 = document.getElementById('activeCallWin');
     if (win2) {
-      if (!_callIsVid) {
+      if (!_callIsVid && !_partnerSharing) {
+        // Убираем #rv только если партнёр ТОЖЕ не шарит
         win2.querySelector('#rv')?.remove();
         win2.style.height = '';
+      } else if (_partnerSharing) {
+        // Партнёр ещё шарит — показываем его экран снова (он мог быть скрыт)
+        const rvEl = document.querySelector('#rv');
+        if (rvEl) rvEl.style.display = 'block';
+        const cwA = document.getElementById('cwAudioContent');
+        if (cwA) cwA.style.display = 'none'; // всё ещё скрыт пока партнёр шарит
       }
       // Восстанавливаем камеру в lv если видеозвонок
       if (_callIsVid && lv && localStream) {
@@ -6186,6 +6197,7 @@ function _cleanup() {
   }
   _callConnectedTime = null;
   _callRoom = null;
+  _partnerSharing = false;
 
   if (_callAutoTimeout) { clearTimeout(_callAutoTimeout); _callAutoTimeout = null; }
   _releaseWakeLock();
