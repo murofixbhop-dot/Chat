@@ -4358,6 +4358,28 @@ const MAX_HISTORY = 2000;
 let messageHistory = [];
 
 // Удаление сообщения
+// ── Очистка истории группы (только создатель) ──────────────────────────────
+app.post('/api/clear-group', async (req, res) => {
+  const { groupId, username } = req.body;
+  if (!groupId || !username) return res.status(400).json({ error: 'Нет данных' });
+
+  // Проверяем что username — создатель группы
+  const group = groups.find(g => g.id === groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.creator !== username) return res.status(403).json({ error: 'Только создатель может очищать группу' });
+
+  const room = `group:${groupId}`;
+  const before = messageHistory.length;
+  messageHistory = messageHistory.filter(m => m.room !== room);
+  const deleted = before - messageHistory.length;
+  saveHistory();
+
+  // Уведомляем всех участников об очистке
+  io.to(room).emit('group-history-cleared', { groupId, by: username });
+
+  res.json({ success: true, deleted });
+});
+
 app.post('/api/delete-message', async (req, res) => {
   const { messageId, username, forAll } = req.body;
   if (!messageId || !username) return res.status(400).json({ error: 'Нет данных' });
@@ -4655,16 +4677,16 @@ io.on('connection', (socket) => {
   }
   socket.on('call-invite', data => {
     if (!data.resumed) {
-      // Проверяем занят ли ПОЛУЧАТЕЛЬ (не звонящий)
-      const calleeEntry = activeCalls.get(data.to);
-      if (calleeEntry && calleeEntry.from !== data.from) {
-        // Получатель уже в звонке с кем-то другим → занят
-        const callerSid = userSockets.get(data.from);
-        if (callerSid) io.to(callerSid).emit('call-busy', { from: data.to });
-        return;
+      // Групповые звонки — пропускаем проверку занятости
+      if (!data.groupId) {
+        const calleeEntry = activeCalls.get(data.to);
+        if (calleeEntry && calleeEntry.from !== data.from) {
+          const callerSid = userSockets.get(data.from);
+          if (callerSid) io.to(callerSid).emit('call-busy', { from: data.to });
+          return;
+        }
       }
-      // Регистрируем звонок (с коротким TTL)
-      activeCalls.set(data.to, { from: data.from, isVid: data.isVid, startTime: Date.now() });
+      activeCalls.set(data.to, { from: data.from, isVid: data.isVid, startTime: Date.now(), groupId: data.groupId });
     }
     relayTo('call-invite', data);
   });
