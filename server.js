@@ -4754,8 +4754,21 @@ io.on('connection', (socket) => {
 
   // ── Read receipts ─────────────────────────────────────────────────────
   socket.on('messages-read', ({ room, by }) => {
-    // Оповещаем всех в комнате (кроме читающего)
-    if (room && by) socket.to(room).emit('messages-read', { room, by });
+    if (!room || !by) return;
+    // Помечаем все сообщения комнаты как прочитанные пользователем by
+    let changed = false;
+    messageHistory.forEach(msg => {
+      if (msg.room === room && msg.user !== by) {
+        if (!msg.readBy) msg.readBy = [];
+        if (!msg.readBy.includes(by)) {
+          msg.readBy.push(by);
+          changed = true;
+        }
+      }
+    });
+    if (changed) saveHistory();
+    // Оповещаем отправителя что прочитано
+    socket.to(room).emit('messages-read', { room, by });
   });
 
   socket.on('call-end', data => {
