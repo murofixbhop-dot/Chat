@@ -1345,19 +1345,16 @@ function addMessage(msg) {
   const isGroup = (msg.room||'').startsWith('group:');
   let statusHtml = '';
 
-  if (own && isPriv) {
-    const partner = (msg.room||'').split(':').slice(1).find(p => p !== currentUser);
-    const isReadByPartner = Array.isArray(msg.readBy) && partner && msg.readBy.includes(partner);
-    // Партнёр в этом чате и вкладка видима = считается прочитанным
-    const partnerInChat = partner && onlineUsersSet.has(partner) && _chatPartner === partner && !document.hidden;
-    const isRead = isReadByPartner || partnerInChat;
-    statusHtml = `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
-      <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-1'}"></span>
-      <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-grey'}"></span>
-    </span>`;
-  } else if (own && isGroup) {
-    // В группе: синие точки если хотя бы один участник прочитал
-    const isRead = Array.isArray(msg.readBy) && msg.readBy.length > 0;
+  if (own && (isPriv || isGroup)) {
+    // Только сервер — источник истины. partnerInChat НЕ используем при рендере
+    let isRead = false;
+    if (isPriv) {
+      const partner = (msg.room||'').split(':').slice(1).find(p => p !== currentUser);
+      isRead = Array.isArray(msg.readBy) && !!partner && msg.readBy.includes(partner);
+    } else {
+      // Группа: хотя бы один прочитал
+      isRead = Array.isArray(msg.readBy) && msg.readBy.length > 0;
+    }
     statusHtml = `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
       <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-1'}"></span>
       <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-grey'}"></span>
