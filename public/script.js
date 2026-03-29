@@ -1081,7 +1081,20 @@ socket.on('history', msgs => {
   requestAnimationFrame(() => {
     _historyLoading = false;
     _applyHiddenMessages(); // скрываем удалённые у себя
-    _lastMsgDate = null;    // сбрасываем после скрытия чтобы новые сообщения получили разделитель
+    // Синхронизируем _lastMsgDate с последним видимым разделителем в DOM
+    const seps = messagesDiv?.querySelectorAll('.msg-day-sep');
+    const lastSep = seps?.length ? seps[seps.length - 1] : null;
+    if (lastSep) {
+      // Обратно конвертируем текст разделителя в дату
+      const txt = lastSep.textContent.trim();
+      const today = new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' });
+      const yesterday = new Date(Date.now()-86400000).toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' });
+      if (txt === 'Сегодня') _lastMsgDate = today;
+      else if (txt === 'Вчера') _lastMsgDate = yesterday;
+      else _lastMsgDate = txt;
+    } else {
+      _lastMsgDate = null; // нет разделителей — сбрасываем
+    }
   });
 });
 
@@ -1159,7 +1172,7 @@ socket.on('messages-read', ({ room, by }) => {
   if (room !== currentRoom) return;
   document.querySelectorAll('.msg-status').forEach(el => {
     if (el.dataset.room === room || !el.dataset.room) {
-      el.innerHTML = '<i class="ti ti-checks msg-tick-2"></i>';
+      el.innerHTML = '<span class="msg-dot msg-dot-2">●●</span>';
     }
   });
 });
@@ -1317,7 +1330,7 @@ function addMessage(msg) {
   }
 
   const statusHtml = own ? `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
-    <i class="ti ti-check msg-tick-1"></i>
+    <span class="msg-dot msg-dot-1">●</span>
   </span>` : '';
   inner += `<div class="msg-meta"><span class="msg-time">${msg.time}</span>${statusHtml}</div>`;
   bub.innerHTML = inner;
