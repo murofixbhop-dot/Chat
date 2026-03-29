@@ -1037,6 +1037,7 @@ function gotoRoom(room) {
   }
 
   socket.emit('join-room', room);
+  _sendReadReceipt(room); // сообщаем что прочитали
   renderFriends();
   renderGroups();
 }
@@ -1080,6 +1081,7 @@ socket.on('history', msgs => {
   requestAnimationFrame(() => {
     _historyLoading = false;
     _applyHiddenMessages(); // скрываем удалённые у себя
+    _lastMsgDate = null;    // сбрасываем после скрытия чтобы новые сообщения получили разделитель
   });
 });
 
@@ -1134,7 +1136,8 @@ socket.on('message', msg => {
       }
     }
   }
-  addMessage(msg);
+  // Рендерим только если сообщение из текущей комнаты
+  if (isActive) addMessage(msg);
 });
 socket.on('system', addSystem);
 
@@ -1147,6 +1150,24 @@ function fileUrl(url) {
   const m = url.match(/\/file\/[^/]+\/(.+?)(\?|$)/);
   if (m) return '/api/dl?f=' + encodeURIComponent(m[1]);
   return url;
+}
+
+
+// ── Read receipts ─────────────────────────────────────────────────────────
+// Когда партнёр открывает чат — помечаем наши сообщения как прочитанные
+socket.on('messages-read', ({ room, by }) => {
+  if (room !== currentRoom) return;
+  document.querySelectorAll('.msg-status').forEach(el => {
+    if (el.dataset.room === room || !el.dataset.room) {
+      el.innerHTML = '<i class="ti ti-checks msg-tick-2"></i>';
+    }
+  });
+});
+
+// Когда МЫ открываем чат — сообщаем отправителю что прочитали
+function _sendReadReceipt(room) {
+  if (!room || !currentUser) return;
+  socket.emit('messages-read', { room, by: currentUser });
 }
 
 // Звонок от сервера (из истории или реалтайм)
@@ -1295,7 +1316,10 @@ function addMessage(msg) {
     inner += `<div class="msg-text">${esc(msg.text)}</div>`;
   }
 
-  inner += `<div class="msg-meta"><span class="msg-time">${msg.time}</span></div>`;
+  const statusHtml = own ? `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
+    <i class="ti ti-check msg-tick-1"></i>
+  </span>` : '';
+  inner += `<div class="msg-meta"><span class="msg-time">${msg.time}</span>${statusHtml}</div>`;
   bub.innerHTML = inner;
 
   // Convert any legacy <audio> elements to custom voice player
@@ -5062,7 +5086,9 @@ async function _initiateGroupPeer(member) {
     }
   };
 
-  socket.emit('call-invite', { to: member, from: currentUser, isVid: _callIsVid });
+  // Передаём groupId чтобы получатель знал что это групповой звонок
+  const gid = currentRoom?.startsWith('group:') ? currentRoom.replace('group:', '') : null;
+  socket.emit('call-invite', { to: member, from: currentUser, isVid: _callIsVid, groupId: gid });
 }
 
 function _addGroupParticipantStream(member, remoteStream) {
@@ -5289,7 +5315,7 @@ function _showOutgoingUI(target, isVid) {
 }
 
 // ── INCOMING ────────────────────────────────────────────
-socket.on('call-invite', ({ from, isVid, resumed }) => {
+socket.on('call-invite', ({ from, isVid, resumed, groupId }) => {
   // Уведомление если вкладка скрыта
   if (document.hidden) {
     showPushNotification(
@@ -5312,6 +5338,13 @@ socket.on('call-invite', ({ from, isVid, resumed }) => {
     if (_callTarget === from) return; // уже принимаем/отвечаем этот звонок
     socket.emit('call-busy', { to: from, from: currentUser });
     return;
+  }
+
+  // Если звонок групповой — показываем групповой UI
+  const incomingGroupId = groupId;
+  if (incomingGroupId) {
+    const grp = groups.find(g => g.id === incomingGroupId);
+    if (grp) { _showGroupIncomingUI(from, isVid, grp); return; }
   }
 
   _callTarget = from;
