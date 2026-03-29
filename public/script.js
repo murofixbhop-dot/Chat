@@ -1176,10 +1176,15 @@ function fileUrl(url) {
 // Когда партнёр открывает чат — помечаем наши сообщения как прочитанные
 socket.on('messages-read', ({ room, by }) => {
   if (room !== currentRoom) return;
-  document.querySelectorAll('.msg-status').forEach(el => {
-    if (el.dataset.room === room || !el.dataset.room) {
-      el.innerHTML = '<span class="msg-dot msg-dot-2">●●</span>';
-    }
+  // Обновляем точки только для сообщений в этой комнате
+  document.querySelectorAll(`.msg-status[data-room="${room}"]`).forEach(el => {
+    const dots = el.querySelectorAll('.msg-dot');
+    dots.forEach(d => { d.className = 'msg-dot msg-dot-2'; });
+  });
+  // Также обновляем сообщения без data-room (старые)
+  document.querySelectorAll('.msg-status:not([data-room])').forEach(el => {
+    const dots = el.querySelectorAll('.msg-dot');
+    dots.forEach(d => { d.className = 'msg-dot msg-dot-2'; });
   });
 });
 
@@ -1335,9 +1340,20 @@ function addMessage(msg) {
     inner += `<div class="msg-text">${esc(msg.text)}</div>`;
   }
 
-  const statusHtml = own ? `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
-    <span class="msg-dot msg-dot-1">●</span>
-  </span>` : '';
+  // Точки статуса (только для своих сообщений в личных чатах)
+  const isPriv = (msg.room||'').startsWith('private:');
+  let statusHtml = '';
+  if (own && isPriv) {
+    // Прочитано если readBy содержит партнёра ИЛИ партнёр сейчас в этом чате
+    const partner = (msg.room||'').split(':').slice(1).find(p => p !== currentUser);
+    const isReadByPartner = Array.isArray(msg.readBy) && partner && msg.readBy.includes(partner);
+    const partnerInChat = partner && onlineUsersSet.has(partner) && _chatPartner === partner && !document.hidden;
+    const isRead = isReadByPartner || partnerInChat;
+    statusHtml = `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
+      <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-1'}"></span>
+      <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-grey'}"></span>
+    </span>`;
+  }
   inner += `<div class="msg-meta"><span class="msg-time">${msg.time}</span>${statusHtml}</div>`;
   bub.innerHTML = inner;
 
