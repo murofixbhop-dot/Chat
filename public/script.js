@@ -1150,7 +1150,13 @@ socket.on('message', msg => {
     }
   }
   // Рендерим только если сообщение из текущей комнаты
-  if (isActive) addMessage(msg);
+  if (isActive) {
+    addMessage(msg);
+    // Если мы уже в этом чате — сразу отмечаем прочитанным
+    if (!document.hidden) {
+      _sendReadReceipt(room);
+    }
+  }
 });
 socket.on('system', addSystem);
 
@@ -2227,6 +2233,16 @@ function _cleanOrphanSeparators() {
 async function deleteMsg(id) { return deleteMsgForAll(id); }
 
 // Real-time deletion from server
+socket.on('group-history-cleared', ({ groupId }) => {
+  const room = `group:${groupId}`;
+  if (currentRoom === room) {
+    const msgs = document.getElementById('messages');
+    if (msgs) { msgs.innerHTML = ''; _lastMsgDate = null; }
+    if (msgsEmpty) msgsEmpty.style.display = 'flex';
+    toast('История группы очищена', 'info', 2500);
+  }
+});
+
 socket.on('message-deleted', ({ messageId }) => {
   const row = document.querySelector(`[data-id="${messageId}"]`);
   if (row) {
@@ -4750,6 +4766,10 @@ function openGroupProfile(g) {
       ${grpAvHtml}
       <div class="upm-name">${esc(g.name || 'Группа')}</div>
       <div class="upm-username">${members.length} участников</div>
+      ${g.creator === currentUser ? `
+      <button class="upm-delete-chat-btn" onclick="confirmClearGroup('${esc(g.id)}','${esc(g.name||'')}')">
+        <i class="ti ti-trash"></i> Очистить историю группы
+      </button>` : ''}
 
       <div class="upm-tabs">
         <button class="upm-tab active" onclick="upmGTab(this,'ugm-members')"><i class="ti ti-users"></i> Участники</button>
@@ -4764,6 +4784,28 @@ function openGroupProfile(g) {
     </div>`;
 
   modal.classList.add('open');
+}
+
+
+async function confirmClearGroup(groupId, groupName) {
+  closeGroupProfile();
+  const ok = await dialog({
+    icon: 'ti-trash', iconType: 'error',
+    title: 'Очистить историю группы?',
+    msg: `Все сообщения в группе «${esc(groupName)}» будут удалены у всех участников. Это действие нельзя отменить.`,
+    ok: 'Очистить', cancel: 'Отмена', danger: true
+  });
+  if (!ok) return;
+  try {
+    const r = await fetch('/api/clear-group', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId, username: currentUser })
+    });
+    const d = await r.json();
+    if (!d.success) toast(d.error || 'Ошибка', 'error');
+    else toast('История группы очищена', 'success', 2500);
+  } catch { toast('Ошибка соединения', 'error'); }
 }
 
 function closeGroupProfile() {
