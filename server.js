@@ -4532,7 +4532,6 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', (room) => {
     if (!currentUser) return;
-    // Leave previous chat rooms but KEEP socket.id room (for direct notifications)
     const rooms = [...socket.rooms];
     rooms.forEach(r => {
       if (r !== socket.id) socket.leave(r);
@@ -4540,6 +4539,24 @@ io.on('connection', (socket) => {
     socket.join(room);
     const roomHistory = messageHistory.filter(m => m.room === room).slice(-100);
     socket.emit('history', roomHistory);
+
+    // Помечаем все сообщения от других как прочитанные этим пользователем
+    // и уведомляем отправителей что сообщения прочитаны
+    let changed = false;
+    messageHistory.forEach(msg => {
+      if (msg.room === room && msg.user !== currentUser) {
+        if (!msg.readBy) msg.readBy = [];
+        if (!msg.readBy.includes(currentUser)) {
+          msg.readBy.push(currentUser);
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      saveHistory();
+      // Уведомляем всех в комнате (отправителей) что currentUser прочитал
+      socket.to(room).emit('messages-read', { room, by: currentUser });
+    }
   });
 
   socket.on('ping', () => {
