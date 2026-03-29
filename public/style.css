@@ -283,7 +283,7 @@ option { background: var(--surface2); color: var(--text); }
    DIALOG  ← УДОБСТВО + КРАСОТА
 ════════════════════════════════════════════════ */
 .dialog-overlay {
-  display: none; position: fixed; inset: 0; z-index: 9000;
+  display: none; position: fixed; inset: 0; z-index: 99999;
   background: rgba(0,0,0,.55);
   backdrop-filter: blur(8px);
   align-items: center; justify-content: center;
