@@ -5497,13 +5497,21 @@ socket.on('screen-share-started', ({ from }) => {
 
 // Caller stopped screen share
 socket.on('screen-share-stopped', ({ from }) => {
-  // Восстанавливаем у обоих
-  const cwAudio = document.getElementById('cwAudioContent');
-  if (cwAudio) cwAudio.style.display = '';
-  document.querySelector('#rv')?.remove();
-  document.querySelector('#screenReceiveOverlay')?.remove();
-  const win = document.getElementById('activeCallWin');
-  if (win) win.style.height = '';
+  // Восстанавливаем только если ТОТ, кто остановил, был нашим шарером
+  // (не трогаем #rv если мы сами шарим или if someone else was sharing)
+  const rv = document.querySelector('#rv');
+  // rv существует и это стрим от партнёра который остановил демку
+  if (rv) {
+    rv.remove();
+    document.querySelector('#screenReceiveOverlay')?.remove();
+    const win = document.getElementById('activeCallWin');
+    if (win) win.style.height = '';
+  }
+  // Восстанавливаем cwAudioContent только если МЫ сами не шарим
+  if (!_screenSharing) {
+    const cwAudio = document.getElementById('cwAudioContent');
+    if (cwAudio) cwAudio.style.display = '';
+  }
 });
 
 // Offline target
@@ -5727,8 +5735,13 @@ function _showScreenReceived(remoteStream) {
     vt.onended = () => {
       scrVid.remove();
       badge.remove();
-      win.style.height = '';
-      console.log('[SS] Screen share ended');
+      if (win) win.style.height = '';
+      // Restore avatar/name for viewer when partner stops sharing
+      if (!_screenSharing) {
+        const cwAudio = document.getElementById('cwAudioContent');
+        if (cwAudio) cwAudio.style.display = '';
+      }
+      console.log('[SS] Screen share ended via track.onended');
     };
   }
   console.log('[SS] Screen share video inserted, track:', vt?.readyState);
@@ -6041,23 +6054,44 @@ async function switchToScreenShare() {
       b.style.background = ''; b.title = 'Экран';
       b.querySelector('i').className = 'ti ti-screen-share';
     });
-    // Восстанавливаем аватарку/имя
+    // Восстанавливаем аватарку/имя у шарера
     const ac = document.getElementById('cwAudioContent');
     if (ac) { ac.style.display = ''; ac.style.pointerEvents = ''; }
-    // Remove screen video
-    const rv = document.getElementById('activeCallWin')?.querySelector('#rv');
-    if (rv && !_callIsVid) { rv.remove(); }
-    const win = document.getElementById('activeCallWin');
-    if (win) win.style.height = '';
+    // Убираем свой PIP превью экрана
+    const lv = document.getElementById('activeCallWin')?.querySelector('#lv');
+    if (lv) { lv.srcObject = null; }
+    // Если это был аудиозвонок — убираем видео элемент
+    const win2 = document.getElementById('activeCallWin');
+    if (win2) {
+      if (!_callIsVid) {
+        win2.querySelector('#rv')?.remove();
+        win2.style.height = '';
+      }
+      // Восстанавливаем камеру в lv если видеозвонок
+      if (_callIsVid && lv && localStream) {
+        lv.srcObject = localStream;
+        lv.style.width = '';
+        lv.style.height = '';
+        lv.style.objectFit = 'cover';
+        lv.style.background = '';
+      }
+    }
     toast('Демонстрация остановлена', 'info', 2000);
     return;
   }
 
-  // MUST call getDisplayMedia directly in user gesture — not inside dialog callback
+  // Показываем выбор качества, потом getDisplayMedia
+  let _selectedOpts = await new Promise(res => showScreenQualityPicker(res));
+  if (!_selectedOpts) return; // пользователь отменил
+
+  const resMap = { '1080p':{w:1920,h:1080}, '720p':{w:1280,h:720}, '480p':{w:854,h:480} };
+  const rz = resMap[_selectedOpts.res] || resMap['720p'];
+  const fps = parseInt(_selectedOpts.fps) || 30;
+
   let _capturedStream = null;
   try {
     _capturedStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} },
+      video: { width:{ideal:rz.w,max:rz.w}, height:{ideal:rz.h,max:rz.h}, frameRate:{ideal:fps,max:fps} },
       audio: true
     });
   } catch(e) {
@@ -6067,7 +6101,6 @@ async function switchToScreenShare() {
   }
   if (!_capturedStream) return;
 
-  // Now stream is captured — add to peer connection
   await _applyScreenShare(_capturedStream);
 }
 
