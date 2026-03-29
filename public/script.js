@@ -2161,7 +2161,29 @@ function _applyHiddenMessages() {
     document.querySelectorAll('[data-id]').forEach(row => {
       if (hidden.has(row.dataset.id)) row.remove();
     });
+    // Удаляем осиротевшие разделители дней
+    _cleanOrphanSeparators();
   } catch {}
+}
+
+function _cleanOrphanSeparators() {
+  const msgs = document.getElementById('messages');
+  if (!msgs) return;
+  // Разделитель — сирота если после него нет сообщений до следующего разделителя
+  const children = Array.from(msgs.children);
+  for (let i = 0; i < children.length; i++) {
+    const el = children[i];
+    if (!el.classList.contains('msg-day-sep')) continue;
+    // Ищем следующий элемент который является сообщением (не разделителем)
+    let hasMsg = false;
+    for (let j = i + 1; j < children.length; j++) {
+      if (children[j].classList.contains('msg-day-sep')) break; // следующий разделитель
+      if (children[j].dataset.id || children[j].classList.contains('call-record')) {
+        hasMsg = true; break;
+      }
+    }
+    if (!hasMsg) el.remove();
+  }
 }
 
 // Старая функция для совместимости
