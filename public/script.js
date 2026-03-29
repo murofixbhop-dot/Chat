@@ -50,7 +50,9 @@ socket.on('connect', () => {
 
 // Reconnect and refresh when tab becomes visible (phone screen on)
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && currentUser) {
+  if (!currentUser) return;
+  if (document.visibilityState === 'visible') {
+    // Вернулись — переподключаемся если нужно и обновляем данные
     if (!socket.connected) {
       socket.connect();
     } else {
@@ -58,8 +60,11 @@ document.addEventListener('visibilitychange', () => {
       if (currentRoom) socket.emit('join-room', currentRoom);
     }
     if (!_inCall) loadUserData();
-    // Вернулись на вкладку с открытым чатом — отмечаем как прочитанное
     if (currentRoom) _sendReadReceipt(currentRoom);
+  } else {
+    // Уходим на другую вкладку — явно говорим серверу что онлайн
+    // (таймеры в фоне throttle-ятся, поэтому шлём identify сразу)
+    if (socket.connected) socket.emit('identify', currentUser);
   }
 });
 socket.on('connect_error', () => {
@@ -6827,7 +6832,9 @@ setInterval(async () => {
   } catch {}
 }, 8000);
 // Keep-alive ping every 5s
-setInterval(() => { if (currentUser) socket.emit('ping'); }, 5000);
+// Увеличенный интервал — браузеры throttle-ят таймеры в фоне до ~60с
+// Socket.IO сам поддерживает соединение через собственный keepalive
+setInterval(() => { if (currentUser && socket.connected) socket.emit('ping'); }, 20000);
 
 // ══════════════════════════════════════════════
 // ONLINE BADGE  ← УДОБСТВО
