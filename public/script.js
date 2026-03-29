@@ -1544,58 +1544,27 @@ async function deleteSelectedMsgs() {
 
 
 // ── Вставка из буфера обмена (Ctrl+V / Command+V) ─────────────────────────
-document.addEventListener('paste', async (e) => {
-  // Работает только когда чат открыт и не в AI режиме
+document.addEventListener('paste', (e) => {
   if (!currentRoom || !currentUser) return;
+  // Не перехватываем если фокус в чужом поле
   const activeEl = document.activeElement;
-  // Если фокус в текстовом поле — не перехватываем (браузер сам вставит текст)
   if (activeEl && (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT') && activeEl.id !== 'msgInput') return;
 
   const items = Array.from(e.clipboardData?.items || []);
-  if (!items.length) return;
-
-  // Ищем файлы/изображения
   const fileItems = items.filter(it => it.kind === 'file');
   if (!fileItems.length) return;
 
   e.preventDefault();
 
+  // Добавляем файлы в очередь прикреплений — как при нажатии кнопки скрепки
   for (const item of fileItems) {
     const file = item.getAsFile();
     if (!file) continue;
-
-    const isImage = file.type.startsWith('image/');
-
-    // Показываем превью и подтверждение
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target.result;
-      const ok = await dialog({
-        icon: isImage ? 'ti-photo' : 'ti-file',
-        iconType: 'info',
-        title: isImage ? 'Отправить изображение?' : 'Отправить файл?',
-        msg: isImage
-          ? `<img src="${dataUrl}" style="max-width:100%;max-height:200px;border-radius:8px;margin-top:8px">`
-          : `<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><i class="ti ti-file" style="font-size:24px;color:var(--accent)"></i><span>${esc(file.name)}<br><small style="color:var(--text3)">${(file.size/1024).toFixed(1)} KB</small></span></div>`,
-        ok: 'Отправить', cancel: 'Отмена'
-      });
-      if (!ok) return;
-
-      // Загружаем и отправляем
-      const formData = new FormData();
-      formData.append('file', file, file.name || (isImage ? 'image.png' : 'file'));
-      formData.append('username', currentUser);
-      formData.append('room', currentRoom);
-      formData.append('type', isImage ? 'image' : 'file');
-
-      try {
-        toast('Загружаю...', 'info', 2000);
-        const r = await fetch('/api/upload', { method: 'POST', body: formData });
-        const d = await r.json();
-        if (!d.success) toast(d.error || 'Ошибка загрузки', 'error');
-      } catch { toast('Ошибка соединения', 'error'); }
-    };
-    reader.readAsDataURL(file);
+    // Именуем файл если нет имени (скриншот из буфера)
+    const named = file.name && file.name !== 'image.png'
+      ? file
+      : new File([file], file.type.startsWith('image/') ? `screenshot_${Date.now()}.png` : `file_${Date.now()}`, { type: file.type });
+    addFile(named);
   }
 });
 function handleSend() {
