@@ -5249,19 +5249,9 @@ socket.on('call-invite', ({ from, isVid, resumed }) => {
     );
   }
 
-  // Проверяем - это звонок из группы?
-  // Если звонящий находится в общей группе с нами - показываем групповой UI
-  const callerGroup = groups.find(g => g.members.includes(from) && g.members.includes(currentUser));
-  if (callerGroup && !_inCall) {
-    // Групповой входящий — спецUIq
-    _showGroupIncomingUI(from, isVid, callerGroup);
-    return;
-  }
-
   // Уже в групповом звонке — добавляем участника
   if (_groupCall) {
     if (groupPeers.has(from)) { _handleGroupAnswer(from, isVid); return; }
-    // Новый участник присоединяется
     _initiateGroupPeer(from);
     return;
   }
