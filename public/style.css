@@ -2789,38 +2789,13 @@ video {
 }
 
 
-/* ── Message status dots ────────────────────────────────── */
-.msg-status {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 4px;
-  flex-shrink: 0;
-  line-height: 1;
-}
-.msg-dot {
-  font-size: 8px;
-  letter-spacing: 1px;
-  line-height: 1;
-}
-.msg-dot-1 {
-  color: rgba(255,255,255,.5); /* 1 точка — доставлено */
-}
-.msg-dot-2 {
-  color: #60a5fa; /* 2 точки — прочитано, синие */
-  letter-spacing: 2px;
-}
-.msg-row.own .msg-meta {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
 
 /* ── Message status dots ────────────────────────────────── */
 .msg-status {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  margin-left: 3px;
+  gap: 3px;
+  margin-left: 4px;
   vertical-align: middle;
   flex-shrink: 0;
 }
@@ -2829,11 +2804,14 @@ video {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: rgba(255,255,255,.45); /* серая — отправлено */
+  flex-shrink: 0;
 }
-.msg-dot-2 {
-  background: #60a5fa; /* синяя — прочитано */
-}
+/* Одна яркая + одна серая = отправлено (не прочитано) */
+.msg-dot-1 { background: rgba(255,255,255,.7); }
+.msg-dot-grey { background: rgba(255,255,255,.25); }
+/* Обе синие = прочитано */
+.msg-dot-2 { background: #60a5fa; }
+
 .msg-row.own .msg-meta {
   display: flex;
   align-items: center;
