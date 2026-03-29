@@ -2788,18 +2788,26 @@ video {
   .gp-ava     { width: 48px; height: 48px; }
 }
 
-/* ── Message status ticks ───────────────────────────────── */
+
+/* ── Message status dots ────────────────────────────────── */
 .msg-status {
   display: inline-flex;
   align-items: center;
   margin-left: 4px;
-  color: rgba(255,255,255,.55);
-  font-size: 12px;
-  line-height: 1;
   flex-shrink: 0;
+  line-height: 1;
 }
-.msg-tick-2 {
-  color: #60a5fa; /* синие = прочитано */
+.msg-dot {
+  font-size: 8px;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+.msg-dot-1 {
+  color: rgba(255,255,255,.5); /* 1 точка — доставлено */
+}
+.msg-dot-2 {
+  color: #60a5fa; /* 2 точки — прочитано, синие */
+  letter-spacing: 2px;
 }
 .msg-row.own .msg-meta {
   display: flex;
