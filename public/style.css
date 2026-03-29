@@ -2814,3 +2814,28 @@ video {
   align-items: center;
   gap: 2px;
 }
+
+/* ── Message status dots ────────────────────────────────── */
+.msg-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 3px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.msg-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.45); /* серая — отправлено */
+}
+.msg-dot-2 {
+  background: #60a5fa; /* синяя — прочитано */
+}
+.msg-row.own .msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
