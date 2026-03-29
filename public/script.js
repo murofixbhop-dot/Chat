@@ -4762,6 +4762,7 @@ async function confirmDeleteChat() {
       localStorage.setItem(key, JSON.stringify(newHidden));
     } catch {}
     msgs.innerHTML = '';
+    _lastMsgDate = null; // сбрасываем дату чтобы следующее сообщение получило разделитель
     if (msgsEmpty) msgsEmpty.style.display = '';
   }
   toast('Переписка удалена у вас', 'success', 2500);
