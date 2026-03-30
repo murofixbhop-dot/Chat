@@ -1258,6 +1258,13 @@ function addMessage(msg) {
   let inner = (!own && !isPrivateChat) ? `<div class="msg-sender">${esc(userNicknames[msg.user] || msg.user)}</div>` : '';
 
   // ── Цитата ответа ──
+  // Метка "Переслано" над сообщением
+  if (msg.forwarded || msg.mediaData?.forwarded) {
+    const fwdFrom = msg.fwdFrom || msg.mediaData?.fwdFrom || '';
+    const fwdNick = fwdFrom ? (userNicknames?.[fwdFrom] || fwdFrom) : '';
+    inner += `<div class="fwd-label"><i class="ti ti-share"></i> Переслано${fwdNick ? ' от <b>' + esc(fwdNick) + '</b>' : ''}</div>`;
+  }
+
   if (msg.replyTo) {
     const rt = msg.replyTo;
     const rNick = esc(userNicknames?.[rt.user] || rt.user || '?');
@@ -1618,29 +1625,40 @@ function showForwardPicker() {
       modal.innerHTML = `
         <div class="modal-card forward-card">
           <div class="modal-hd">
-            <h2><i class="ti ti-share"></i> Переслать</h2>
+            <span style="display:flex;align-items:center;gap:8px"><i class="ti ti-share" style="color:var(--accent)"></i> Переслать</span>
             <button class="icon-btn" id="fwCloseBtn"><i class="ti ti-x"></i></button>
           </div>
-          <div class="forward-list"></div>
+          <div class="fw-search-wrap">
+            <i class="ti ti-search" style="color:var(--text3);font-size:14px"></i>
+            <input id="fwSearchInput" class="fw-search" placeholder="Поиск" autocomplete="off">
+          </div>
+          <div class="forward-list" id="fwList"></div>
         </div>`;
       document.body.appendChild(modal);
       modal.addEventListener('click', e => {
         if (e.target === modal) done(null);
       });
       modal.querySelector('#fwCloseBtn')?.addEventListener('click', () => done(null));
+      modal.querySelector('#fwSearchInput')?.addEventListener('input', function() {
+        const q = this.value.toLowerCase();
+        modal.querySelectorAll('.forward-item').forEach(row => {
+          const txt = (row.querySelector('.fi-title')?.textContent || '').toLowerCase();
+          row.style.display = txt.includes(q) ? '' : 'none';
+        });
+      });
     }
 
     const list = modal.querySelector('.forward-list');
     if (list) list.innerHTML = '';
 
     const items = [];
-    items.push({ title: 'Общий чат', sub: 'Глобальный', room: 'general' });
+    // Только реальные личные чаты и группы (без "Общего чата")
     (friends || []).forEach(f => {
       const name = userNicknames?.[f] || f;
-      items.push({ title: name, sub: 'Личный чат', room: getRoomId(f) });
+      items.push({ title: name, sub: 'Личный чат', room: getRoomId(f), av: userAvatars?.[f] || null });
     });
     (groups || []).forEach(g => {
-      items.push({ title: g.name || `Группа ${g.id}`, sub: 'Группа', room: `group:${g.id}` });
+      items.push({ title: g.name || `Группа ${g.id}`, sub: 'Группа', room: `group:${g.id}`, av: g.avatar || null });
     });
 
     if (!items.length && list) {
@@ -1649,9 +1667,10 @@ function showForwardPicker() {
       items.forEach(it => {
         const row = document.createElement('div');
         row.className = 'forward-item';
-        row.innerHTML = `
-          <div class="fi-title">${esc(it.title)}</div>
-          <div class="fi-sub">${esc(it.sub)}</div>`;
+        const avHtml = it.av
+          ? `<div class="fi-av" style="background-image:url(${it.av});background-size:cover;border-radius:50%;width:36px;height:36px;flex-shrink:0"></div>`
+          : `<div class="fi-av" style="border-radius:${it.sub==='Группа'?'10px':'50%'};width:36px;height:36px;flex-shrink:0;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700">${esc(it.title[0]||'?')}</div>`;
+        row.innerHTML = `${avHtml}<div class="fi-info"><div class="fi-title">${esc(it.title)}</div><div class="fi-sub">${esc(it.sub)}</div></div>`;
         row.addEventListener('click', () => done(it.room));
         list.appendChild(row);
       });
@@ -1682,14 +1701,16 @@ async function forwardSelectedMsgs() {
     if (!msg) { skipped++; continue; }
 
     const type = msg.type || 'text';
+    const originalUser = msg.user || '';
+    const fwdMeta = { forwarded: true, fwdFrom: originalUser };
     if (type === 'text') {
       const text = String(msg.text || '').trim();
       if (!text) { skipped++; continue; }
-      socket.emit('message', { text, room: targetRoom });
+      socket.emit('message', { text, room: targetRoom, forwarded: true, fwdFrom: originalUser });
       sent++;
-    } else if (['image','video','audio','file','video_circle'].includes(type)) {
+    } else if (['image','video','audio','file','video_circle','voice'].includes(type)) {
       socket.emit('media-message', {
-        mediaData: { type, url: msg.url, fileName: msg.fileName, text: msg.text || '' },
+        mediaData: { type, url: msg.url, fileName: msg.fileName, text: msg.text || '', forwarded: true, fwdFrom: originalUser },
         room: targetRoom
       });
       sent++;
