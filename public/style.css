@@ -359,6 +359,12 @@ option { background: var(--surface2); color: var(--text); }
   color: var(--text);
 }
 .settings-card { max-width: 480px; }
+.forward-card { max-width: 420px; }
+.forward-list { display: flex; flex-direction: column; gap: 6px; max-height: 52vh; overflow-y: auto; }
+.forward-item { padding: 10px 12px; border-radius: 12px; background: var(--surface3); cursor: pointer; transition: background .12s; }
+.forward-item:hover { background: var(--hover); }
+.forward-item .fi-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.forward-item .fi-sub { font-size: 11px; color: var(--text3); }
 .modal-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .modal-hd h2 { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
 .modal-tabs { display: flex; gap: 4px; background: var(--surface3); border-radius: 16px; padding: 5px; margin-bottom: 22px; }
