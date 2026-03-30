@@ -1166,7 +1166,7 @@ socket.on('message', msg => {
       }
 
       // Звук уведомления
-      playCallSound('message');
+      playNotifSound();
 
       // Push-уведомление если вкладка скрыта
       if (document.hidden) {
@@ -3047,6 +3047,12 @@ function openSettings() {
   $('volRange').value = vol;
   $('volLabel').textContent = vol + '%';
   loadAudioDevices();
+  // Notification sound name
+  const notifData = localStorage.getItem('aura_notif_sound');
+  const notifNameEl = $('notifSoundName');
+  const notifResetBtn = $('notifSoundResetBtn');
+  if (notifNameEl) notifNameEl.textContent = notifData ? '🎵 Кастомный звук' : 'Стандартный звук';
+  if (notifResetBtn) notifResetBtn.style.display = notifData ? '' : 'none';
   // Recovery email + verified badge
   $('stRecoveryEmail').value = userData.recoveryEmail || '';
   const badge = $('emailVerifiedBadge');
@@ -5256,6 +5262,73 @@ function _warmAudio() {
 ['touchstart','mousedown','keydown'].forEach(ev =>
   document.addEventListener(ev, _warmAudio, { once: true, passive: true })
 );
+
+
+// ── Custom notification sound ─────────────────────────────────────────────
+let _notifAudio = null; // кастомный Audio объект
+
+function _loadNotifSound() {
+  const data = localStorage.getItem('aura_notif_sound');
+  if (data) {
+    _notifAudio = new Audio(data);
+    _notifAudio.volume = 1.0;
+  } else {
+    _notifAudio = null;
+  }
+}
+_loadNotifSound(); // загружаем при старте
+
+function uploadNotifSound(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    toast('Файл слишком большой (макс 2 МБ)', 'error'); return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      localStorage.setItem('aura_notif_sound', e.target.result);
+      _loadNotifSound();
+      // Обновляем UI
+      const nameEl = document.getElementById('notifSoundName');
+      const resetBtn = document.getElementById('notifSoundResetBtn');
+      if (nameEl) nameEl.textContent = file.name;
+      if (resetBtn) resetBtn.style.display = '';
+      toast('Звук уведомления загружен', 'success', 2000);
+    } catch(err) {
+      toast('Не удалось сохранить звук (возможно недостаточно места)', 'error');
+    }
+  };
+  reader.readAsDataURL(file);
+  input.value = ''; // сброс input чтобы можно было загрузить тот же файл
+}
+
+function resetNotifSound() {
+  localStorage.removeItem('aura_notif_sound');
+  _loadNotifSound();
+  const nameEl = document.getElementById('notifSoundName');
+  const resetBtn = document.getElementById('notifSoundResetBtn');
+  if (nameEl) nameEl.textContent = 'Стандартный звук';
+  if (resetBtn) resetBtn.style.display = 'none';
+  toast('Стандартный звук восстановлен', 'info', 1500);
+}
+
+function previewNotifSound() {
+  playNotifSound();
+}
+
+function playNotifSound() {
+  if (_notifAudio) {
+    // Воспроизводим кастомный звук
+    _notifAudio.currentTime = 0;
+    _notifAudio.play().catch(() => {
+      // Если не удалось — падаем на стандартный
+      playCallSound('message');
+    });
+  } else {
+    playCallSound('message');
+  }
+}
 
 function playCallSound(type) {
   try {
