@@ -5421,6 +5421,7 @@ async function startCall(isVid) {
       if (target.members.length === 0) { toast('В группе нет участников', 'warning'); _cleanup(); return; }
       // Create peer connections for each member
       _showGroupCallUI(target.name, target.members);
+      ringBeep(); // гудок у звонящего в группе
       // Initiate call with each member sequentially
       for (const member of target.members) {
         await _initiateGroupPeer(member);
@@ -5473,7 +5474,11 @@ async function _initiateGroupPeer(member) {
   };
 
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+    if (pc.connectionState === 'connected') {
+      // Первый участник принял — останавливаем гудок
+      stopRing();
+      playCallSound('connect');
+    } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
       groupPeers.delete(member);
       _updateGroupCallStatus();
     }
@@ -6134,11 +6139,13 @@ function _createPeer() {
     if (!_connected && track.kind === 'audio') {
       _connected = true;
       _callConnectedTime = Date.now();
+      stopRing(); // останавливаем гудок
       playCallSound('connect');
       _showCallWindow(remoteStream);
     } else if (!_connected && track.kind === 'video' && _callIsVid) {
       _connected = true;
       _callConnectedTime = Date.now();
+      stopRing(); // останавливаем гудок
       playCallSound('connect');
       _showCallWindow(remoteStream);
     }
