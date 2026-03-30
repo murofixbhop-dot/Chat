@@ -1236,6 +1236,7 @@ function addMessage(msg) {
   const row = document.createElement('div');
   row.className = `msg-row${own ? ' own' : ''}${_historyLoading ? ' no-anim' : ''}`;
   row.dataset.id = msg.id;
+  _replyStore.set(String(msg.id), msg);
 
   // Avatar — mark with data-user so avatar-updated can refresh it
   const ava = document.createElement('div');
@@ -1606,6 +1607,102 @@ async function deleteSelectedMsgs() {
   toast(`Удалено ${ids.length} сообщений`, 'success', 2000);
 }
 
+function showForwardPicker() {
+  return new Promise(res => {
+    let resolved = false;
+    let modal = document.getElementById('forwardModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'forwardModal';
+      modal.className = 'modal-bg';
+      modal.innerHTML = `
+        <div class="modal-card forward-card">
+          <div class="modal-hd">
+            <h2><i class="ti ti-share"></i> Переслать</h2>
+            <button class="icon-btn" id="fwCloseBtn"><i class="ti ti-x"></i></button>
+          </div>
+          <div class="forward-list"></div>
+        </div>`;
+      document.body.appendChild(modal);
+      modal.addEventListener('click', e => {
+        if (e.target === modal) done(null);
+      });
+      modal.querySelector('#fwCloseBtn')?.addEventListener('click', () => done(null));
+    }
+
+    const list = modal.querySelector('.forward-list');
+    if (list) list.innerHTML = '';
+
+    const items = [];
+    items.push({ title: 'Общий чат', sub: 'Глобальный', room: 'general' });
+    (friends || []).forEach(f => {
+      const name = userNicknames?.[f] || f;
+      items.push({ title: name, sub: 'Личный чат', room: getRoomId(f) });
+    });
+    (groups || []).forEach(g => {
+      items.push({ title: g.name || `Группа ${g.id}`, sub: 'Группа', room: `group:${g.id}` });
+    });
+
+    if (!items.length && list) {
+      list.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">Нет доступных чатов</div>';
+    } else if (list) {
+      items.forEach(it => {
+        const row = document.createElement('div');
+        row.className = 'forward-item';
+        row.innerHTML = `
+          <div class="fi-title">${esc(it.title)}</div>
+          <div class="fi-sub">${esc(it.sub)}</div>`;
+        row.addEventListener('click', () => done(it.room));
+        list.appendChild(row);
+      });
+    }
+
+    modal.classList.add('open');
+
+    function done(value) {
+      if (resolved) return;
+      resolved = true;
+      modal.classList.remove('open');
+      res(value);
+    }
+  });
+}
+
+async function forwardSelectedMsgs() {
+  if (!_selectedMsgs.size) return;
+  closeCtx();
+  const targetRoom = await showForwardPicker();
+  if (!targetRoom) return;
+
+  let sent = 0;
+  let skipped = 0;
+
+  for (const id of _selectedMsgs) {
+    const msg = _replyStore.get(String(id));
+    if (!msg) { skipped++; continue; }
+
+    const type = msg.type || 'text';
+    if (type === 'text') {
+      const text = String(msg.text || '').trim();
+      if (!text) { skipped++; continue; }
+      socket.emit('message', { text, room: targetRoom });
+      sent++;
+    } else if (['image','video','audio','file','video_circle'].includes(type)) {
+      socket.emit('media-message', {
+        mediaData: { type, url: msg.url, fileName: msg.fileName, text: msg.text || '' },
+        room: targetRoom
+      });
+      sent++;
+    } else {
+      skipped++;
+    }
+  }
+
+  cancelMsgSelect();
+  closeCtx();
+  if (sent) toast(`Переслано: ${sent}`, 'success', 2000);
+  if (skipped) toast(`Не переслано: ${skipped}`, 'info', 2000);
+}
 
 // ── Вставка из буфера обмена (Ctrl+V / Command+V) ─────────────────────────
 document.addEventListener('paste', (e) => {
@@ -2217,6 +2314,7 @@ function showCtxMsg(e, msg) {
       </div>
       <div class="ctx-sep"></div>
       <div class="ctx-item" onclick="copySelectedMsgs();closeCtx()"><i class="ti ti-copy"></i> Копировать</div>
+      <div class="ctx-item" onclick="forwardSelectedMsgs()"><i class="ti ti-share"></i> Переслать</div>
       <div class="ctx-sep"></div>
       <div class="ctx-item danger" onclick="deleteSelectedMsgsAll();closeCtx()"><i class="ti ti-trash"></i> Удалить у всех</div>
       <div class="ctx-item danger" onclick="deleteSelectedMsgs();closeCtx()"><i class="ti ti-trash" style="opacity:.6"></i> Удалить у себя</div>
