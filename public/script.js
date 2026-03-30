@@ -797,6 +797,14 @@ function renderFriends(filter = '') {
       li.classList.toggle('active', isActive);
       const nameEl = li.querySelector('.ci-name');
       if (nameEl && nameEl.textContent !== dispName) nameEl.textContent = dispName;
+      // Обновляем статус онлайн в подписи
+      const subEl = li.querySelector('.ci-sub');
+      if (subEl) {
+        const isOnNow2 = onlineUsersSet.has(f);
+        subEl.innerHTML = isOnNow2
+          ? '<span style="color:#22c55e;font-weight:500">● онлайн</span>'
+          : (dispName !== f ? `<span style="color:var(--text3)">@${esc(f)}</span>` : 'Личный чат');
+      }
     }
     // Обновляем бейдж непрочитанных
     const badge = li.querySelector('.ci-badge') || document.getElementById('badge_' + f);
