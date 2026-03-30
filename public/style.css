@@ -359,12 +359,27 @@ option { background: var(--surface2); color: var(--text); }
   color: var(--text);
 }
 .settings-card { max-width: 480px; }
-.forward-card { max-width: 420px; }
-.forward-list { display: flex; flex-direction: column; gap: 6px; max-height: 52vh; overflow-y: auto; }
-.forward-item { padding: 10px 12px; border-radius: 12px; background: var(--surface3); cursor: pointer; transition: background .12s; }
-.forward-item:hover { background: var(--hover); }
-.forward-item .fi-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.forward-card { max-width: 420px; width: 100%; }
+.fw-search-wrap { display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--surface2);border-radius:12px;margin-bottom:10px;border:1.5px solid var(--border); }
+.fw-search { flex:1;background:none;border:none;outline:none;color:var(--text);font-size:13px;font-family:inherit; }
+.forward-list { display: flex; flex-direction: column; gap: 4px; max-height: 55vh; overflow-y: auto; }
+.forward-item { display:flex;align-items:center;gap:10px;padding: 9px 12px; border-radius: 12px; background: var(--surface2); cursor: pointer; transition: background .12s; }
+.forward-item:hover { background: var(--surface3); }
+.fi-info { display:flex;flex-direction:column;gap:1px;min-width:0; }
+.forward-item .fi-title { font-size: 13px; font-weight: 600; color: var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .forward-item .fi-sub { font-size: 11px; color: var(--text3); }
+
+/* Forwarded label */
+.fwd-label {
+  font-size: 11px;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 3px;
+  opacity: .85;
+}
+.fwd-label b { font-weight: 600; color: var(--accent); }
 .modal-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .modal-hd h2 { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
 .modal-tabs { display: flex; gap: 4px; background: var(--surface3); border-radius: 16px; padding: 5px; margin-bottom: 22px; }
