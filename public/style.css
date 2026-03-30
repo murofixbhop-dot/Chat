@@ -2940,3 +2940,21 @@ video {
   transition: background .12s;
 }
 .uvm-item:hover { background: var(--surface2); }
+
+/* ── Online dot in chat list ─────────────────────────────── */
+.ci-ava {
+  position: relative;
+  flex-shrink: 0;
+}
+.ci-ava .online-dot {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  background: #6b7280;
+  transition: background .3s;
+  pointer-events: none;
+}
