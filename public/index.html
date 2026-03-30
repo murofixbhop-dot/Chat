@@ -246,6 +246,25 @@
       <input type="range" id="volRange" min="0" max="100" value="100" class="range-slider" oninput="setVolume(this.value)"/>
       <button class="btn-secondary w-full mt" onclick="testMic()"><i class="ti ti-microphone"></i> Тест микрофона</button>
       <p id="micTestOut" class="sub-text mt hidden"></p>
+
+      <label class="lbl mt"><i class="ti ti-music"></i> Звук уведомления</label>
+      <div id="notifSoundWrap" style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="notifSoundName" style="flex:1;font-size:13px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Стандартный звук</div>
+          <button class="btn-secondary" style="flex-shrink:0;padding:6px 12px;font-size:12px" onclick="document.getElementById('notifSoundInput').click()">
+            <i class="ti ti-upload"></i> Загрузить
+          </button>
+          <button class="btn-secondary" id="notifSoundResetBtn" style="flex-shrink:0;padding:6px 10px;font-size:12px;display:none" onclick="resetNotifSound()">
+            <i class="ti ti-x"></i>
+          </button>
+        </div>
+        <input type="file" id="notifSoundInput" accept="audio/*" style="display:none" onchange="uploadNotifSound(this)">
+        <div style="display:flex;gap:8px">
+          <button class="btn-secondary" style="flex:1;font-size:12px" onclick="previewNotifSound()">
+            <i class="ti ti-player-play"></i> Прослушать
+          </button>
+        </div>
+      </div>
     </div>
 
     <div id="st_theme" class="stab-pane hidden">
