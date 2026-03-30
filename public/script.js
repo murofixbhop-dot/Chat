@@ -729,7 +729,8 @@ function renderFriends(filter = '') {
 
   // ── Smart diff: не перерисовываем если список не изменился ──
   const unreadKey = [...unreadCounts.entries()].map(([k,v])=>k+':'+v).join(',');
-  const newKey = list2.join('|') + '|' + (currentRoom || '') + '|' + unreadKey;
+  const onlineKey = list2.filter(f => onlineUsersSet.has(f)).join(',');
+  const newKey = list2.join('|') + '|' + (currentRoom || '') + '|' + unreadKey + '|' + onlineKey;
   if (ul._lastKey === newKey && !filter) return;
   ul._lastKey = newKey;
 
@@ -1071,34 +1072,19 @@ let _onlineUpdateTimer = null;
 socket.on('online-users', users => {
   onlineUsersSet.clear();
   users.forEach(u => onlineUsersSet.add(u));
-  // Дебаунс — обновляем DOM не чаще 1 раза в 2 секунды
-  clearTimeout(_onlineUpdateTimer);
-  _onlineUpdateTimer = setTimeout(() => {
-    document.querySelectorAll('[data-online-for]').forEach(dot => {
-      const u = dot.dataset.onlineFor;
-      const isOn = onlineUsersSet.has(u);
-      dot.style.background = isOn ? '#22c55e' : '#6b7280';
-      dot.title = isOn ? 'Онлайн' : 'Не в сети';
+  
+  // Обновляем точки на аватарках сразу
+  document.querySelectorAll('[data-online-for]').forEach(dot => {
+    const u = dot.dataset.onlineFor;
+    const isOn = onlineUsersSet.has(u);
+    dot.style.background = isOn ? '#22c55e' : '#6b7280';
+    dot.title = isOn ? 'Онлайн' : 'Не в сети';
+  });
 
-      // Обновляем подпись в списке чатов
-      const li = dot.closest('li[data-friend]') || friendsList?.querySelector(`li[data-friend="${u}"]`);
-      if (li) {
-        const sub = li.querySelector('.ci-sub');
-        if (sub) {
-          const nick = userNicknames[u] || u;
-          const hasNick = nick !== u;
-          if (isOn) {
-            sub.innerHTML = '<span style="color:#22c55e;font-weight:500">● онлайн</span>';
-          } else {
-            sub.innerHTML = hasNick
-              ? `<span style="color:var(--text3)">@${esc(u)}</span>`
-              : 'Личный чат';
-          }
-        }
-      }
-    });
-    _updateChatOnlineStatus();
-  }, 2000);
+  // renderFriends обновит ci-sub через cache key (включает onlineKey)
+  if (friendsList) friendsList._lastKey = '';
+  renderFriends();
+  _updateChatOnlineStatus();
 });
 
 function _updateChatOnlineStatus() {
