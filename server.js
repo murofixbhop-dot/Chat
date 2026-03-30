@@ -4807,8 +4807,10 @@ io.on('connection', (socket) => {
     relayTo('call-answer-ready', data);
   });
   socket.on('call-busy',           data => relayTo('call-busy',           data));
-  socket.on('screen-share-started', data => relayTo('screen-share-started', data));
-  socket.on('screen-share-stopped', data => relayTo('screen-share-stopped', data));
+  socket.on('screen-share-started',       data => relayTo('screen-share-started',       data));
+  socket.on('screen-share-stopped',       data => relayTo('screen-share-stopped',       data));
+  socket.on('group-screen-share-started', data => relayTo('group-screen-share-started', data));
+  socket.on('group-screen-share-stopped', data => relayTo('group-screen-share-stopped', data));
 
   socket.on('disconnect', () => {
     if (currentUser) {
