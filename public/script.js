@@ -5233,6 +5233,9 @@ function _showGroupCallUI(groupName, members) {
         <button class="gcw-btn gcw-flip" onclick="flipGroupCamera()" title="Перевернуть камеру" style="${_callIsVid?'':'display:none'}">
           <i class="ti ti-rotate"></i>
         </button>
+        <button class="gcw-btn gcw-screen" id="gcwScreenBtn" onclick="toggleGroupScreenShare()" title="Демонстрация экрана">
+          <i class="ti ti-screen-share"></i>
+        </button>
         <button class="gcw-btn gcw-end" onclick="endCall()" title="Завершить">
           <i class="ti ti-phone-off"></i>
         </button>
@@ -6156,6 +6159,151 @@ function toggleMuteWin(btn) {
   btn.style.background = _muted ? 'var(--danger)' : '';
 }
 
+
+// ── GROUP SCREEN SHARE ─────────────────────────────────────────────────────
+let _groupScreenSharing = false;
+let _groupScreenStream  = null;
+
+async function toggleGroupScreenShare() {
+  if (!_groupCall) return;
+
+  if (_groupScreenSharing) {
+    // Остановить демку
+    _groupScreenStream?.getTracks().forEach(t => t.stop());
+    _groupScreenStream = null;
+    _groupScreenSharing = false;
+
+    // Восстанавливаем видеодорожку камеры (или убираем если аудио-звонок)
+    groupPeers.forEach(async (pc, member) => {
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) {
+        if (_callIsVid && localStream) {
+          const camTrack = localStream.getVideoTracks()[0];
+          if (camTrack) await sender.replaceTrack(camTrack).catch(() => {});
+        } else {
+          await sender.replaceTrack(null).catch(() => {});
+        }
+      }
+    });
+
+    // Уведомляем всех участников
+    groupPeers.forEach((_, member) => {
+      socket.emit('group-screen-share-stopped', { to: member, from: currentUser });
+    });
+
+    // Обновляем кнопку
+    const btn = document.getElementById('gcwScreenBtn');
+    if (btn) { btn.style.background = ''; btn.querySelector('i').className = 'ti ti-screen-share'; }
+
+    // Убираем большой экран из своей плитки
+    const myTile = document.querySelector(`[data-participant="${currentUser}"]`);
+    if (myTile) {
+      const vid = myTile.querySelector('.gp-vid');
+      const avaWrap = myTile.querySelector('.gp-ava-wrap');
+      if (vid) { vid.srcObject = _callIsVid && localStream ? localStream : null; vid.style.display = _callIsVid ? 'block' : 'none'; }
+      if (avaWrap) avaWrap.style.display = _callIsVid ? 'none' : 'flex';
+    }
+
+    toast('Демонстрация остановлена', 'info', 1500);
+    return;
+  }
+
+  // Проверяем поддержку
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    toast('Браузер не поддерживает демонстрацию экрана', 'warning'); return;
+  }
+
+  // Выбор качества → захват
+  const opts = await new Promise(res => showScreenQualityPicker(res));
+  if (!opts) return;
+
+  const resMap = { '1080p':{w:1920,h:1080}, '720p':{w:1280,h:720}, '480p':{w:854,h:480} };
+  const rz = resMap[opts.res] || resMap['720p'];
+  const fps = parseInt(opts.fps) || 30;
+
+  let captured = null;
+  try {
+    captured = await navigator.mediaDevices.getDisplayMedia({
+      video: { width:{ideal:rz.w,max:rz.w}, height:{ideal:rz.h,max:rz.h}, frameRate:{ideal:fps,max:fps} },
+      audio: true
+    });
+  } catch(e) {
+    if (e.name !== 'NotAllowedError' && e.name !== 'AbortError')
+      toast('Не удалось захватить экран: ' + e.message, 'error');
+    return;
+  }
+
+  _groupScreenStream = captured;
+  _groupScreenSharing = true;
+  const vid = captured.getVideoTracks()[0];
+
+  // Заменяем видеодорожку во всех peer-соединениях
+  const peerPromises = [];
+  groupPeers.forEach(async (pc, member) => {
+    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) {
+      peerPromises.push(sender.replaceTrack(vid).catch(() => {}));
+    } else {
+      // Аудио-звонок — добавляем новый трек + рenegotiate
+      pc.addTrack(vid, captured);
+      try {
+        const offer = await pc.createOffer({ offerToReceiveVideo: true });
+        await pc.setLocalDescription(offer);
+        socket.emit('call-offer', { to: member, from: currentUser, sdp: offer });
+      } catch {}
+    }
+    // Уведомляем участника
+    socket.emit('group-screen-share-started', { to: member, from: currentUser });
+  });
+  await Promise.all(peerPromises);
+
+  // Показываем свой экран в своей плитке
+  const myTile = document.querySelector(`[data-participant="${currentUser}"]`);
+  if (myTile) {
+    const myVid = myTile.querySelector('.gp-vid');
+    const myAva = myTile.querySelector('.gp-ava-wrap');
+    if (myVid) { myVid.srcObject = captured; myVid.style.display = 'block'; }
+    if (myAva) myAva.style.display = 'none';
+  }
+
+  // Обновляем кнопку
+  const btn = document.getElementById('gcwScreenBtn');
+  if (btn) { btn.style.background = 'var(--accent)'; btn.querySelector('i').className = 'ti ti-screen-share-off'; }
+
+  // Когда пользователь нажал "Остановить" в браузере
+  vid.onended = () => toggleGroupScreenShare();
+
+  toast('Демонстрация экрана начата', 'info', 1500);
+}
+
+// Получили сигнал что кто-то начал шарить экран в группе
+socket.on('group-screen-share-started', ({ from }) => {
+  if (!_groupCall) return;
+  const nick = userNicknames[from] || from;
+  toast(`${nick} показывает экран`, 'info', 2000);
+  // Плитка обновится через ontrack когда придёт видеодорожка
+  // Помечаем плитку
+  const tile = document.querySelector(`[data-participant="${from}"]`);
+  if (tile) {
+    let badge = tile.querySelector('.gp-ss-badge');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'gp-ss-badge';
+      badge.innerHTML = '<i class="ti ti-screen-share"></i>';
+      badge.style.cssText = 'position:absolute;top:7px;left:7px;background:rgba(99,102,241,.85);color:#fff;border-radius:8px;padding:3px 8px;font-size:11px;display:flex;align-items:center;gap:4px;z-index:5;';
+      tile.appendChild(badge);
+    }
+  }
+});
+
+// Получили сигнал что кто-то остановил шаринг
+socket.on('group-screen-share-stopped', ({ from }) => {
+  if (!_groupCall) return;
+  const tile = document.querySelector(`[data-participant="${from}"]`);
+  if (tile) tile.querySelector('.gp-ss-badge')?.remove();
+  toast(`${userNicknames[from] || from} остановил демонстрацию`, 'info', 1500);
+});
+
 function toggleGroupMute() {
   _muted = !_muted;
   localStream?.getAudioTracks().forEach(t => t.enabled = !_muted);
@@ -6431,6 +6579,8 @@ function _cleanup() {
   groupPeers.clear();
   localStream?.getTracks().forEach(t => t.stop()); localStream = null;
   screenStream?.getTracks().forEach(t => t.stop()); screenStream = null;
+  _groupScreenStream?.getTracks().forEach(t => t.stop()); _groupScreenStream = null;
+  _groupScreenSharing = false;
   _groupCall = false;
   _groupMembers = [];
   document.querySelectorAll('.call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
