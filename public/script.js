@@ -6300,9 +6300,64 @@ socket.on('group-screen-share-started', ({ from }) => {
 socket.on('group-screen-share-stopped', ({ from }) => {
   if (!_groupCall) return;
   const tile = document.querySelector(`[data-participant="${from}"]`);
-  if (tile) tile.querySelector('.gp-ss-badge')?.remove();
+  if (tile) {
+    tile.querySelector('.gp-ss-badge')?.remove();
+    // Сбрасываем video: если у участника нет камеры — скрываем, показываем аватарку
+    const vid = tile.querySelector('.gp-vid');
+    const avaWrap = tile.querySelector('.gp-ava-wrap');
+    // Получаем текущий remoteStream этого участника из peer connection
+    const pc = groupPeers.get(from);
+    if (pc && vid) {
+      const receivers = pc.getReceivers();
+      const videoReceiver = receivers.find(r => r.track?.kind === 'video');
+      if (videoReceiver && videoReceiver.track.readyState === 'live') {
+        // Есть живая видеодорожка (камера партнёра)
+        const newStream = new MediaStream([videoReceiver.track]);
+        vid.srcObject = newStream;
+        vid.style.display = 'block';
+        if (avaWrap) avaWrap.style.display = 'none';
+      } else {
+        // Нет видео — показываем аватарку
+        vid.srcObject = null;
+        vid.style.display = 'none';
+        if (avaWrap) avaWrap.style.display = 'flex';
+      }
+    } else if (vid) {
+      vid.srcObject = null;
+      vid.style.display = 'none';
+      if (avaWrap) avaWrap.style.display = 'flex';
+    }
+  }
   toast(`${userNicknames[from] || from} остановил демонстрацию`, 'info', 1500);
 });
+
+
+// ── Полноэкранный режим для плитки участника ─────────────────────────────
+let _fullscreenTile = null;
+
+function _toggleTileFullscreen(tile) {
+  const grid = document.getElementById('gcwGrid');
+  const win  = document.getElementById('groupCallWin');
+  if (!grid || !win) return;
+
+  if (_fullscreenTile === tile) {
+    // Выходим из полноэкранного режима
+    tile.classList.remove('gp-tile-fullscreen');
+    grid.classList.remove('has-fullscreen');
+    _fullscreenTile = null;
+    _updateGcwGrid(grid.querySelectorAll('.gp-tile').length);
+    return;
+  }
+
+  // Убираем предыдущий fullscreen
+  if (_fullscreenTile) {
+    _fullscreenTile.classList.remove('gp-tile-fullscreen');
+  }
+
+  tile.classList.add('gp-tile-fullscreen');
+  grid.classList.add('has-fullscreen');
+  _fullscreenTile = tile;
+}
 
 function toggleGroupMute() {
   _muted = !_muted;
