@@ -2817,3 +2817,8 @@ video {
   align-items: center;
   gap: 2px;
 }
+
+/* Group screen share button */
+.gcw-screen { background: rgba(255,255,255,.15); }
+.gcw-screen:hover { background: rgba(255,255,255,.22); }
+.gcw-screen.active { background: var(--accent); }
