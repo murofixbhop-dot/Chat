@@ -4797,11 +4797,9 @@ io.on('connection', (socket) => {
   socket.on('call-decline', data => {
     activeCalls.delete(data.to);
     activeCalls.delete(data.from);
-    // Уведомляем обе стороны об отклонении
-    const toId   = userSockets.get(data.to);
-    const fromId = userSockets.get(data.from);
-    if (toId)   io.to(toId).emit('call-decline', data);
-    if (fromId) io.to(fromId).emit('call-decline', data);
+    // Для группового звонка: шлём только звонящему (не обратно отклонившему)
+    const toId = userSockets.get(data.to);
+    if (toId) io.to(toId).emit('call-decline', { from: data.from, groupId: data.groupId });
   });
   socket.on('call-answer-ready', data => {
     // Callee answered — clear active call
