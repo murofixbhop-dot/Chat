@@ -5573,6 +5573,7 @@ function _showGroupCallUI(groupName, members) {
   _updateGcwGrid(allMembers.length);
 
   // Таймер звонка
+  _muted = false; // сбрасываем состояние микрофона при новом звонке
   _gcwStartTime = Date.now();
   _gcwTimer = setInterval(() => {
     const el = document.getElementById('gcwTimer');
@@ -5633,6 +5634,8 @@ function _addGroupParticipantTile(grid, member, stream, isLocal) {
   const vid = document.getElementById('gp_vid_' + member);
   if (vid && stream) {
     vid.srcObject = stream;
+    // Применяем сохранённую громкость
+    if (!isLocal) vid.volume = Math.min(1, _userVolumes.get(member) ?? 1.0);
     vid.play().catch(()=>{});
     // Показываем видео только если есть видеодорожка
     const hasVideo = stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled;
@@ -6311,28 +6314,12 @@ const _userVolumes = new Map(); // username -> volume (0.0 - 2.0, default 1.0)
 function _setUserVolume(username, vol) {
   vol = Math.max(0, Math.min(2, vol));
   _userVolumes.set(username, vol);
-  // Применяем к аудио-элементу (личный звонок)
+  // Личный звонок — audio element
   const audio = document.getElementById('remoteAudio');
   if (audio && _callTarget === username) audio.volume = Math.min(1, vol);
-  // Для группового звонка — применяем через AudioContext gain
-  const gainNode = _userGainNodes.get(username);
-  if (gainNode) gainNode.gain.value = vol;
-}
-
-const _userGainNodes = new Map(); // username -> GainNode (для группового звонка)
-const _groupAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-function _applyGroupVolume(username, audioTrack) {
-  // Создаём GainNode для управления громкостью участника
-  try {
-    const stream = new MediaStream([audioTrack]);
-    const src = _groupAudioCtx.createMediaStreamSource(stream);
-    const gain = _groupAudioCtx.createGain();
-    gain.gain.value = _userVolumes.get(username) ?? 1.0;
-    src.connect(gain);
-    gain.connect(_groupAudioCtx.destination);
-    _userGainNodes.set(username, gain);
-  } catch(e) {}
+  // Групповой звонок — video element (audio plays through it)
+  const vid = document.getElementById('gp_vid_' + username);
+  if (vid) vid.volume = Math.min(1, vol); // браузер ограничивает до 1.0
 }
 
 function showUserVolumeMenu(e, username, displayName) {
@@ -6705,8 +6692,15 @@ async function toggleGroupScreenShare() {
   if (myTile) {
     const myVid = myTile.querySelector('.gp-vid');
     const myAva = myTile.querySelector('.gp-ava-wrap');
-    if (myVid) { myVid.srcObject = captured; myVid.style.display = 'block'; }
+    if (myVid) {
+      myVid.srcObject = captured;
+      myVid.style.display = 'block';
+      myVid.style.objectFit = 'contain'; // не обрезать экран
+      myVid.style.background = '#000';
+    }
     if (myAva) myAva.style.display = 'none';
+    // Открываем свою плитку на весь экран
+    _toggleTileFullscreen(myTile);
   }
 
   // Обновляем кнопку
@@ -6724,8 +6718,6 @@ socket.on('group-screen-share-started', ({ from }) => {
   if (!_groupCall) return;
   const nick = userNicknames[from] || from;
   toast(`${nick} показывает экран`, 'info', 2000);
-  // Плитка обновится через ontrack когда придёт видеодорожка
-  // Помечаем плитку
   const tile = document.querySelector(`[data-participant="${from}"]`);
   if (tile) {
     let badge = tile.querySelector('.gp-ss-badge');
@@ -6736,6 +6728,11 @@ socket.on('group-screen-share-started', ({ from }) => {
       badge.style.cssText = 'position:absolute;top:7px;left:7px;background:rgba(99,102,241,.85);color:#fff;border-radius:8px;padding:3px 8px;font-size:11px;display:flex;align-items:center;gap:4px;z-index:5;';
       tile.appendChild(badge);
     }
+    // Переключаем на contain чтобы не обрезало демку
+    const vid = tile.querySelector('.gp-vid');
+    if (vid) { vid.style.objectFit = 'contain'; vid.style.background = '#000'; }
+    // Автоматически открываем на весь экран
+    _toggleTileFullscreen(tile);
   }
 });
 
@@ -6745,6 +6742,10 @@ socket.on('group-screen-share-stopped', ({ from }) => {
   const tile = document.querySelector(`[data-participant="${from}"]`);
   if (tile) {
     tile.querySelector('.gp-ss-badge')?.remove();
+    // Возвращаем cover и убираем fullscreen
+    const vid2 = tile.querySelector('.gp-vid');
+    if (vid2) { vid2.style.objectFit = ''; vid2.style.background = ''; }
+    if (_fullscreenTile === tile) _toggleTileFullscreen(tile);
     // Сбрасываем video: если у участника нет камеры — скрываем, показываем аватарку
     const vid = tile.querySelector('.gp-vid');
     const avaWrap = tile.querySelector('.gp-ava-wrap');
