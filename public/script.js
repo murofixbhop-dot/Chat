@@ -1143,6 +1143,16 @@ socket.on('message', msg => {
         if (li && friendsList?.firstChild !== li) {
           friendsList.prepend(li);
         }
+
+        // Звук уведомления
+        playNotifSound();
+
+        // Push-уведомление если вкладка скрыта
+        if (document.hidden) {
+          const senderNick = userNicknames?.[msg.user] || msg.user || '';
+          const preview = msg.text ? msg.text.slice(0, 60) : '📎 Вложение';
+          showPushNotification(senderNick, preview, room);
+        }
       }
     } else if (room.startsWith('group:')) {
       const gid = room.slice(6);
