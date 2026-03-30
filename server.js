@@ -4578,7 +4578,9 @@ io.on('connection', (socket) => {
       date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
       ts:   Date.now(),
       room: room || 'general',
-      replyTo: replyTo || undefined
+      replyTo: replyTo || undefined,
+      forwarded: data.forwarded || undefined,
+      fwdFrom:   data.fwdFrom   || undefined,
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
