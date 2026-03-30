@@ -4587,6 +4587,22 @@ io.on('connection', (socket) => {
     saveHistory();
     io.to(msg.room).emit('message', msg);
 
+    // Для групповых чатов — шлём напрямую каждому участнику (не в комнате)
+    if (msg.room.startsWith('group:')) {
+      const groupId = msg.room.slice(6);
+      for (const [uname, udata] of users.entries()) {
+        if (uname === currentUser) continue;
+        const inGroup = (udata.groups || []).some(g => g.id === groupId);
+        if (!inGroup) continue;
+        const sid = userSockets.get(uname);
+        if (!sid) continue;
+        const sock = io.sockets.sockets.get(sid);
+        if (sock && ![...sock.rooms].includes(msg.room)) {
+          sock.emit('message', msg);
+        }
+      }
+    }
+
     // Уведомление получателю даже если он не в этой комнате
     if (msg.room.startsWith('private:')) {
       const parts = msg.room.split(':').slice(1);
@@ -4651,6 +4667,22 @@ io.on('connection', (socket) => {
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
     saveHistory();
     io.to(msg.room).emit('message', msg);
+
+    // Для групповых чатов — шлём напрямую каждому участнику (не в комнате)
+    if (msg.room.startsWith('group:')) {
+      const groupId = msg.room.slice(6);
+      for (const [uname, udata] of users.entries()) {
+        if (uname === currentUser) continue;
+        const inGroup = (udata.groups || []).some(g => g.id === groupId);
+        if (!inGroup) continue;
+        const sid = userSockets.get(uname);
+        if (!sid) continue;
+        const sock = io.sockets.sockets.get(sid);
+        if (sock && ![...sock.rooms].includes(msg.room)) {
+          sock.emit('message', msg);
+        }
+      }
+    }
 
     // Уведомление получателю даже если он не в этой комнате
     if (msg.room.startsWith('private:')) {
