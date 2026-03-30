@@ -4602,6 +4602,31 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('edit-message', ({ messageId, text }) => {
+    if (!currentUser) return;
+    const newText = String(text || '').trim();
+    if (!messageId || !newText) return;
+
+    const idx = messageHistory.findIndex(m => String(m.id) === String(messageId));
+    if (idx < 0) return;
+    const msg = messageHistory[idx];
+    if (!msg || msg.user !== currentUser) return;
+    if ((msg.type || 'text') !== 'text') return;
+
+    msg.text = newText;
+    msg.edited = true;
+    msg.editedAt = Date.now();
+    messageHistory[idx] = msg;
+    saveHistory();
+
+    io.to(msg.room).emit('message-edited', {
+      messageId: msg.id,
+      text: msg.text,
+      edited: true,
+      editedAt: msg.editedAt,
+      room: msg.room
+    });
+  });
   socket.on('media-message', (data) => {
     const { mediaData, room } = data;
     if (!currentUser) return;
