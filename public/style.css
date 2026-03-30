@@ -2822,3 +2822,25 @@ video {
 .gcw-screen { background: rgba(255,255,255,.15); }
 .gcw-screen:hover { background: rgba(255,255,255,.22); }
 .gcw-screen.active { background: var(--accent); }
+
+/* ── Group tile fullscreen ──────────────────────────────── */
+.gcw-grid.has-fullscreen {
+  display: block;
+  position: relative;
+}
+.gcw-grid.has-fullscreen .gp-tile {
+  display: none;
+}
+.gp-tile-fullscreen {
+  display: flex !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 12px !important;
+  z-index: 5;
+  cursor: zoom-out;
+}
+.gp-tile {
+  cursor: zoom-in;
+}
