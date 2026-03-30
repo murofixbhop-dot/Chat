@@ -5471,7 +5471,21 @@ async function _createGroupPeerAnswer(member, pc) {
 }
 
 socket.on('call-busy', ({ from }) => {
-  toast(from + ' занят', 'info', 2500); endCall();
+  if (_groupCall) {
+    // В групповом звонке — участник занят, пропускаем его
+    const nick = userNicknames[from] || from;
+    toast(`${nick} занят`, 'info', 1500);
+    const pc = groupPeers.get(from);
+    if (pc) { pc.close(); groupPeers.delete(from); }
+    document.querySelector(`[data-participant="${from}"]`)?.remove();
+    _groupMembers = _groupMembers.filter(m => m !== from);
+    _updateGroupCallStatus();
+    if (groupPeers.size === 0 && _groupMembers.length === 0) endCall();
+    return;
+  }
+  // Личный звонок
+  toast((userNicknames[from] || from) + ' занят', 'info', 2500);
+  endCall();
 });
 
 // ── ANSWER ──────────────────────────────────────────────
@@ -5528,11 +5542,36 @@ async function _startCallAsCaller_noVideo() {
 
 function declineCall() {
   stopRing();
-  socket.emit('call-decline', { to: _callTarget, from: currentUser });
+  // Для группового звонка: groupId передаём чтобы звонящий знал — это decline от одного участника
+  const gid = _groupCall ? (currentRoom?.replace('group:','') || null) : null;
+  socket.emit('call-decline', { to: _callTarget, from: currentUser, groupId: gid });
   _cleanup();
 }
 
-socket.on('call-decline', () => { toast((_callTarget ? (userNicknames[_callTarget] || _callTarget) : '?') + ' отклонил звонок', 'info', 2500); _cleanup(); });
+socket.on('call-decline', ({ from, groupId } = {}) => {
+  const nick = userNicknames[from] || from || '?';
+  if (_groupCall && groupId) {
+    // Групповой звонок — один участник отклонил, продолжаем для остальных
+    toast(`${nick} отклонил звонок`, 'info', 2000);
+    // Закрываем пир-соединение с этим участником
+    const pc = groupPeers.get(from);
+    if (pc) { pc.close(); groupPeers.delete(from); }
+    // Убираем плитку этого участника из UI
+    document.querySelector(`[data-participant="${from}"]`)?.remove();
+    // Обновляем счётчик участников
+    _groupMembers = _groupMembers.filter(m => m !== from);
+    _updateGroupCallStatus();
+    // Если больше никого нет — завершаем
+    if (groupPeers.size === 0 && _groupMembers.length === 0) {
+      toast('Все участники отклонили звонок', 'info', 2500);
+      endCall();
+    }
+    return;
+  }
+  // Личный звонок — обычная логика
+  toast(`${nick} отклонил звонок`, 'info', 2500);
+  _cleanup();
+});
 
 // Адресат вернулся онлайн пока мы звоним — обновляем статус
 socket.on('call-callee-online', ({ to }) => {
@@ -5616,10 +5655,23 @@ socket.on('call-ice', async ({ from, candidate }) => {
 });
 
 // End
-socket.on('call-end', () => {
-  // Callee side: если нам звонили но мы не приняли → пропущенный
+socket.on('call-end', ({ from, groupId } = {}) => {
+  if (_groupCall && groupId && from) {
+    // Один участник группового звонка завершил — убираем только его
+    const nick = userNicknames[from] || from;
+    toast(`${nick} покинул звонок`, 'info', 1500);
+    const pc = groupPeers.get(from);
+    if (pc) { pc.close(); groupPeers.delete(from); }
+    document.querySelector(`[data-participant="${from}"]`)?.remove();
+    _groupMembers = _groupMembers.filter(m => m !== from);
+    _updateGroupCallStatus();
+    if (groupPeers.size === 0 && _groupMembers.length === 0) {
+      endCall();
+    }
+    return;
+  }
+  // Личный звонок — пропущенный или завершение
   if (_inCall && !_connected && !_isCaller && _callTarget && currentRoom) {
-    // Пропущенный: callee сообщает серверу (caller уже offline)
     socket.emit('save-call-record', {
       room: currentRoom, from: _callTarget, to: currentUser,
       isVid: _callIsVid, isCaller: false, connected: false,
@@ -6318,8 +6370,15 @@ function showScreenQualityPicker(cb) {
 // ── END / CLEANUP ────────────────────────────────────────
 function endCall() {
   stopRing();
-  // Отправляем сигнал обоим — и целевому пользователю и на все устройства
-  if (_callTarget) {
+  if (_groupCall) {
+    // Групповой звонок — шлём завершение всем участникам с groupId
+    const gid = currentRoom?.replace('group:','') || _callRoom?.replace('group:','') || '';
+    const targets = [...groupPeers.keys()];
+    if (_callTarget && !targets.includes(_callTarget)) targets.push(_callTarget);
+    targets.forEach(member => {
+      socket.emit('call-end', { to: member, from: currentUser, groupId: gid });
+    });
+  } else if (_callTarget) {
     socket.emit('call-end', { to: _callTarget, from: currentUser });
   }
   _cleanup();
