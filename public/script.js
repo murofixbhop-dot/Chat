@@ -5714,6 +5714,7 @@ function _showOutgoingUI(target, isVid) {
       <i class="ti ti-phone-off"></i>
     </button>`;
   callModal.classList.add('open');
+  ringBeep(); // гудок у звонящего
 }
 
 // ── INCOMING ────────────────────────────────────────────
