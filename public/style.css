@@ -2870,3 +2870,68 @@ video {
 .gp-tile {
   cursor: zoom-in;
 }
+
+/* ── User volume menu ───────────────────────────────────── */
+.user-vol-menu {
+  position: fixed;
+  z-index: 99999;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  padding: 10px;
+  min-width: 210px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.35);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: fadeUp .15s ease;
+}
+.uvm-header {
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.uvm-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.uvm-section { padding: 2px 4px; }
+.uvm-label {
+  font-size: 11px;
+  color: var(--text3);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+.uvm-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.uvm-pct {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 38px;
+  text-align: right;
+}
+.uvm-slider {
+  flex: 1;
+  accent-color: var(--accent);
+  height: 4px;
+  cursor: pointer;
+}
+.uvm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  transition: background .12s;
+}
+.uvm-item:hover { background: var(--surface2); }
