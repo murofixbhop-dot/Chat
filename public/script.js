@@ -761,9 +761,13 @@ function renderFriends(filter = '') {
       avaEl.className = 'ci-ava';
       avaEl.dataset.user = f;
       setAvatar(avaEl, f, userAvatars[f]);
+      const isOnNow = onlineUsersSet.has(f);
+      const subText = isOnNow
+        ? '<span style="color:#22c55e;font-weight:500">● онлайн</span>'
+        : (dispName !== f ? '<span style="color:var(--text3)">@' + esc(f) + '</span>' : 'Личный чат');
       li.innerHTML = `<div class="ci-body">
         <span class="ci-name">${esc(dispName)}</span>
-        <span class="ci-sub">${dispName !== f ? '<span style="color:var(--text3)">@' + esc(f) + '</span>' : 'Личный чат'}</span>
+        <span class="ci-sub">${subText}</span>
       </div>
       <div class="ci-badge" id="badge_${f}" style="display:none"></div>`;
       // Онлайн-точка на аватарке
@@ -1075,6 +1079,23 @@ socket.on('online-users', users => {
       const isOn = onlineUsersSet.has(u);
       dot.style.background = isOn ? '#22c55e' : '#6b7280';
       dot.title = isOn ? 'Онлайн' : 'Не в сети';
+
+      // Обновляем подпись в списке чатов
+      const li = dot.closest('li[data-friend]') || friendsList?.querySelector(`li[data-friend="${u}"]`);
+      if (li) {
+        const sub = li.querySelector('.ci-sub');
+        if (sub) {
+          const nick = userNicknames[u] || u;
+          const hasNick = nick !== u;
+          if (isOn) {
+            sub.innerHTML = '<span style="color:#22c55e;font-weight:500">● онлайн</span>';
+          } else {
+            sub.innerHTML = hasNick
+              ? `<span style="color:var(--text3)">@${esc(u)}</span>`
+              : 'Личный чат';
+          }
+        }
+      }
     });
     _updateChatOnlineStatus();
   }, 2000);
