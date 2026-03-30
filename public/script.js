@@ -1285,13 +1285,11 @@ function addMessage(msg) {
     </div>`;
     bub.innerHTML = inner;
     // Контекстное меню для записи звонка (удалить у себя / выбрать)
-    bub.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMsg(e, msg); });
-    let _crLpt = null;
-    bub.addEventListener('touchstart', e => {
-      _crLpt = setTimeout(() => { _crLpt = null; const t = e.touches[0]; showCtxMsg({ clientX:t.clientX, clientY:t.clientY, preventDefault:()=>{} }, msg); }, 500);
-    }, { passive:true });
-    bub.addEventListener('touchend', () => { clearTimeout(_crLpt); _crLpt = null; }, { passive:true });
-    bub.addEventListener('click', e => { if (_selectMode) { e.stopPropagation(); _toggleMsgSelect(String(msg.id), row); } });
+    bub.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        // Правая кнопка не должна добавлять в выделение
+        showCtxMsg(e, msg);
+      });
     row.appendChild(bub);
     messagesDiv?.appendChild(row);
     if (messagesDiv) messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -1381,15 +1379,10 @@ function addMessage(msg) {
 
   // ── Правая кнопка — контекстное меню ──────────────────────────
   bub.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    if (_selectMode) {
-      // В режиме выделения — добавляем к выделенным и показываем меню выделения
-      _toggleMsgSelect(String(msg.id), row);
-      showCtxMsg(e, msg); // меню покажет действия для всех выделенных
-    } else {
+      e.preventDefault();
+      // Правая кнопка не должна добавлять в выделение
       showCtxMsg(e, msg);
-    }
-  });
+    });
 
   // ── Зажатие левой кнопки мыши — начало выделения (desktop) ───
   let _mholdTimer = null;
