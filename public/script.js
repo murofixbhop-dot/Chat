@@ -5612,9 +5612,22 @@ function _addGroupParticipantTile(grid, member, stream, isLocal) {
       </div>
       ${isSelf ? '<div class="gp-self-label">Вы</div>' : ''}`;
     grid?.appendChild(tile);
-    // Set avatar
     const avaEl = document.getElementById('gp_ava_' + member);
     if (avaEl) setAvatar(avaEl, member, av);
+
+    // Клик → полный экран
+    tile.addEventListener('click', (e) => {
+      if (e.button !== 0) return;
+      _toggleTileFullscreen(tile);
+    });
+
+    // Правая кнопка → громкость (только для других)
+    if (!isLocal) {
+      tile.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        showUserVolumeMenu(e, member, userNicknames[member] || member);
+      });
+    }
   }
 
   const vid = document.getElementById('gp_vid_' + member);
@@ -6771,23 +6784,31 @@ function _toggleTileFullscreen(tile) {
   if (!grid || !win) return;
 
   if (_fullscreenTile === tile) {
-    // Выходим из полноэкранного режима
+    // Выходим
+    _fullscreenTile = null;
     tile.classList.remove('gp-tile-fullscreen');
     grid.classList.remove('has-fullscreen');
-    _fullscreenTile = null;
+    win.classList.remove('has-fs-tile');
     _updateGcwGrid(grid.querySelectorAll('.gp-tile').length);
     return;
   }
 
-  // Убираем предыдущий fullscreen
   if (_fullscreenTile) {
     _fullscreenTile.classList.remove('gp-tile-fullscreen');
   }
 
+  _fullscreenTile = tile;
   tile.classList.add('gp-tile-fullscreen');
   grid.classList.add('has-fullscreen');
-  _fullscreenTile = tile;
+  win.classList.add('has-fs-tile');
 }
+
+// Выход из fullscreen по Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _fullscreenTile) {
+    _toggleTileFullscreen(_fullscreenTile);
+  }
+}, { passive: true });
 
 function toggleGroupMute() {
   _muted = !_muted;
