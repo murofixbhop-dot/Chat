@@ -733,6 +733,7 @@ option { background: var(--surface2); color: var(--text); }
 .msg-text { font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; }
 .msg-meta { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 1px; }
 .msg-time { font-size: 10px; opacity: .5; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.msg-edited { font-size: 10px; opacity: .55; letter-spacing: .02em; }
 
 /* Media in messages */
 .msg-img { max-width: 100%; max-height: 280px; border-radius: 12px; cursor: pointer; display: block; margin-top: 6px; object-fit: cover; }
