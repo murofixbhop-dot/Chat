@@ -6291,6 +6291,101 @@ function _showScreenReceived(remoteStream) {
   console.log('[SS] Screen share video inserted, track:', vt?.readyState);
 }
 
+
+// ── Per-user volume control ───────────────────────────────────────────────
+const _userVolumes = new Map(); // username -> volume (0.0 - 2.0, default 1.0)
+
+function _setUserVolume(username, vol) {
+  vol = Math.max(0, Math.min(2, vol));
+  _userVolumes.set(username, vol);
+  // Применяем к аудио-элементу (личный звонок)
+  const audio = document.getElementById('remoteAudio');
+  if (audio && _callTarget === username) audio.volume = Math.min(1, vol);
+  // Для группового звонка — применяем через AudioContext gain
+  const gainNode = _userGainNodes.get(username);
+  if (gainNode) gainNode.gain.value = vol;
+}
+
+const _userGainNodes = new Map(); // username -> GainNode (для группового звонка)
+const _groupAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function _applyGroupVolume(username, audioTrack) {
+  // Создаём GainNode для управления громкостью участника
+  try {
+    const stream = new MediaStream([audioTrack]);
+    const src = _groupAudioCtx.createMediaStreamSource(stream);
+    const gain = _groupAudioCtx.createGain();
+    gain.gain.value = _userVolumes.get(username) ?? 1.0;
+    src.connect(gain);
+    gain.connect(_groupAudioCtx.destination);
+    _userGainNodes.set(username, gain);
+  } catch(e) {}
+}
+
+function showUserVolumeMenu(e, username, displayName) {
+  e.preventDefault();
+  e.stopPropagation();
+  // Убираем старое меню
+  document.getElementById('userVolMenu')?.remove();
+
+  const vol = _userVolumes.get(username) ?? 1.0;
+  const pct = Math.round(vol * 100);
+
+  const menu = document.createElement('div');
+  menu.id = 'userVolMenu';
+  menu.className = 'user-vol-menu';
+  menu.innerHTML = `
+    <div class="uvm-header">
+      <span class="uvm-name">${esc(displayName)}</span>
+    </div>
+    <div class="uvm-section">
+      <div class="uvm-label"><i class="ti ti-volume"></i> Громкость пользователя</div>
+      <div class="uvm-slider-row">
+        <span class="uvm-pct" id="uvmPct">${pct}%</span>
+        <input type="range" class="uvm-slider" id="uvmSlider"
+          min="0" max="200" step="5" value="${pct}">
+      </div>
+    </div>
+    <div class="uvm-section" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+      <div class="uvm-item" id="uvmMuteBtn">
+        <i class="ti ti-volume-off"></i>
+        <span>${vol === 0 ? 'Включить звук' : 'Заглушить'}</span>
+      </div>
+    </div>`;
+
+  // Позиция меню
+  const x = Math.min(e.clientX, window.innerWidth - 220);
+  const y = Math.min(e.clientY, window.innerHeight - 160);
+  menu.style.cssText += `;left:${x}px;top:${y}px`;
+
+  document.body.appendChild(menu);
+
+  // Слайдер
+  const slider = menu.querySelector('#uvmSlider');
+  const pctEl  = menu.querySelector('#uvmPct');
+  slider.addEventListener('input', () => {
+    const v = parseInt(slider.value) / 100;
+    pctEl.textContent = slider.value + '%';
+    _setUserVolume(username, v);
+  });
+
+  // Кнопка заглушить
+  menu.querySelector('#uvmMuteBtn').addEventListener('click', () => {
+    const curVol = _userVolumes.get(username) ?? 1.0;
+    const newVol = curVol > 0 ? 0 : 1.0;
+    _setUserVolume(username, newVol);
+    slider.value = Math.round(newVol * 100);
+    pctEl.textContent = slider.value + '%';
+    menu.querySelector('#uvmMuteBtn span').textContent = newVol === 0 ? 'Включить звук' : 'Заглушить';
+  });
+
+  // Закрытие по клику вне
+  const closeMenu = (ev) => {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', closeMenu); }
+  };
+  setTimeout(() => document.addEventListener('mousedown', closeMenu), 0);
+}
+
 // ── CALL WINDOW ──────────────────────────────────────────
 function _showCallWindow(remoteStream) {
   document.querySelectorAll('.call-win, .call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
@@ -6318,7 +6413,10 @@ function _showCallWindow(remoteStream) {
         <div class="cw-btns">${btns}</div>
       </div>`;
     document.body.appendChild(win);
-    win.querySelector('#rv').srcObject = remoteStream;
+    const rvEl = win.querySelector('#rv');
+    rvEl.srcObject = remoteStream;
+    rvEl.style.cursor = 'context-menu';
+    rvEl.addEventListener('contextmenu', e => showUserVolumeMenu(e, _callTarget, userNicknames[_callTarget] || _callTarget));
     if (localStream && !_callNoCamera) win.querySelector('#lv').srcObject = localStream;
   } else {
     win.innerHTML = `
@@ -6333,10 +6431,17 @@ function _showCallWindow(remoteStream) {
       </div>`;
     document.body.appendChild(win);
     const cwAva = win.querySelector('#cwAva');
-    if (cwAva) setAvatar(cwAva, _callTarget, userAvatars[_callTarget] || null);
+    if (cwAva) {
+      setAvatar(cwAva, _callTarget, userAvatars[_callTarget] || null);
+      // Правая кнопка → меню громкости
+      const nick = userNicknames[_callTarget] || _callTarget;
+      cwAva.style.cursor = 'context-menu';
+      cwAva.addEventListener('contextmenu', e => showUserVolumeMenu(e, _callTarget, nick));
+      win.querySelector('#cwName')?.addEventListener('contextmenu', e => showUserVolumeMenu(e, _callTarget, nick));
+    }
     const audio = Object.assign(document.createElement('audio'), { id: 'remoteAudio', autoplay: true });
     audio.srcObject = remoteStream;
-    audio.volume = (parseInt(localStorage.getItem('aura_vol') || '100')) / 100;
+    audio.volume = (_userVolumes.get(_callTarget) ?? (parseInt(localStorage.getItem('aura_vol') || '100')) / 100);
     audio.play().catch(() => document.addEventListener('click', () => audio.play(), { once: true }));
     win.appendChild(audio);
   }
