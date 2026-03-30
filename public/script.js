@@ -1363,7 +1363,8 @@ function addMessage(msg) {
       <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-grey'}"></span>
     </span>`;
   }
-  inner += `<div class="msg-meta"><span class="msg-time">${msg.time}</span>${statusHtml}</div>`;
+  const editedHtml = msg.edited ? '<span class="msg-edited">ред.</span>' : '';
+  inner += `<div class="msg-meta"><span class="msg-time">${msg.time}</span>${editedHtml}${statusHtml}</div>`;
   bub.innerHTML = inner;
 
   // Convert any legacy <audio> elements to custom voice player
@@ -1632,6 +1633,17 @@ document.addEventListener('paste', (e) => {
 });
 function handleSend() {
   const text = msgInput.value.trim();
+
+  if (_editMsgId) {
+    if (!text) { toast('Текст не может быть пустым', 'warning', 1600); return; }
+    socket.emit('edit-message', { messageId: _editMsgId, text, room: _editRoom || currentRoom });
+    cancelEdit();
+    msgInput.value = '';
+    autoGrow(msgInput);
+    refreshSendBtn();
+    return;
+  }
+
   if (text) {
     const replySnap = _replyMsg
       ? { id: _replyMsg.id, user: _replyMsg.user, text: _replyMsg.text?.slice(0,100), type: _replyMsg.type }
@@ -2087,6 +2099,8 @@ function insertEmoji(em) {
 const ctxMenu = $('ctxMenu');
 
 let _replyMsg = null;
+let _editMsgId = null;
+let _editRoom = null;
 const _replyStore = new Map(); // id -> msg snapshot для ответа
 
 function startReply(msg) {
@@ -2122,6 +2136,54 @@ function cancelReply() {
   if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
 }
 
+function cancelEdit() {
+  _editMsgId = null;
+  _editRoom = null;
+  const bar = document.getElementById('editBar');
+  if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
+}
+
+function startMsgEdit(id) {
+  const msgId = String(id);
+  const cached = _replyStore.get(msgId) || {};
+  const row = document.querySelector(`[data-id="${msgId}"]`);
+  const text = (cached.text ?? row?.querySelector('.msg-text')?.textContent ?? '').toString();
+  if (!text.trim()) { toast('Нечего редактировать', 'info', 1500); return; }
+  if (cached.user && cached.user !== currentUser) return;
+
+  _editMsgId = msgId;
+  _editRoom = cached.room || currentRoom;
+
+  cancelReply();
+  if (typeof cancelMsgSelect === 'function') cancelMsgSelect();
+  if (selectedFiles.length) { selectedFiles = []; renderFilePreviews(); }
+
+  let bar = document.getElementById('editBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'editBar';
+    const inputRow = document.querySelector('.input-zone .input-row');
+    if (inputRow) inputRow.parentElement.insertBefore(bar, inputRow);
+    else document.querySelector('.input-zone')?.prepend(bar);
+  }
+  const prev = text.slice(0, 60);
+  bar.innerHTML = `
+    <i class="ti ti-edit" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
+    <div style="flex:1;min-width:0;overflow:hidden">
+      <div style="color:var(--accent);font-size:11px;font-weight:700;line-height:1.4">Редактирование</div>
+      <div style="color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4">${esc(prev)}</div>
+    </div>
+    <button onclick="cancelEdit()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;padding:0 4px;line-height:1;flex-shrink:0"><i class="ti ti-x"></i></button>`;
+  bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 14px;border-left:3px solid var(--accent);background:var(--surface2);';
+  bar.style.display = 'flex';
+
+  msgInput.value = text;
+  autoGrow(msgInput);
+  msgInput.focus();
+  refreshSendBtn();
+}
+
+
 function scrollToMsg(id) {
   const el = document.querySelector('[data-id="' + id + '"]');
   if (!el) { toast('Сообщение не найдено', 'info', 1500); return; }
@@ -2145,6 +2207,7 @@ function showCtxMsg(e, msg) {
   _replyStore.set(String(msg.id), msg);
   e.preventDefault();
   const own = msg.user === currentUser;
+  const canEdit = own && (msg.type || 'text') === 'text';
   const msgId = String(msg.id).replace(/'/g,'');
   // В режиме выделения — показываем действия для всех выделенных
   if (_selectMode && _selectedMsgs.size > 0) {
@@ -2166,6 +2229,7 @@ function showCtxMsg(e, msg) {
   ctxMenu.innerHTML = `
     <div class="ctx-item" onclick="_replyFromId('${msgId}');closeCtx()"><i class="ti ti-arrow-back-up"></i> Ответить</div>
     <div class="ctx-item" onclick="copyMsgText('${msg.id}');closeCtx()"><i class="ti ti-copy"></i> Копировать текст</div>
+    ${canEdit ? `<div class="ctx-item" onclick="startMsgEdit('${msgId}');closeCtx()"><i class="ti ti-edit"></i> Редактировать</div>` : ''}
     <div class="ctx-item" onclick="startMsgSelect('${msgId}');closeCtx()"><i class="ti ti-checkbox"></i> Выбрать</div>
     <div class="ctx-sep"></div>
     ${own ? `
@@ -2273,6 +2337,38 @@ socket.on('message-deleted', ({ messageId }) => {
     setTimeout(() => row.remove(), 200);
   }
 });
+
+function applyMessageEdit(messageId, text) {
+  const row = document.querySelector(`[data-id="${messageId}"]`);
+  if (!row) return;
+  const textEl = row.querySelector('.msg-text');
+  if (textEl) textEl.textContent = text;
+
+  const meta = row.querySelector('.msg-meta');
+  if (meta) {
+    let ed = meta.querySelector('.msg-edited');
+    if (!ed) {
+      ed = document.createElement('span');
+      ed.className = 'msg-edited';
+      ed.textContent = 'ред.';
+      const status = meta.querySelector('.msg-status');
+      if (status) meta.insertBefore(ed, status);
+      else meta.appendChild(ed);
+    }
+  }
+
+  const cached = _replyStore.get(String(messageId));
+  if (cached) {
+    cached.text = text;
+    cached.edited = true;
+    _replyStore.set(String(messageId), cached);
+  }
+}
+
+socket.on('message-edited', ({ messageId, text }) => {
+  applyMessageEdit(messageId, text);
+});
+
 
 function showCtxFriend(e, friend) {
   e.preventDefault();
