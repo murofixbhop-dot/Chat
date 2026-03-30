@@ -885,7 +885,6 @@ function renderGroups() {
     };
     } else {
       li.classList.toggle('active', isActive);
-      // Обновляем аватарку если изменилась
       const avaEl = li.querySelector('[data-group-ava]');
       if (avaEl) {
         if (g.avatar) setAvatar(avaEl, `group:${g.id}`, g.avatar);
@@ -893,6 +892,19 @@ function renderGroups() {
       }
       const nameEl = li.querySelector('.ci-name');
       if (nameEl) nameEl.textContent = g.name;
+    }
+    // Обновляем бейдж (и для новых и для существующих li)
+    const badge2 = document.getElementById('gbadge_' + g.id) || li.querySelector('.ci-badge');
+    const cnt2 = groupUnreadCounts.get(g.id) || 0;
+    if (badge2) {
+      if (cnt2 > 0 && !isActive) {
+        badge2.textContent = cnt2 > 99 ? '99+' : cnt2;
+        badge2.style.display = 'flex';
+        li.classList.add('has-unread');
+      } else {
+        badge2.style.display = 'none';
+        li.classList.remove('has-unread');
+      }
     }
     const at = ul.children[idx];
     if (at !== li) ul.insertBefore(li, at || null);
@@ -1148,9 +1160,23 @@ socket.on('message', msg => {
       }
 
       // Поднимаем группу наверх
-      const gli = groupsList?.querySelector(`li[data-group="${gid}"]`);
+      const gli = groupsList?.querySelector(`[data-group="${gid}"]`);
       if (gli && groupsList?.firstChild !== gli) {
         groupsList.prepend(gli);
+      }
+
+      // Звук уведомления
+      playCallSound('message');
+
+      // Push-уведомление если вкладка скрыта
+      if (document.hidden) {
+        const grp = groups?.find(g => g.id === gid);
+        const grpName = grp?.name || 'Группа';
+        const senderNick = userNicknames?.[msg.user] || msg.user || '';
+        const preview = msg.text
+          ? (senderNick ? `${senderNick}: ${msg.text.slice(0,60)}` : msg.text.slice(0,60))
+          : `${senderNick}: 📎 Вложение`;
+        showPushNotification(grpName, preview, `group:${gid}`);
       }
     }
   }
