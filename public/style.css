@@ -372,14 +372,18 @@ option { background: var(--surface2); color: var(--text); }
 /* Forwarded label */
 .fwd-label {
   font-size: 11px;
-  color: var(--accent);
+  color: var(--text3);  /* входящие — приглушённый цвет */
   display: flex;
   align-items: center;
   gap: 4px;
   margin-bottom: 3px;
-  opacity: .85;
 }
-.fwd-label b { font-weight: 600; color: var(--accent); }
+.fwd-label b { font-weight: 600; color: var(--text3); }
+/* Свои сообщения — цвет как у точки (белый полупрозрачный) */
+.msg-row.own .fwd-label,
+.msg-row.own .fwd-label b {
+  color: rgba(255,255,255,.7);
+}
 .modal-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .modal-hd h2 { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
 .modal-tabs { display: flex; gap: 4px; background: var(--surface3); border-radius: 16px; padding: 5px; margin-bottom: 22px; }
