@@ -2854,7 +2854,7 @@ video {
   display: block;
   position: relative;
 }
-.gcw-grid.has-fullscreen .gp-tile {
+.gcw-grid.has-fullscreen .gp-tile:not(.gp-tile-fullscreen) {
   display: none;
 }
 .gp-tile-fullscreen {
@@ -2869,6 +2869,11 @@ video {
 }
 .gp-tile {
   cursor: zoom-in;
+}
+/* Когда есть fullscreen — grid занимает всё доступное пространство */
+.group-call-win.has-fs-tile .gcw-grid {
+  flex: 1;
+  height: 100%;
 }
 
 /* ── User volume menu ───────────────────────────────────── */
