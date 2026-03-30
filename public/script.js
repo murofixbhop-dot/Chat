@@ -1088,11 +1088,19 @@ socket.on('online-users', users => {
 });
 
 function _updateChatOnlineStatus() {
-  const statusEl = document.getElementById('chatOnlineStatus');
-  if (!statusEl || !_chatPartner) return;
+  if (!_chatPartner || !roomSub) return;
   const isOnline = onlineUsersSet.has(_chatPartner);
-  statusEl.textContent = isOnline ? 'онлайн' : 'не в сети';
-  statusEl.style.color = isOnline ? '#22c55e' : 'var(--text3)';
+  const color = isOnline ? '#22c55e' : 'var(--text3)';
+  const text = isOnline ? 'онлайн' : 'не в сети';
+  // Обновляем или пересоздаём span
+  let statusEl = document.getElementById('chatOnlineStatus');
+  if (statusEl) {
+    statusEl.textContent = text;
+    statusEl.style.color = color;
+  } else {
+    // span не существует — пересоздаём roomSub
+    roomSub.innerHTML = `<span id="chatOnlineStatus" style="color:${color}">${text}</span>`;
+  }
 }
 
 socket.on('history', msgs => {
