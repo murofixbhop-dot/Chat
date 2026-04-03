@@ -1629,11 +1629,11 @@ function addMessage(msg) {
   if (msg.type === 'image') {
     const u = fileUrl(msg.url);
     inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="фото"></div>`;
-    if (msg.text) inner += `<div class="msg-text">${esc(msg.text)}</div>`;
+    if (msg.text) inner += `<div class="msg-text">${renderMsgText(msg.text)}</div>`;
   } else if (msg.type === 'video') {
     const u = fileUrl(msg.url);
     inner += `<video class="msg-video" controls preload="auto" playsinline src="${u}"></video>`;
-    if (msg.text) inner += `<div class="msg-text">${esc(msg.text)}</div>`;
+    if (msg.text) inner += `<div class="msg-text">${renderMsgText(msg.text)}</div>`;
   } else if (msg.type === 'video_circle') {
     const u = fileUrl(msg.url);
     const vid_id = 'vc_' + (msg.id || Math.random().toString(36).slice(2,9));
@@ -1671,7 +1671,7 @@ function addMessage(msg) {
       </div>
     </a>`;
   } else {
-    inner += `<div class="msg-text">${esc(msg.text)}</div>`;
+    inner += `<div class="msg-text">${renderMsgText(msg.text)}</div>`;
   }
 
   // Точки статуса (только для своих сообщений в личных чатах)
@@ -1797,6 +1797,35 @@ function addSystem(text) {
 
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+// Рендер текста сообщения с поддержкой markdown-форматирования и ссылок
+function renderMsgText(s) {
+  // Экранируем HTML (без замены \n — делаем ниже)
+  let t = String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+
+  // Форматирование (порядок важен: сначала многосимвольные)
+  t = t
+    // Жирный: **text** или __text__ (двойной)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(?<![_])__(?!_)(.+?)__(?![_])/g, '<u>$1</u>')
+    // Курсив: _text_ (одиночный)
+    .replace(/(?<![_])_(?!_)(.+?)_(?![_])/g, '<em>$1</em>')
+    // Зачёркнутый: ~~text~~
+    .replace(/~~(.+?)~~/g, '<s>$1</s>')
+    // Моноширинный: `code`
+    .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.18);padding:1px 5px;border-radius:5px;font-family:monospace;font-size:12px">$1</code>')
+    // Markdown-ссылка: [текст](url)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="msg-link">$1</a>')
+    // Голая ссылка: http(s)://...
+    .replace(/(^|[\s>])(https?:\/\/[^\s<"]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer" class="msg-link">$2</a>');
+
+  // Перевод строки
+  t = t.replace(/\n/g, '<br>');
+  return t;
 }
 
 // ══════════════════════════════════════════════
@@ -7853,13 +7882,6 @@ function vcShowDuration(id) {
   function attachTo(ta) {
     if (!ta || ta._fmtAttached) return;
     ta._fmtAttached = true;
-
-    // ПКМ — всегда перехватываем, показываем нашу панель форматирования
-    ta.addEventListener('contextmenu', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      buildFmtBar(ta, e.clientX, e.clientY);
-    });
 
     // Отпускание ЛКМ — показываем если есть выделение
     ta.addEventListener('mouseup', e => {
