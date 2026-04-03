@@ -7775,16 +7775,22 @@ function vcShowDuration(id) {
     }, { passive: false });
     bar.appendChild(linkBtn);
 
-    // Позиционирование
+    // Позиционирование — после рендера чтобы получить реальную ширину
+    bar.style.visibility = 'hidden';
     document.body.appendChild(bar);
-    const bw = bar.offsetWidth || 260;
-    const bh = bar.offsetHeight || 44;
-    let left = x - bw / 2;
-    let top  = y - bh - 10;
-    left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
-    top  = Math.max(8, top);
-    bar.style.left = left + 'px';
-    bar.style.top  = top  + 'px';
+    requestAnimationFrame(() => {
+      const bw = bar.offsetWidth || 260;
+      const bh = bar.offsetHeight || 44;
+      let left = x - bw / 2;
+      let top  = y - bh - 12;
+      // Не уходим за края экрана
+      left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
+      // Если выше экрана — показываем снизу от курсора
+      if (top < 8) top = y + 16;
+      bar.style.left = left + 'px';
+      bar.style.top  = top  + 'px';
+      bar.style.visibility = '';
+    });
   }
 
   function showLinkInput(ta, bar) {
@@ -7845,26 +7851,27 @@ function vcShowDuration(id) {
 
   // Навешиваем на msgInput
   function attachTo(ta) {
-    if (!ta) return;
+    if (!ta || ta._fmtAttached) return;
+    ta._fmtAttached = true;
 
-    // Правая кнопка мыши — показываем панель если есть выделение
+    // ПКМ — всегда перехватываем, показываем нашу панель форматирования
     ta.addEventListener('contextmenu', e => {
-      const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
-      if (!sel) { removeFmtBar(); return; } // нет выделения — стандартное меню
       e.preventDefault();
+      e.stopPropagation();
       buildFmtBar(ta, e.clientX, e.clientY);
     });
 
-    // Отпускание кнопки мыши — если есть выделение, показываем над ним
+    // Отпускание ЛКМ — показываем если есть выделение
     ta.addEventListener('mouseup', e => {
       if (e.button !== 0) return;
       setTimeout(() => {
         const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
         if (!sel) { removeFmtBar(); return; }
-        // Позиция — над серединой выделения
         const r = ta.getBoundingClientRect();
+        _skipNextClose = true;
         buildFmtBar(ta, r.left + r.width / 2, r.top);
-      }, 0);
+        setTimeout(() => { _skipNextClose = false; }, 300);
+      }, 20);
     });
 
     // Touch — конец выделения
@@ -7874,27 +7881,32 @@ function vcShowDuration(id) {
         if (!sel) { removeFmtBar(); return; }
         const r = ta.getBoundingClientRect();
         buildFmtBar(ta, r.left + r.width / 2, r.top);
-      }, 120);
+      }, 150);
     });
   }
 
+  let _skipNextClose = false;
+
   // Закрытие панели при клике вне
   document.addEventListener('mousedown', e => {
+    if (_skipNextClose) return;
     if (_fmtBar && !_fmtBar.contains(e.target)) removeFmtBar();
   });
   document.addEventListener('touchstart', e => {
     if (_fmtBar && !_fmtBar.contains(e.target)) removeFmtBar();
   }, { passive: true });
 
-  // Прикрепляем после загрузки DOM
-  document.addEventListener('DOMContentLoaded', () => {
+  // Прикрепляем — ищем элемент несколькими способами
+  function tryAttach() {
     const ta = document.getElementById('msgInput');
-    attachTo(ta);
-  });
-  if (document.readyState !== 'loading') {
-    const ta = document.getElementById('msgInput');
-    attachTo(ta);
+    if (ta) { attachTo(ta); return true; }
+    return false;
   }
+  if (!tryAttach()) {
+    document.addEventListener('DOMContentLoaded', tryAttach);
+  }
+  // Дополнительный fallback — через 500ms после load
+  window.addEventListener('load', () => setTimeout(tryAttach, 500));
 })();
 
 
