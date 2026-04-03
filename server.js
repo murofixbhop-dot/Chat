@@ -8,7 +8,7 @@ const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server);F
 
 // PeerJS не нужен — сигналинг через Socket.IO
 
@@ -34,7 +34,7 @@ const SB_BUCKET = process.env.SUPABASE_BUCKET || 'aura-files';
 const USE_SB    = !!(SB_URL && SB_KEY);
 
 async function sbUpload(fileName, buffer, contentType) {
-  const url = ${SB_URL}/storage/v1/object/${SB_BUCKET}/${fileName};
+  const url = `${SB_URL}/storage/v1/object/${SB_BUCKET}/${fileName}`;
   await axios.post(url, buffer, {
     headers: {
       'Authorization': Bearer ${SB_KEY},
@@ -48,13 +48,13 @@ async function sbUpload(fileName, buffer, contentType) {
 }
 
 async function sbDownload(fileName) {
-  const url = ${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName};
+  const url = `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName}`;
   return { url, token: null };
 }
 
 async function sbReadJson(fileName) {
   try {
-    const url = ${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName};
+    const url = `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName}`;
     const r = await axios.get(url, { timeout: 10000 });
     return r.data;
   } catch(e) {
