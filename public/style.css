@@ -3169,21 +3169,76 @@ video {
 .msg-text u      { text-decoration: underline; text-underline-offset: 2px; }
 .msg-text s      { text-decoration: line-through; opacity: .75; }
 .msg-code {
-  background: rgba(0,0,0,.18);
-  padding: 1px 5px; border-radius: 5px;
-  font-family: 'Geist Mono', monospace; font-size: 12px;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  padding: 1px 6px; border-radius: 5px;
+  font-family: 'Geist Mono', monospace; font-size: 11.5px;
+  color: var(--text);
 }
+.msg-row.own .msg-code {
+  background: rgba(255,255,255,.15);
+  border-color: rgba(255,255,255,.2);
+  color: #fff;
+}
+
+/* ── Ссылки в сообщениях — заметные, адаптируются к теме ── */
 .msg-link {
+  /* Цвет акцента текущей темы */
   color: var(--accent);
-  text-decoration: underline;
-  text-decoration-color: rgba(99,102,241,.45);
-  text-underline-offset: 2px;
+  text-decoration: none;
+  /* Подчёркивание волной — выделяется на фоне текста */
+  border-bottom: 1.5px solid var(--accent);
+  padding-bottom: 0px;
+  /* Небольшой фон-подсветка */
+  background: var(--accent-dim);
+  border-radius: 3px;
+  padding: 0 3px 1px;
   word-break: break-all;
-  transition: text-decoration-color .15s;
+  font-weight: 500;
+  transition: background .15s, color .15s, border-color .15s;
+  display: inline;
 }
-.msg-link:hover { text-decoration-color: var(--accent); }
+.msg-link:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* Ссылки в своих сообщениях (градиентный пузырь) */
 .msg-row.own .msg-link {
-  color: rgba(255,255,255,.92);
-  text-decoration-color: rgba(255,255,255,.4);
+  color: rgba(255,255,255,.95);
+  background: rgba(255,255,255,.18);
+  border-bottom-color: rgba(255,255,255,.6);
+  font-weight: 500;
 }
-.msg-row.own .msg-link:hover { text-decoration-color: #fff; }
+.msg-row.own .msg-link:hover {
+  background: rgba(255,255,255,.32);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* Иконка-стрелка после ссылки (указывает что это внешняя ссылка) */
+.msg-link::after {
+  content: '↗';
+  font-size: 10px;
+  margin-left: 2px;
+  opacity: .7;
+  vertical-align: super;
+  line-height: 0;
+}
+
+/* Светлая тема — ссылки чуть темнее */
+[data-theme="light"] .msg-link {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-bottom-color: var(--accent);
+}
+[data-theme="light"] .msg-link:hover {
+  background: var(--accent);
+  color: #fff;
+}
+[data-theme="light"] .msg-row.own .msg-link {
+  color: rgba(255,255,255,.95);
+  background: rgba(255,255,255,.2);
+  border-bottom-color: rgba(255,255,255,.65);
+}
