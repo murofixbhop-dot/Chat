@@ -35,36 +35,92 @@ const USE_SB    = !!(SB_URL && SB_KEY);
 
 async function sbUpload(fileName, buffer, contentType) {
   const url = `${SB_URL}/storage/v1/object/${SB_BUCKET}/${fileName}`;
-  await axios.post(url, buffer, {
+  const resp = await axios.put(url, buffer, {
     headers: {
       'Authorization': `Bearer ${SB_KEY}`,
-      'Content-Type': contentType || 'application/octet-stream',
-      'x-upsert': 'true'
+      'Content-Type':  contentType || 'application/octet-stream',
+      'x-upsert':      'true',
+      'Cache-Control': 'max-age=3600',
     },
     maxContentLength: Infinity,
-    maxBodyLength: Infinity,
-    timeout: 60000
+    maxBodyLength:    Infinity,
+    timeout: 120000,
+    validateStatus: s => s < 500,
   });
+  if (resp.status >= 400) {
+    throw new Error(`[SB] Upload failed ${resp.status}: ${JSON.stringify(resp.data)}`);
+  }
+}
+
+function sbPublicUrl(fileName) {
+  return `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName}`;
 }
 
 async function sbDownload(fileName) {
-  const url = `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName}`;
+  const url = sbPublicUrl(fileName);
   return { url, token: null };
 }
 
 async function sbReadJson(fileName) {
   try {
-    const url = `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName}`;
-    const r = await axios.get(url, { timeout: 10000 });
-    return r.data;
+    const url = `${SB_URL}/storage/v1/object/${SB_BUCKET}/${fileName}`;
+    const r = await axios.get(url, {
+      headers: { 'Authorization': `Bearer ${SB_KEY}` },
+      timeout: 15000,
+      validateStatus: s => s < 500,
+    });
+    if (r.status === 404 || r.status === 400) return null;
+    if (r.status >= 400) throw new Error(`[SB] ReadJson ${r.status}`);
+    return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
   } catch(e) {
-    if (e.response?.status === 400 || e.response?.status === 404) return null;
+    if (e.response?.status === 404 || e.response?.status === 400) return null;
+    if (e.message.includes('404') || e.message.includes('400')) return null;
     throw e;
   }
 }
 
-async function sbEnsureBucketPublic() {
-  console.log(`[SB] Bucket готов`);
+async function sbDelete(fileName) {
+  try {
+    await axios.delete(`${SB_URL}/storage/v1/object/${SB_BUCKET}/${fileName}`, {
+      headers: { 'Authorization': `Bearer ${SB_KEY}` },
+      timeout: 10000,
+    });
+  } catch(e) { /* ignore */ }
+}
+
+async function sbEnsureBucket() {
+  try {
+    const list = await axios.get(`${SB_URL}/storage/v1/bucket`, {
+      headers: { 'Authorization': `Bearer ${SB_KEY}` },
+      timeout: 10000,
+    });
+    const exists = list.data?.find(b => b.name === SB_BUCKET);
+    if (!exists) {
+      await axios.post(`${SB_URL}/storage/v1/bucket`, {
+        id: SB_BUCKET, name: SB_BUCKET, public: true,
+        file_size_limit: 52428800,
+        allowed_mime_types: null,
+      }, {
+        headers: { 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+      console.log(`[SB] ✅ Бакет "${SB_BUCKET}" создан`);
+    } else {
+      if (!exists.public) {
+        await axios.put(`${SB_URL}/storage/v1/bucket/${SB_BUCKET}`, {
+          public: true, file_size_limit: 52428800,
+        }, {
+          headers: { 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
+        console.log(`[SB] ✅ Бакет "${SB_BUCKET}" сделан публичным`);
+      } else {
+        console.log(`[SB] ✅ Бакет "${SB_BUCKET}" готов`);
+      }
+    }
+  } catch(e) {
+    console.warn(`[SB] sbEnsureBucket: ${e.response?.data?.message || e.message}`);
+  }
 }
 
 // Cloudflare R2
@@ -170,7 +226,6 @@ async function r2Delete(fileName) {
 
 // ── B2 скачивание (рабочий метод: fileNamePrefix=файл, токен в URL) ──────────
 async function b2S3Download(bucketName, fileName) {
-  if (!b2Auth) await reAuthB2();
   const bucketId = (bucketName === B2_BUCKET_NAME2 && b2BucketId2) ? b2BucketId2 : b2BucketId;
   const r = await axios.post(
     `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
@@ -184,11 +239,9 @@ async function b2S3Download(bucketName, fileName) {
 }
 
 async function b2S3Upload(bucketName, fileName, buffer, contentType) {
-  if (!b2Auth) await reAuthB2();
   const bucketId = (bucketName === B2_BUCKET_NAME2 && b2BucketId2) ? b2BucketId2 : b2BucketId;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      if (!b2Auth) await reAuthB2();
       const r = await axios.post(
         `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
         { bucketId },
@@ -388,7 +441,7 @@ async function storageDownload(fileName) {
 async function initStorage() {
   if (USE_SB) {
     console.log(`✅ Хранилище: Supabase Storage (бакет: ${SB_BUCKET})`);
-    await sbEnsureBucketPublic();
+    await sbEnsureBucket();
     storageReady = true;
     return;
   }
@@ -597,10 +650,18 @@ async function saveUsers() {
   try {
     const usersObj = Object.fromEntries(users);
     const jsonBuffer = Buffer.from(JSON.stringify(usersObj, null, 2), 'utf-8');
-    await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
+    if (USE_SB) {
+      await sbUpload(USERS_FILE, jsonBuffer, 'application/json');
+    } else {
+      await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
+    }
     console.log('💾 Пользователи сохранены');
   } catch (err) {
     console.error('Ошибка сохранения пользователей:', err.message);
+    if (!saveUsers._retry) {
+      saveUsers._retry = true;
+      setTimeout(() => { saveUsers._retry = false; saveUsers(); }, 10000);
+    }
   }
 }
 
@@ -621,20 +682,11 @@ app.get('/api/dl', async (req, res) => {
   if (urlMatch) fileName = urlMatch[1];
   fileName = decodeURIComponent(fileName);
 
-  if (!b2Auth || !b2BucketId) {
-    // Пробуем переавторизоваться
-    try {
-      await reAuthB2();
-    } catch(e) {
-      return res.status(503).send('B2 недоступен. Попробуй позже.');
-    }
-  }
-
   try {
     const dl = await storageDownload(fileName);
-    const dlH = dl.authHeader ? { Authorization: dl.authHeader, ...(dl.extraHeaders||{}) } : dl.token ? { Authorization: dl.token } : {};
     // Supabase и R2 с публичным URL — редиректим напрямую
     if (USE_SB || (USE_R2 && R2_PUBLIC)) return res.redirect(302, dl.url);
+    const dlH = dl.authHeader ? { Authorization: dl.authHeader, ...(dl.extraHeaders||{}) } : dl.token ? { Authorization: dl.token } : {};
     const b2Response = await axios.get(dl.url, { responseType:'stream', timeout:30000, headers: { ...dlH, ...(req.headers.range?{Range:req.headers.range}:{}) } });
 
     // Пробрасываем заголовки от B2
@@ -1099,7 +1151,11 @@ function scheduleAiConvSave() {
         obj[user] = { history: (sess.history||[]).slice(-40), msgCount: sess.msgCount||0 };
       }
       const buf = Buffer.from(JSON.stringify(obj));
-      await storageUpload(AI_CONV_FILE, buf, 'application/json');
+      if (USE_SB) {
+        await sbUpload(AI_CONV_FILE, buf, 'application/json');
+      } else {
+        await storageUpload(AI_CONV_FILE, buf, 'application/json');
+      }
     } catch(e) { console.error('[AI] Ошибка сохранения бесед:', e.message); }
   }, 5000); // Save 5s after last activity
 }
@@ -1136,7 +1192,11 @@ function scheduleAiFilesSave() {
         obj[user] = files.slice(-20).map(f => ({ ...f, ttl: AI_FILE_TTL }));
       }
       const buf = Buffer.from(JSON.stringify(obj));
-      await storageUpload(AI_FILES_FILE, buf, 'application/json');
+      if (USE_SB) {
+        await sbUpload(AI_FILES_FILE, buf, 'application/json');
+      } else {
+        await storageUpload(AI_FILES_FILE, buf, 'application/json');
+      }
     } catch(e) { console.error('[AI] Ошибка сохранения файлов:', e.message); }
   }, 4000);
 }
@@ -4459,34 +4519,17 @@ async function loadHistory() {
       console.log(`📁 Загружено ${messageHistory.length} сообщений`);
     }
   } catch (err) {
-    if (err.message && err.message.includes('null')) {
-      console.error('[loadHistory] b2Auth null — попытка переавторизации...');
-      try {
-        await reAuthB2();
-        const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
-        const text = await b2S3Download(bucketName, HISTORY_FILE);
-        const data = JSON.parse(text);
-        if (data && Array.isArray(data)) {
-          messageHistory = data.slice(-MAX_HISTORY);
-          console.log(`📁 Загружено ${messageHistory.length} сообщений (после переавторизации)`);
-        }
-      } catch(e2) {
-        console.log('📁 history.json не найден — начинаем пустыми');
-      }
-    } else {
-      console.log('📁 history.json не найден — начинаем пустыми');
-    }
+    console.log('📁 history.json не найден — начинаем пустыми');
   }
 }
 
 async function saveHistory() {
   try {
     const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
-    if (USE_B2) {
-      if (!b2Auth) {
-        console.warn('[saveHistory] b2Auth не инициализирован — переавторизация...');
-        await reAuthB2();
-      }
+    if (USE_SB) {
+      await sbUpload(HISTORY_FILE, jsonBuffer, 'application/json');
+    } else if (USE_B2) {
+      if (!b2Auth) await reAuthB2();
       const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
       await b2S3Upload(bucketName, HISTORY_FILE, jsonBuffer, 'application/json');
     } else {
@@ -4495,44 +4538,43 @@ async function saveHistory() {
     console.log('💾 История сохранена');
   } catch (err) {
     console.error('Ошибка сохранения истории:', err.message);
-    // Пробуем переавторизоваться и сохранить ещё раз
-    if (USE_B2 && err.message && (err.message.includes('null') || err.message.includes('401') || err.message.includes('expired'))) {
-      try {
-        console.log('[saveHistory] Попытка переавторизации и повторного сохранения...');
-        await reAuthB2();
-        const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
-        const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
-        await b2S3Upload(bucketName, HISTORY_FILE, jsonBuffer, 'application/json');
-        console.log('💾 История сохранена (после переавторизации)');
-      } catch(e2) {
-        console.error('[saveHistory] Повторная попытка не удалась:', e2.message);
-      }
+    // Повтор через 10с при временной ошибке сети
+    if (!saveHistory._retry) {
+      saveHistory._retry = true;
+      setTimeout(() => { saveHistory._retry = false; saveHistory(); }, 10000);
     }
   }
 }
 
-// ========== ИНИЦИАЛИЗАЦИЯ B2 ==========
+// ========== ИНИЦИАЛИЗАЦИЯ ХРАНИЛИЩА ==========
 (async () => {
   try {
     console.log('🔄 Инициализация хранилища...');
+    if (USE_SB)      console.log(`   Провайдер: Supabase (${SB_URL})`);
+    else if (USE_R2) console.log(`   Провайдер: Cloudflare R2`);
+    else if (USE_B2) console.log(`   Провайдер: Backblaze B2`);
+    else             console.log(`   ⚠️  Провайдер не настроен — данные только в памяти`);
+
     await initStorage();
     await loadUsers();
     await loadHistory();
     await loadAiConversations();
     await loadAiFiles();
+    console.log('✅ Хранилище инициализировано');
   } catch (err) {
-    console.error('❌ Ошибка подключения к B2:', err.message);
-    console.log('⚠️  Сервер запускается без B2 — данные будут в памяти до переподключения');
-    // НЕ вызываем process.exit — сервер работает, просто без persistence
-    // Пробуем переподключиться через 30 секунд
+    console.error('❌ Ошибка инициализации хранилища:', err.message);
+    console.log('⚠️  Сервер запускается без персистентности — данные в памяти');
+    // Повторная попытка через 30 секунд
     setTimeout(async () => {
       try {
         await initStorage();
         await loadUsers();
         await loadHistory();
+        await loadAiConversations();
+        await loadAiFiles();
         console.log('✅ Хранилище переподключено');
       } catch(e2) {
-        console.error('[B2] Повторная попытка не удалась:', e2.message);
+        console.error('❌ Повторная попытка не удалась:', e2.message);
       }
     }, 30000);
   }
@@ -4958,34 +5000,27 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
+// ── Периодический автосейв каждые 5 минут ───────────────────────────────────
+setInterval(async () => {
+  if (!storageReady) return;
+  try {
+    await saveHistory();
+    await saveUsers();
+  } catch(e) {
+    console.warn('[autosave] Ошибка:', e.message);
+  }
+}, 5 * 60 * 1000);
+
 // ── Периодическая переавторизация B2 (токен живёт 24ч — обновляем каждые 20ч) ──
 setInterval(async () => {
-  if (!USE_B2) return;
   try {
     console.log('[B2] Плановая переавторизация...');
-    await reAuthB2();
+    await authorizeB2();
     console.log('[B2] Переавторизация успешна');
   } catch(e) {
     console.warn('[B2] Ошибка переавторизации:', e.message);
-    // Попробуем ещё раз через 5 минут
-    setTimeout(async () => {
-      try { await reAuthB2(); console.log('[B2] Повторная переавторизация успешна'); }
-      catch(e2) { console.error('[B2] Повторная переавторизация не удалась:', e2.message); }
-    }, 5 * 60 * 1000);
   }
 }, 20 * 60 * 60 * 1000); // 20 часов
-
-// Проверяем b2Auth каждые 5 минут — если null, переавторизуемся
-setInterval(async () => {
-  if (!USE_B2 || b2Auth) return;
-  try {
-    console.warn('[B2] b2Auth = null, принудительная переавторизация...');
-    await reAuthB2();
-    console.log('[B2] Принудительная переавторизация успешна');
-  } catch(e) {
-    console.error('[B2] Принудительная переавторизация не удалась:', e.message);
-  }
-}, 5 * 60 * 1000);
 
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
