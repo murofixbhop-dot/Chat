@@ -778,13 +778,27 @@ option { background: var(--surface2); color: var(--text); }
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+  /* Не вылазим за пузырь сообщения */
+  max-width: min(340px, calc(100% - 0px));
+  flex-shrink: 1;
 }
 .cvp-wrap video {
   width: 100%;
+  /* По умолчанию горизонтальное — высота ограничена */
   max-height: 260px;
   display: block;
   background: #000;
   cursor: pointer;
+  /* JS меняет height/max-height для вертикальных видео */
+}
+/* Вертикальное видео — JS задаёт размеры, CSS не мешает */
+.cvp-wrap.cvp-portrait video {
+  max-height: 420px;
+  object-fit: cover;
+}
+/* Видео всегда внутри пузыря */
+.msg-bubble .cvp-wrap {
+  max-width: 100%;
 }
 .cvp-big-play {
   position: absolute; inset: 0;
@@ -3169,47 +3183,44 @@ video {
 .msg-text u      { text-decoration: underline; text-underline-offset: 2px; }
 .msg-text s      { text-decoration: line-through; opacity: .75; }
 .msg-code {
-  background: var(--surface3);
-  border: 1px solid var(--border2);
-  padding: 1px 6px; border-radius: 5px;
-  font-family: 'Geist Mono', monospace; font-size: 11.5px;
-  color: var(--text);
+  background: rgba(0,0,0,.18);
+  padding: 1px 5px; border-radius: 5px;
+  font-family: 'Geist Mono', monospace; font-size: 12px;
 }
-.msg-row.own .msg-code {
-  background: rgba(255,255,255,.15);
-  border-color: rgba(255,255,255,.2);
-  color: #fff;
-}
-
-/* ── Ссылки в сообщениях — заметные, адаптируются к теме ── */
 .msg-link {
-  /* Цвет акцента текущей темы */
+  /* Цвет акцента темы */
   color: var(--accent);
   text-decoration: none;
-  /* Подчёркивание волной — выделяется на фоне текста */
-  border-bottom: 1.5px solid var(--accent);
-  padding-bottom: 0px;
-  /* Небольшой фон-подсветка */
+  /* Фоновая подсветка */
   background: var(--accent-dim);
-  border-radius: 3px;
-  padding: 0 3px 1px;
-  word-break: break-all;
+  border-radius: 4px;
+  padding: 1px 4px;
+  /* Нижняя черта */
+  border-bottom: 1.5px solid var(--accent);
   font-weight: 500;
+  word-break: break-all;
   transition: background .15s, color .15s, border-color .15s;
   display: inline;
+  line-height: 1.6;
 }
 .msg-link:hover {
   background: var(--accent);
   color: #fff;
   border-color: transparent;
 }
+/* Иконка внешней ссылки */
+.msg-link::after {
+  content: ' ↗';
+  font-size: 10px;
+  opacity: .7;
+  font-weight: 400;
+}
 
-/* Ссылки в своих сообщениях (градиентный пузырь) */
+/* В своих сообщениях (градиентный пузырь) */
 .msg-row.own .msg-link {
   color: rgba(255,255,255,.95);
   background: rgba(255,255,255,.18);
-  border-bottom-color: rgba(255,255,255,.6);
-  font-weight: 500;
+  border-bottom-color: rgba(255,255,255,.55);
 }
 .msg-row.own .msg-link:hover {
   background: rgba(255,255,255,.32);
@@ -3217,17 +3228,7 @@ video {
   border-color: transparent;
 }
 
-/* Иконка-стрелка после ссылки (указывает что это внешняя ссылка) */
-.msg-link::after {
-  content: '↗';
-  font-size: 10px;
-  margin-left: 2px;
-  opacity: .7;
-  vertical-align: super;
-  line-height: 0;
-}
-
-/* Светлая тема — ссылки чуть темнее */
+/* Светлая тема */
 [data-theme="light"] .msg-link {
   color: var(--accent);
   background: var(--accent-dim);
@@ -3239,6 +3240,21 @@ video {
 }
 [data-theme="light"] .msg-row.own .msg-link {
   color: rgba(255,255,255,.95);
-  background: rgba(255,255,255,.2);
-  border-bottom-color: rgba(255,255,255,.65);
+  background: rgba(255,255,255,.22);
+  border-bottom-color: rgba(255,255,255,.6);
+}
+/* Битая / незагрузившаяся картинка */
+.msg-img.img-broken {
+  min-width: 80px; min-height: 60px;
+  background: var(--surface3);
+  border-radius: 12px;
+  opacity: .35;
+  position: relative;
+}
+.msg-img.img-broken::after {
+  content: '\e4b0'; /* ti-photo-off */
+  font-family: 'tabler-icons';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; color: var(--text3);
 }
