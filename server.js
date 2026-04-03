@@ -8,7 +8,7 @@ const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);F
+const io = new Server(server);
 
 // PeerJS не нужен — сигналинг через Socket.IO
 
@@ -58,13 +58,13 @@ async function sbReadJson(fileName) {
     const r = await axios.get(url, { timeout: 10000 });
     return r.data;
   } catch(e) {
-    if (e.response?.status === 400  e.response?.status === 404) return null;
+    if (e.response?.status === 400 || e.response?.status === 404) return null;
     throw e;
   }
 }
 
 async function sbEnsureBucketPublic() {
-  console.log([SB] Bucket "${SB_BUCKET}" готов);
+  console.log(`[SB] Bucket готов`);
 }
 
 // Cloudflare R2
@@ -571,7 +571,7 @@ async function loadUsers() {
       const data = await sbReadJson(USERS_FILE);
       if (data && typeof data === 'object') {
         users = new Map(Object.entries(data));
-        console.log(👥 Загружено ${users.size} пользователей);
+        console.log(`👥 Загружено ${users.size} пользователей`);
       } else {
         console.log('📁 users.json не найден — начинаем пустыми');
       }
@@ -583,7 +583,7 @@ async function loadUsers() {
     const data = JSON.parse(text);
     if (data && typeof data === 'object') {
       users = new Map(Object.entries(data));
-      console.log(👥 Загружено ${users.size} пользователей);
+      console.log(`👥 Загружено ${users.size} пользователей`);
     }
   } catch (err) {
     console.log('📁 users.json не найден — начинаем пустыми');
@@ -1079,10 +1079,10 @@ async function loadAiConversations() {
     }
     if (data) {
       for (const [user, sess] of Object.entries(data)) {
-        const hist = (sess.history  []).slice(-40);
-        aiConversations.set(user, { history: hist, msgCount: sess.msgCount  0, debugMode: false });
+        const hist = (sess.history || []).slice(-40);
+        aiConversations.set(user, { history: hist, msgCount: sess.msgCount || 0, debugMode: false });
       }
-      console.log([AI] Загружены беседы: ${aiConversations.size} пользователей);
+      console.log(`[AI] Загружены беседы: ${aiConversations.size} пользователей`);
     }
   } catch(e) {
     console.log('[AI] ai_conversations.json не найден');
@@ -1122,7 +1122,7 @@ async function loadAiFiles() {
       for (const [user, files] of Object.entries(data)) {
         if (Array.isArray(files) && files.length) aiUserFiles.set(user, files.slice(-50));
       }
-      console.log([AI] Загружены файлы: ${aiUserFiles.size} пользователей);
+      console.log(`[AI] Загружены файлы: ${aiUserFiles.size} пользователей`);
     }
   } catch { console.log('[AI] ai_files.json не найден'); }
 }
@@ -4448,7 +4448,7 @@ async function loadHistory() {
       const data = await sbReadJson(HISTORY_FILE);
       if (data && Array.isArray(data)) {
         messageHistory = data.slice(-MAX_HISTORY);
-        console.log(📁 Загружено ${messageHistory.length} сообщений);
+        console.log(`📁 Загружено ${messageHistory.length} сообщений`);
       }
       return;
     }
@@ -4458,7 +4458,7 @@ async function loadHistory() {
     const data = JSON.parse(text);
     if (data && Array.isArray(data)) {
       messageHistory = data.slice(-MAX_HISTORY);
-      console.log(📁 Загружено ${messageHistory.length} сообщений);
+      console.log(`📁 Загружено ${messageHistory.length} сообщений`);
     }
   } catch (err) {
     console.log('📁 history.json не найден — начинаем пустыми');
