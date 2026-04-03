@@ -33,6 +33,40 @@ const SB_KEY    = process.env.SUPABASE_KEY;
 const SB_BUCKET = process.env.SUPABASE_BUCKET || 'aura-files';
 const USE_SB    = !!(SB_URL && SB_KEY);
 
+async function sbUpload(fileName, buffer, contentType) {
+  const url = ${SB_URL}/storage/v1/object/${SB_BUCKET}/${fileName};
+  await axios.post(url, buffer, {
+    headers: {
+      'Authorization': Bearer ${SB_KEY},
+      'Content-Type': contentType  'application/octet-stream',
+      'x-upsert': 'true'
+    },
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+    timeout: 60000
+  });
+}
+
+async function sbDownload(fileName) {
+  const url = ${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName};
+  return { url, token: null };
+}
+
+async function sbReadJson(fileName) {
+  try {
+    const url = ${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName};
+    const r = await axios.get(url, { timeout: 10000 });
+    return r.data;
+  } catch(e) {
+    if (e.response?.status === 400  e.response?.status === 404) return null;
+    throw e;
+  }
+}
+
+async function sbEnsureBucketPublic() {
+  console.log([SB] Bucket "${SB_BUCKET}" готов);
+}
+
 // Cloudflare R2
 const R2_ENDPOINT  = process.env.R2_ENDPOINT;
 const R2_ACCESS_KEY= process.env.R2_ACCESS_KEY_ID;
@@ -533,32 +567,26 @@ async function sendVerifyEmail(to, code) {
 
 async function loadUsers() {
   try {
+    if (USE_SB) {
+      const data = await sbReadJson(USERS_FILE);
+      if (data && typeof data === 'object') {
+        users = new Map(Object.entries(data));
+        console.log(👥 Загружено ${users.size} пользователей);
+      } else {
+        console.log('📁 users.json не найден — начинаем пустыми');
+      }
+      return;
+    }
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(USERS_FILE);
-    console.log('[B2 load] users via S3:', B2_S3_ENDPOINT + '/' + bucketName + '/' + USERS_FILE);
     const text = await b2S3Download(bucketName, USERS_FILE);
-    const response = { data: JSON.parse(text) };
-    if (response.data && typeof response.data === 'object') {
-      users = new Map(Object.entries(response.data));
-      console.log(`👥 Загружено ${users.size} пользователей`);
+    const data = JSON.parse(text);
+    if (data && typeof data === 'object') {
+      users = new Map(Object.entries(data));
+      console.log(👥 Загружено ${users.size} пользователей);
     }
   } catch (err) {
-    const status = err.response?.status;
-    if (status === 404) {
-      console.log('📁 users.json не найден — будет создан при первом входе');
-    } else if (status === 403) {
-      // B2 возвращает 403 и когда файл не существует в приватном бакете
-      console.log('📁 users.json: 403 — файл не существует или нет доступа (первый запуск?)');
-      // Создаём пустой файл пользователей
-      try {
-        await saveUsers();
-        console.log('✅ Создан пустой users.json');
-      } catch(e2) {
-        console.error('Не удалось создать users.json:', e2.message);
-      }
-    } else {
-      console.error('Ошибка загрузки пользователей:', err.message);
-    }
+    console.log('📁 users.json не найден — начинаем пустыми');
   }
 }
 
@@ -1041,17 +1069,23 @@ const AI_CONV_FILE = 'ai_conversations.json';
 // Load AI conversations from storage
 async function loadAiConversations() {
   try {
-    const { bucketName } = b2GetBucketForFile(AI_CONV_FILE);
-    const text = await b2S3Download(bucketName, AI_CONV_FILE);
-    const data = JSON.parse(text);
-    for (const [user, sess] of Object.entries(data)) {
-      // Keep last 40 messages per user
-      const hist = (sess.history || []).slice(-40);
-      aiConversations.set(user, { history: hist, msgCount: sess.msgCount || 0, debugMode: false });
+    let data;
+    if (USE_SB) {
+      data = await sbReadJson(AI_CONV_FILE);
+    } else {
+      const { bucketName } = b2GetBucketForFile(AI_CONV_FILE);
+      const text = await b2S3Download(bucketName, AI_CONV_FILE);
+      data = JSON.parse(text);
     }
-    console.log(`[AI] Загружены беседы: ${aiConversations.size} пользователей`);
+    if (data) {
+      for (const [user, sess] of Object.entries(data)) {
+        const hist = (sess.history  []).slice(-40);
+        aiConversations.set(user, { history: hist, msgCount: sess.msgCount  0, debugMode: false });
+      }
+      console.log([AI] Загружены беседы: ${aiConversations.size} пользователей);
+    }
   } catch(e) {
-    console.log('[AI] ai_conversations.json не найден — начинаем пустыми');
+    console.log('[AI] ai_conversations.json не найден');
   }
 }
 
@@ -1067,8 +1101,7 @@ function scheduleAiConvSave() {
         obj[user] = { history: (sess.history||[]).slice(-40), msgCount: sess.msgCount||0 };
       }
       const buf = Buffer.from(JSON.stringify(obj));
-      const { bucketName } = b2GetBucketForFile(AI_CONV_FILE);
-      await b2S3Upload(bucketName, AI_CONV_FILE, buf, 'application/json');
+      await storageUpload(AI_CONV_FILE, buf, 'application/json');
     } catch(e) { console.error('[AI] Ошибка сохранения бесед:', e.message); }
   }, 5000); // Save 5s after last activity
 }
@@ -1077,18 +1110,22 @@ const AI_FILES_FILE   = 'ai_files.json';
 
 async function loadAiFiles() {
   try {
-    const { bucketName } = b2GetBucketForFile(AI_FILES_FILE);
-    const text = await b2S3Download(bucketName, AI_FILES_FILE);
-    const data = JSON.parse(text);
-    for (const [user, files] of Object.entries(data)) {
-      if (Array.isArray(files) && files.length) {
-        aiUserFiles.set(user, files.slice(-50));
-      }
+    let data;
+    if (USE_SB) {
+      data = await sbReadJson(AI_FILES_FILE);
+    } else {
+      const { bucketName } = b2GetBucketForFile(AI_FILES_FILE);
+      const text = await b2S3Download(bucketName, AI_FILES_FILE);
+      data = JSON.parse(text);
     }
-    console.log(`[AI] Загружены файлы: ${aiUserFiles.size} пользователей`);
-  } catch { console.log('[AI] ai_files.json не найден — начинаем без файлов'); }
+    if (data) {
+      for (const [user, files] of Object.entries(data)) {
+        if (Array.isArray(files) && files.length) aiUserFiles.set(user, files.slice(-50));
+      }
+      console.log([AI] Загружены файлы: ${aiUserFiles.size} пользователей);
+    }
+  } catch { console.log('[AI] ai_files.json не найден'); }
 }
-
 let _aiFilesSaveTimer = null;
 function scheduleAiFilesSave() {
   if (_aiFilesSaveTimer) return;
@@ -1101,8 +1138,7 @@ function scheduleAiFilesSave() {
         obj[user] = files.slice(-20).map(f => ({ ...f, ttl: AI_FILE_TTL }));
       }
       const buf = Buffer.from(JSON.stringify(obj));
-      const { bucketName } = b2GetBucketForFile(AI_FILES_FILE);
-      await b2S3Upload(bucketName, AI_FILES_FILE, buf, 'application/json');
+      await storageUpload(AI_FILES_FILE, buf, 'application/json');
     } catch(e) { console.error('[AI] Ошибка сохранения файлов:', e.message); }
   }, 4000);
 }
@@ -4408,17 +4444,24 @@ app.post('/api/delete-message', async (req, res) => {
 
 async function loadHistory() {
   try {
+    if (USE_SB) {
+      const data = await sbReadJson(HISTORY_FILE);
+      if (data && Array.isArray(data)) {
+        messageHistory = data.slice(-MAX_HISTORY);
+        console.log(📁 Загружено ${messageHistory.length} сообщений);
+      }
+      return;
+    }
     if (!b2Auth) await reAuthB2();
     const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
     const text = await b2S3Download(bucketName, HISTORY_FILE);
-    const response = { data: JSON.parse(text) };
-    if (response.data && Array.isArray(response.data)) {
-      messageHistory = response.data.slice(-MAX_HISTORY);
-      console.log(`📁 Загружено ${messageHistory.length} сообщений`);
+    const data = JSON.parse(text);
+    if (data && Array.isArray(data)) {
+      messageHistory = data.slice(-MAX_HISTORY);
+      console.log(📁 Загружено ${messageHistory.length} сообщений);
     }
   } catch (err) {
-    if (err.response?.status === 404) console.log('📁 history.json не найден');
-    else console.error('Ошибка загрузки истории:', err.message);
+    console.log('📁 history.json не найден — начинаем пустыми');
   }
 }
 
