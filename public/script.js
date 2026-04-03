@@ -6,6 +6,262 @@
 
 'use strict';
 
+// ═══════════════════════════════════════════════════
+// CUSTOM VIDEO PLAYER
+// ═══════════════════════════════════════════════════
+
+function buildCustomVideoPlayer(src) {
+  const wrap = document.createElement('div');
+  wrap.className = 'cvp-wrap';
+
+  const vid = document.createElement('video');
+  vid.src = src;
+  vid.preload = 'metadata';
+  vid.setAttribute('playsinline', '');
+  vid.setAttribute('webkit-playsinline', '');
+  wrap.appendChild(vid);
+
+  const bigPlay = document.createElement('div');
+  bigPlay.className = 'cvp-big-play';
+  bigPlay.innerHTML = `<div class="cvp-big-play-btn"><i class="ti ti-player-play"></i></div>`;
+  wrap.appendChild(bigPlay);
+
+  const badge = document.createElement('div');
+  badge.className = 'cvp-badge';
+  badge.innerHTML = `<i class="ti ti-video"></i><span class="cvp-badge-dur">—</span>`;
+  wrap.appendChild(badge);
+
+  const bar = document.createElement('div');
+  bar.className = 'cvp-bar';
+
+  const prog = document.createElement('div');
+  prog.className = 'cvp-progress';
+  const fill = document.createElement('div');
+  fill.className = 'cvp-progress-fill';
+  const thumb = document.createElement('div');
+  thumb.className = 'cvp-progress-thumb';
+  prog.appendChild(fill); prog.appendChild(thumb);
+
+  const ctrl = document.createElement('div');
+  ctrl.className = 'cvp-controls';
+
+  const playBtn = document.createElement('button');
+  playBtn.className = 'cvp-btn';
+  playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;
+
+  const timeEl = document.createElement('span');
+  timeEl.className = 'cvp-time';
+  timeEl.textContent = '0:00 / 0:00';
+
+  const spacer = document.createElement('div');
+  spacer.className = 'cvp-spacer';
+
+  const speedBtn = document.createElement('button');
+  speedBtn.className = 'cvp-btn cvp-speed-btn';
+  speedBtn.textContent = '1×';
+  const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  let speedIdx = 2;
+
+  const volWrap = document.createElement('div');
+  volWrap.className = 'cvp-vol-wrap';
+  const muteBtn = document.createElement('button');
+  muteBtn.className = 'cvp-btn';
+  muteBtn.innerHTML = `<i class="ti ti-volume"></i>`;
+  const volSlider = document.createElement('input');
+  volSlider.type = 'range'; volSlider.className = 'cvp-vol-slider';
+  volSlider.min = 0; volSlider.max = 1; volSlider.step = 0.05; volSlider.value = 1;
+  volWrap.appendChild(muteBtn); volWrap.appendChild(volSlider);
+
+  const fsBtn = document.createElement('button');
+  fsBtn.className = 'cvp-btn';
+  fsBtn.innerHTML = `<i class="ti ti-arrows-maximize"></i>`;
+
+  ctrl.append(playBtn, timeEl, spacer, speedBtn, volWrap, fsBtn);
+  bar.appendChild(prog); bar.appendChild(ctrl);
+  wrap.appendChild(bar);
+
+  const fmt = s => { const m = Math.floor(s/60), sc = Math.floor(s%60); return `${m}:${sc.toString().padStart(2,'0')}`; };
+
+  let hideTimer = null;
+  const showCtrls = () => {
+    wrap.classList.remove('controls-hidden');
+    clearTimeout(hideTimer);
+    if (!vid.paused) hideTimer = setTimeout(() => wrap.classList.add('controls-hidden'), 2800);
+  };
+
+  vid.addEventListener('loadedmetadata', () => {
+    const d = fmt(vid.duration);
+    timeEl.textContent = `0:00 / ${d}`;
+    badge.querySelector('.cvp-badge-dur').textContent = d;
+  });
+  vid.addEventListener('timeupdate', () => {
+    if (!vid.duration) return;
+    const p = (vid.currentTime / vid.duration) * 100;
+    fill.style.width = p + '%';
+    thumb.style.right = (100 - p) + '%';
+    timeEl.textContent = `${fmt(vid.currentTime)} / ${fmt(vid.duration)}`;
+  });
+  vid.addEventListener('play',  () => { playBtn.innerHTML = `<i class="ti ti-player-pause"></i>`; bigPlay.classList.add('hidden'); showCtrls(); });
+  vid.addEventListener('pause', () => { playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;  bigPlay.classList.remove('hidden'); showCtrls(); });
+  vid.addEventListener('ended', () => { playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;  bigPlay.classList.remove('hidden'); wrap.classList.remove('controls-hidden'); });
+  vid.addEventListener('volumechange', () => {
+    muteBtn.innerHTML = vid.muted || vid.volume === 0
+      ? `<i class="ti ti-volume-off"></i>`
+      : vid.volume < 0.4 ? `<i class="ti ti-volume-2"></i>` : `<i class="ti ti-volume"></i>`;
+    if (!vid.muted) volSlider.value = vid.volume;
+  });
+
+  vid.addEventListener('click', e => { e.stopPropagation(); vid.paused ? vid.play() : vid.pause(); showCtrls(); });
+  vid.addEventListener('dblclick', e => { e.stopPropagation(); fsBtn.click(); });
+  bigPlay.addEventListener('click', e => { e.stopPropagation(); vid.play(); });
+  wrap.addEventListener('mousemove', showCtrls);
+  wrap.addEventListener('touchstart', showCtrls, { passive: true });
+
+  playBtn.addEventListener('click', e => { e.stopPropagation(); vid.paused ? vid.play() : vid.pause(); });
+
+  prog.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!vid.duration) return;
+    const r = prog.getBoundingClientRect();
+    vid.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * vid.duration;
+  });
+  prog.addEventListener('touchstart', e => {
+    e.stopPropagation();
+    const doSeek = ev => {
+      const r = prog.getBoundingClientRect();
+      const t = ev.touches[0] || ev.changedTouches[0];
+      if (vid.duration) vid.currentTime = Math.max(0, Math.min(1, (t.clientX - r.left) / r.width)) * vid.duration;
+    };
+    doSeek(e);
+    prog.addEventListener('touchmove', doSeek, { passive: true });
+    prog.addEventListener('touchend', () => prog.removeEventListener('touchmove', doSeek), { once: true });
+  }, { passive: true });
+
+  volSlider.addEventListener('input', e => { e.stopPropagation(); vid.volume = parseFloat(volSlider.value); vid.muted = vid.volume === 0; });
+  muteBtn.addEventListener('click', e => { e.stopPropagation(); vid.muted = !vid.muted; if (!vid.muted) volSlider.value = vid.volume || 0.7; });
+
+  speedBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    speedIdx = (speedIdx + 1) % speeds.length;
+    vid.playbackRate = speeds[speedIdx];
+    speedBtn.textContent = speeds[speedIdx] + '×';
+  });
+
+  fsBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!document.fullscreenElement) {
+      (wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullScreen)?.call(wrap);
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    fsBtn.innerHTML = document.fullscreenElement
+      ? `<i class="ti ti-arrows-minimize"></i>`
+      : `<i class="ti ti-arrows-maximize"></i>`;
+  });
+
+  return wrap;
+}
+
+// Авто-патч: заменяем все video.msg-video на кастомный плеер
+(function patchVideoPlayer() {
+  function upgradeVideos(root) {
+    root.querySelectorAll('video.msg-video').forEach(v => {
+      if (v.dataset.cvpDone) return;
+      v.dataset.cvpDone = '1';
+      const src = v.src || v.getAttribute('src') || '';
+      if (!src) return;
+      v.parentNode.insertBefore(buildCustomVideoPlayer(src), v.nextSibling);
+    });
+  }
+  const obs = new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(n => {
+      if (n.nodeType !== 1) return;
+      if (n.matches?.('video.msg-video')) upgradeVideos(n.parentNode);
+      else upgradeVideos(n);
+    }));
+  });
+  document.addEventListener('DOMContentLoaded', () => {
+    upgradeVideos(document);
+    obs.observe(document.body, { childList: true, subtree: true });
+  });
+  if (document.readyState !== 'loading') {
+    upgradeVideos(document);
+    obs.observe(document.body, { childList: true, subtree: true });
+  }
+})();
+
+// ═══════════════════════════════════════════════════
+// SMART FILE TYPE DETECTION
+// ═══════════════════════════════════════════════════
+const _FILE_CAT = {
+  // images
+  jpg:'image',jpeg:'image',png:'image',gif:'image',webp:'image',avif:'image',
+  svg:'image',ico:'image',bmp:'image',tiff:'image',tif:'image',heic:'image',heif:'image',
+  // video
+  mp4:'video',webm:'video',mov:'video',avi:'video',mkv:'video',
+  flv:'video',wmv:'video',m4v:'video',ogv:'video',ts:'video',
+  // audio
+  mp3:'audio',ogg:'audio',wav:'audio',flac:'audio',aac:'audio',
+  m4a:'audio',opus:'audio',wma:'audio',amr:'audio',
+  // docs
+  pdf:'pdf',
+  doc:'doc',docx:'doc',odt:'doc',rtf:'doc',pages:'doc',
+  xls:'sheet',xlsx:'sheet',csv:'sheet',ods:'sheet',numbers:'sheet',
+  ppt:'slide',pptx:'slide',odp:'slide',key:'slide',
+  // archives
+  zip:'arch',rar:'arch','7z':'arch',tar:'arch',gz:'arch',bz2:'arch',xz:'arch',iso:'arch',
+  // code
+  js:'code',ts:'code',jsx:'code',tsx:'code',html:'code',css:'code',
+  py:'code',java:'code',c:'code',cpp:'code',cs:'code',go:'code',
+  rs:'code',php:'code',rb:'code',swift:'code',kt:'code',dart:'code',
+  sh:'code',bat:'code',yml:'code',yaml:'code',json:'code',xml:'code',
+  sql:'code',vue:'code',svelte:'code',
+  // text
+  txt:'text',md:'text',log:'text',ini:'text',conf:'text',
+  // apps
+  apk:'apk',ipa:'apk',exe:'apk',dmg:'apk',pkg:'apk',deb:'apk',
+  // fonts
+  ttf:'font',otf:'font',woff:'font',woff2:'font',
+  // 3d / design
+  obj:'3d',fbx:'3d',gltf:'3d',glb:'3d',stl:'3d',blend:'3d',
+  psd:'3d',ai:'3d',sketch:'3d',fig:'3d',
+};
+const _FILE_META = {
+  image:{ icon:'ti-photo',         cls:'mft-image',  label:'Изображение' },
+  video:{ icon:'ti-video',         cls:'mft-video',  label:'Видео'       },
+  audio:{ icon:'ti-music',         cls:'mft-audio',  label:'Аудио'       },
+  pdf:  { icon:'ti-file-type-pdf', cls:'mft-pdf',    label:'PDF'         },
+  doc:  { icon:'ti-file-word',     cls:'mft-doc',    label:'Документ'    },
+  sheet:{ icon:'ti-table',         cls:'mft-sheet',  label:'Таблица'     },
+  slide:{ icon:'ti-presentation',  cls:'mft-slide',  label:'Презентация' },
+  arch: { icon:'ti-file-zip',      cls:'mft-arch',   label:'Архив'       },
+  code: { icon:'ti-code',          cls:'mft-code',   label:'Код'         },
+  text: { icon:'ti-file-text',     cls:'mft-text',   label:'Текст'       },
+  apk:  { icon:'ti-device-mobile', cls:'mft-apk',    label:'Приложение'  },
+  font: { icon:'ti-letter-case',   cls:'mft-font',   label:'Шрифт'       },
+  '3d': { icon:'ti-box',           cls:'mft-3d',     label:'3D/Дизайн'   },
+  file: { icon:'ti-file',          cls:'mft-file',   label:'Файл'        },
+};
+function _detectFileCat(name, mime) {
+  const m = (mime || '').toLowerCase();
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('video/')) return 'video';
+  if (m.startsWith('audio/')) return 'audio';
+  if (m === 'application/pdf') return 'pdf';
+  const ext = (name || '').split('.').pop().toLowerCase();
+  return _FILE_CAT[ext] || 'file';
+}
+function _buildFileIconHtml(name, mime) {
+  const cat  = _detectFileCat(name, mime);
+  const meta = _FILE_META[cat] || _FILE_META.file;
+  const ext  = (name || '').split('.').pop().toUpperCase().slice(0, 6) || 'FILE';
+  return `<div class="msg-file-ico-wrap ${meta.cls}"><i class="ti ${meta.icon}"></i></div>`;
+}
+
+
+
 // ── Socket (must be first) ──────────────────────────
 const socket = io({ reconnectionAttempts: Infinity, timeout: 20000, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
 
@@ -1398,12 +1654,13 @@ function addMessage(msg) {
   } else if (msg.type === 'file') {
     const u = fileUrl(msg.url);
     const fname = esc(msg.fileName || 'Файл');
-    const ext = (msg.fileName||'').split('.').pop().toUpperCase().slice(0,4);
-    inner += `<a class="msg-file" href="${u}" target="_blank" rel="noopener">
-      <i class="ti ti-file msg-file-ico"></i>
+    const ext = (msg.fileName||'').split('.').pop().toUpperCase().slice(0,6) || 'FILE';
+    const iconHtml = _buildFileIconHtml(msg.fileName || '', '');
+    inner += `<a class="msg-file" href="${u}" target="_blank" rel="noopener" download>
+      ${iconHtml}
       <div class="msg-file-body">
         <div class="msg-file-name">${fname}</div>
-        <div class="msg-file-size">${ext || 'FILE'}</div>
+        <div class="msg-file-size">${ext}</div>
       </div>
     </a>`;
   } else {
@@ -1906,10 +2163,11 @@ function pickFiles(accept) {
 
 function addFile(file) {
   if (file.size > 50 * 1024 * 1024) { toast(`Файл слишком большой: ${file.name}`, 'warning'); return; }
+  const cat = _detectFileCat(file.name, file.type);
   let type = 'file';
-  if (file.type.startsWith('image/'))  type = 'image';
-  if (file.type.startsWith('video/'))  type = 'video';
-  if (file.type.startsWith('audio/'))  type = 'audio';
+  if (cat === 'image') type = 'image';
+  else if (cat === 'video') type = 'video';
+  else if (cat === 'audio') type = 'audio';
   const reader = new FileReader();
   reader.onload = ev => {
     selectedFiles.push({ file, type, dataUrl: ev.target.result, name: file.name });
