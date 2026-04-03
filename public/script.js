@@ -1480,14 +1480,23 @@ socket.on('message', msg => {
 });
 socket.on('system', addSystem);
 
-// Конвертирует B2 URL в прокси /api/dl?f=... чтобы токены всегда были свежими
+// Конвертирует URL файла в рабочий src
+// Supabase public URL — оставляем как есть
+// B2 URL — оборачиваем в /api/dl прокси
 function fileUrl(url) {
   if (!url) return url;
   // Уже прокси — не трогаем
   if (url.startsWith('/api/dl')) return url;
+  // Supabase public URL — отдаём напрямую (не нужен прокси)
+  if (url.includes('.supabase.co/storage/')) return url;
+  // Относительный путь /uploads/... или /api/... — не трогаем
+  if (url.startsWith('/')) return url;
+  // data: URL — не трогаем
+  if (url.startsWith('data:')) return url;
   // Извлекаем путь файла из B2 URL: /file/BUCKET/photos/...
   const m = url.match(/\/file\/[^/]+\/(.+?)(\?|$)/);
   if (m) return '/api/dl?f=' + encodeURIComponent(m[1]);
+  // Любой другой внешний URL (например CDN) — напрямую
   return url;
 }
 
@@ -1621,7 +1630,7 @@ function addMessage(msg) {
 
   if (msg.type === 'image') {
     const u = fileUrl(msg.url);
-    inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="фото"></div>`;
+    inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="фото" onerror="this.dataset.retry=(+this.dataset.retry||0)+1;if(this.dataset.retry<4){const t=this;setTimeout(()=>{t.src=t.src.split('?')[0]+'?r='+Date.now()},2000*this.dataset.retry)}else{this.style.opacity='.3'}"></div>`;
     if (msg.text) inner += `<div class="msg-text">${renderMsgText(msg.text)}</div>`;
   } else if (msg.type === 'video') {
     const u = fileUrl(msg.url);
@@ -7782,29 +7791,23 @@ function vcShowDuration(id) {
     if (!ta || ta._fmtOk) return;
     ta._fmtOk = true;
 
-    // Показываем панель после отпускания кнопки мыши (если есть выделение)
-    ta.addEventListener('mouseup', e => {
-      if (e.button !== 0) return;
-      setTimeout(() => {
-        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
-        if (!sel.trim()) { removeBar(); return; }
-        const r = ta.getBoundingClientRect();
-        const cx = r.left + r.width / 2;
-        const cy = r.top;
-        _skip = true;
-        makeBar(ta, cx, cy);
-        setTimeout(() => { _skip = false; }, 200);
-      }, 20);
+    // Показываем панель ТОЛЬКО по ПКМ (правая кнопка), если есть выделение
+    ta.addEventListener('contextmenu', e => {
+      const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
+      if (!sel) return; // нет выделения — стандартное браузерное меню
+      e.preventDefault();
+      e.stopPropagation();
+      makeBar(ta, e.clientX, e.clientY);
     });
 
-    // Тоже для touch
+    // Touch: длинное нажатие с выделением
     ta.addEventListener('touchend', () => {
       setTimeout(() => {
-        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
-        if (!sel.trim()) { removeBar(); return; }
+        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
+        if (!sel) { removeBar(); return; }
         const r = ta.getBoundingClientRect();
-        makeBar(ta, r.left + r.width / 2, r.top);
-      }, 180);
+        makeBar(ta, r.left + r.width / 2, r.top - 8);
+      }, 200);
     });
   }
 
