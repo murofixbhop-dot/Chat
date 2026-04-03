@@ -28,7 +28,7 @@ const io = new Server(server);
 //    B2_ACCOUNT_ID, B2_APP_KEY, B2_BUCKET_NAME
 
 // Supabase
-const SB_URL    = process.env.SUPABASE_URL;
+const SB_URL    = (process.env.SUPABASE_URL || '').replace(/\/+$/, ''); // убираем trailing slash
 const SB_KEY    = process.env.SUPABASE_KEY;
 const SB_BUCKET = process.env.SUPABASE_BUCKET || 'aura-files';
 const USE_SB    = !!(SB_URL && SB_KEY);
@@ -735,34 +735,17 @@ app.get('/api/dl', async (req, res) => {
   }
 });
 
-// Таблица расширений → правильный MIME тип (для fallback)
-const EXT_MIME_MAP = {
-  // video
-  mp4:'video/mp4', webm:'video/webm', mov:'video/quicktime',
-  avi:'video/x-msvideo', mkv:'video/x-matroska', flv:'video/x-flv',
-  wmv:'video/x-ms-wmv', m4v:'video/mp4', ogv:'video/ogg', ts:'video/mp2t',
-  '3gp':'video/3gpp', '3g2':'video/3gpp2',
-  // image
-  jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif',
-  webp:'image/webp', avif:'image/avif', heic:'image/heic', heif:'image/heif',
-  svg:'image/svg+xml', bmp:'image/bmp', tiff:'image/tiff', tif:'image/tiff',
-  ico:'image/x-icon', jfif:'image/jpeg',
-  // audio
-  mp3:'audio/mpeg', ogg:'audio/ogg', wav:'audio/wav', flac:'audio/flac',
-  aac:'audio/aac', m4a:'audio/mp4', opus:'audio/opus', wma:'audio/x-ms-wma', amr:'audio/amr',
-};
-
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
 
-    // Определяем mime — если браузер прислал octet-stream, берём по расширению
+    // Если браузер прислал octet-stream — определяем тип по расширению
     let mimeType = req.file.mimetype;
-    const origExt = (req.file.originalname || '').split('.').pop().toLowerCase();
-    if (!mimeType || mimeType === 'application/octet-stream' || mimeType === 'application/unknown') {
-      mimeType = EXT_MIME_MAP[origExt] || mimeType;
+    const _origExt = (req.file.originalname || '').split('.').pop().toLowerCase();
+    if (!mimeType || mimeType === 'application/octet-stream') {
+      const _EXT = { mp4:'video/mp4',webm:'video/webm',mov:'video/quicktime',avi:'video/x-msvideo',mkv:'video/x-matroska',flv:'video/x-flv',wmv:'video/x-ms-wmv',m4v:'video/mp4',ogv:'video/ogg','3gp':'video/3gpp',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',avif:'image/avif',heic:'image/heic',heif:'image/heif',svg:'image/svg+xml',bmp:'image/bmp',tif:'image/tiff',tiff:'image/tiff',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',flac:'audio/flac',aac:'audio/aac',m4a:'audio/mp4',opus:'audio/opus',wma:'audio/x-ms-wma' };
+      mimeType = _EXT[_origExt] || mimeType;
     }
-
     let fileType = 'file';
     if (mimeType.startsWith('image/')) fileType = 'image';
     else if (mimeType.startsWith('audio/')) fileType = 'audio';
@@ -778,10 +761,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     await storageUpload(fileName, req.file.buffer, mimeType);
 
-    // Supabase: кодируем каждый сегмент пути отдельно (не трогаем слеш)
-    const sbSafePath = fileName.split('/').map(encodeURIComponent).join('/');
     const proxyUrl = (USE_SB)
-      ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${sbSafePath}`
+      ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName.split('/').map(encodeURIComponent).join('/')}`
       : (USE_R2 && R2_PUBLIC) ? `${R2_PUBLIC}/${encodeURIComponent(fileName)}`
       : '/api/dl?f=' + encodeURIComponent(fileName);
     res.json({ success: true, url: proxyUrl, type: fileType, name: req.file.originalname });
