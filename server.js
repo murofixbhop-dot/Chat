@@ -170,6 +170,7 @@ async function r2Delete(fileName) {
 
 // ── B2 скачивание (рабочий метод: fileNamePrefix=файл, токен в URL) ──────────
 async function b2S3Download(bucketName, fileName) {
+  if (!b2Auth) await reAuthB2();
   const bucketId = (bucketName === B2_BUCKET_NAME2 && b2BucketId2) ? b2BucketId2 : b2BucketId;
   const r = await axios.post(
     `${b2Auth.apiUrl}/b2api/v2/b2_get_download_authorization`,
@@ -183,9 +184,11 @@ async function b2S3Download(bucketName, fileName) {
 }
 
 async function b2S3Upload(bucketName, fileName, buffer, contentType) {
+  if (!b2Auth) await reAuthB2();
   const bucketId = (bucketName === B2_BUCKET_NAME2 && b2BucketId2) ? b2BucketId2 : b2BucketId;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      if (!b2Auth) await reAuthB2();
       const r = await axios.post(
         `${b2Auth.apiUrl}/b2api/v2/b2_get_upload_url`,
         { bucketId },
@@ -4456,7 +4459,23 @@ async function loadHistory() {
       console.log(`📁 Загружено ${messageHistory.length} сообщений`);
     }
   } catch (err) {
-    console.log('📁 history.json не найден — начинаем пустыми');
+    if (err.message && err.message.includes('null')) {
+      console.error('[loadHistory] b2Auth null — попытка переавторизации...');
+      try {
+        await reAuthB2();
+        const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
+        const text = await b2S3Download(bucketName, HISTORY_FILE);
+        const data = JSON.parse(text);
+        if (data && Array.isArray(data)) {
+          messageHistory = data.slice(-MAX_HISTORY);
+          console.log(`📁 Загружено ${messageHistory.length} сообщений (после переавторизации)`);
+        }
+      } catch(e2) {
+        console.log('📁 history.json не найден — начинаем пустыми');
+      }
+    } else {
+      console.log('📁 history.json не найден — начинаем пустыми');
+    }
   }
 }
 
@@ -4464,6 +4483,10 @@ async function saveHistory() {
   try {
     const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
     if (USE_B2) {
+      if (!b2Auth) {
+        console.warn('[saveHistory] b2Auth не инициализирован — переавторизация...');
+        await reAuthB2();
+      }
       const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
       await b2S3Upload(bucketName, HISTORY_FILE, jsonBuffer, 'application/json');
     } else {
@@ -4472,6 +4495,19 @@ async function saveHistory() {
     console.log('💾 История сохранена');
   } catch (err) {
     console.error('Ошибка сохранения истории:', err.message);
+    // Пробуем переавторизоваться и сохранить ещё раз
+    if (USE_B2 && err.message && (err.message.includes('null') || err.message.includes('401') || err.message.includes('expired'))) {
+      try {
+        console.log('[saveHistory] Попытка переавторизации и повторного сохранения...');
+        await reAuthB2();
+        const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
+        const { bucketName } = b2GetBucketForFile(HISTORY_FILE);
+        await b2S3Upload(bucketName, HISTORY_FILE, jsonBuffer, 'application/json');
+        console.log('💾 История сохранена (после переавторизации)');
+      } catch(e2) {
+        console.error('[saveHistory] Повторная попытка не удалась:', e2.message);
+      }
+    }
   }
 }
 
@@ -4924,14 +4960,32 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 // ── Периодическая переавторизация B2 (токен живёт 24ч — обновляем каждые 20ч) ──
 setInterval(async () => {
+  if (!USE_B2) return;
   try {
     console.log('[B2] Плановая переавторизация...');
-    await authorizeB2();
+    await reAuthB2();
     console.log('[B2] Переавторизация успешна');
   } catch(e) {
     console.warn('[B2] Ошибка переавторизации:', e.message);
+    // Попробуем ещё раз через 5 минут
+    setTimeout(async () => {
+      try { await reAuthB2(); console.log('[B2] Повторная переавторизация успешна'); }
+      catch(e2) { console.error('[B2] Повторная переавторизация не удалась:', e2.message); }
+    }, 5 * 60 * 1000);
   }
 }, 20 * 60 * 60 * 1000); // 20 часов
+
+// Проверяем b2Auth каждые 5 минут — если null, переавторизуемся
+setInterval(async () => {
+  if (!USE_B2 || b2Auth) return;
+  try {
+    console.warn('[B2] b2Auth = null, принудительная переавторизация...');
+    await reAuthB2();
+    console.log('[B2] Принудительная переавторизация успешна');
+  } catch(e) {
+    console.error('[B2] Принудительная переавторизация не удалась:', e.message);
+  }
+}, 5 * 60 * 1000);
 
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
