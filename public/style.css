@@ -778,25 +778,13 @@ option { background: var(--surface2); color: var(--text); }
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
-  /* Авто-высота — поддержка вертикальных видео */
-  height: auto;
 }
 .cvp-wrap video {
   width: 100%;
-  /* вертикальные видео: max-height большой, горизонтальные ограничены */
-  max-height: 420px;
+  max-height: 260px;
   display: block;
   background: #000;
   cursor: pointer;
-  /* сохраняем aspect-ratio видео */
-  object-fit: contain;
-}
-/* Вертикальное видео — уже обёртка */
-.cvp-wrap.cvp-portrait {
-  max-width: 220px;
-}
-.cvp-wrap.cvp-portrait video {
-  max-height: 380px;
 }
 .cvp-big-play {
   position: absolute; inset: 0;
@@ -906,25 +894,6 @@ option { background: var(--surface2); color: var(--text); }
   display: flex; align-items: center; gap: 4px;
 }
 .cvp-badge i { font-size: 12px; }
-
-/* Fullscreen mode — вертикальное видео растягивается правильно */
-.cvp-wrap:-webkit-full-screen video,
-.cvp-wrap:fullscreen video {
-  max-height: 100vh;
-  max-width: 100vw;
-  width: auto;
-  height: 100%;
-  margin: 0 auto;
-}
-.cvp-wrap:-webkit-full-screen,
-.cvp-wrap:fullscreen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #000;
-  max-width: 100vw;
-}
-
 
 .msg-audio { width: 200px; margin-top: 6px; accent-color: var(--accent); }
 .msg-file { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.1); padding: 10px 12px; border-radius: 12px; margin-top: 6px; font-size: 13px; text-decoration: none; color: inherit; cursor: pointer; transition: background .15s; }
@@ -3133,122 +3102,47 @@ video {
   pointer-events: none;
 }
 
-/* ════════════════════════════════════════════════
-   SQUARE FULLSCREEN OVERLAY — улучшенный
-════════════════════════════════════════════════ */
-.vc-fs-overlay {
-  position: fixed; inset: 0; z-index: 9999;
-  background: rgba(0,0,0,.96);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  animation: fadeIn .18s ease;
-  touch-action: none;
-}
-.vc-fs-video-wrap {
-  position: relative;
-  display: flex; align-items: center; justify-content: center;
-  max-width: 96vw; max-height: 82vh;
-  border-radius: 20px; overflow: hidden;
-}
-.vc-fs-video-wrap video {
-  display: block;
-  border-radius: 20px;
-  box-shadow: 0 8px 48px rgba(0,0,0,.6);
-  /* поддержка вертикальных видео */
-  max-width: 92vw;
-  max-height: 80vh;
-  width: auto; height: auto;
-  object-fit: contain;
-  background: #000;
-}
-/* Вертикальное видео в fullscreen */
-.vc-fs-video-wrap.vc-fs-portrait video {
-  max-width: 70vw;
-  max-height: 84vh;
-}
-/* Горизонтальное видео в fullscreen */
-.vc-fs-video-wrap.vc-fs-landscape video {
-  max-width: 92vw;
-  max-height: 75vh;
-}
-.vc-fs-controls {
-  display: flex; align-items: center; gap: 12px;
-  margin-top: 18px;
-}
-.vc-fs-btn {
-  background: rgba(255,255,255,.12);
-  border: 1px solid rgba(255,255,255,.18);
-  color: #fff; padding: 9px 22px;
-  border-radius: 22px; font-size: 14px;
-  cursor: pointer; font-family: inherit;
-  display: flex; align-items: center; gap: 7px;
-  transition: background .15s;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-.vc-fs-btn:hover { background: rgba(255,255,255,.2); }
-.vc-fs-btn.danger { background: rgba(239,68,68,.25); border-color: rgba(239,68,68,.35); }
-.vc-fs-btn.danger:hover { background: rgba(239,68,68,.4); }
-.vc-fs-hint {
-  color: rgba(255,255,255,.35);
-  font-size: 11px; margin-top: 10px; text-align: center;
-}
-/* Прогресс в FS */
-.vc-fs-progress {
-  width: min(400px, 88vw); height: 4px;
-  background: rgba(255,255,255,.18);
-  border-radius: 99px; cursor: pointer;
-  margin-top: 14px; position: relative;
-}
-.vc-fs-progress-fill {
-  height: 100%; background: var(--accent);
-  border-radius: 99px; width: 0%;
-  pointer-events: none; transition: width .1s linear;
-}
 
-/* ════════════════════════════════════════════════
-   TEXT FORMAT BAR — панель форматирования
-════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════
+   TEXT FORMAT BAR
+════════════════════════════════════════════ */
 .fmt-bar {
   position: fixed;
   z-index: 99000;
   background: var(--surface);
   border: 1px solid var(--border2);
   border-radius: 12px;
-  padding: 5px 7px;
+  padding: 4px 6px;
   display: flex;
   align-items: center;
   gap: 2px;
-  box-shadow: 0 4px 24px rgba(0,0,0,.35);
+  box-shadow: 0 4px 20px rgba(0,0,0,.35);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   animation: fadeUp .12s ease;
   user-select: none;
   -webkit-user-select: none;
+  pointer-events: all;
 }
 .fmt-btn {
   width: 30px; height: 30px;
-  border-radius: 8px;
+  border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
   background: none; border: none;
   color: var(--text2); cursor: pointer;
-  font-size: 14px; font-family: inherit;
-  font-weight: 700;
+  font-size: 13px; font-family: inherit;
   transition: background .12s, color .12s;
   flex-shrink: 0;
+  line-height: 1;
 }
 .fmt-btn:hover { background: var(--hover); color: var(--text); }
-.fmt-btn.active { background: var(--accent-dim); color: var(--accent); }
 .fmt-sep {
-  width: 1px; height: 20px;
-  background: var(--border);
-  margin: 0 2px; flex-shrink: 0;
+  width: 1px; height: 18px;
+  background: var(--border); margin: 0 3px; flex-shrink: 0;
 }
-/* Ссылка — инпут */
 .fmt-link-row {
-  display: flex; align-items: center; gap-6px;
-  gap: 6px;
-  padding: 2px 2px 2px 6px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 2px 2px 2px 8px;
   background: var(--surface3);
   border-radius: 8px;
   border: 1px solid var(--border2);
@@ -3256,36 +3150,40 @@ video {
 .fmt-link-input {
   width: 180px; border: none; background: transparent;
   color: var(--text); font-size: 12px; outline: none;
-  font-family: inherit;
-  padding: 4px 0;
+  font-family: inherit; padding: 4px 0;
 }
 .fmt-link-input::placeholder { color: var(--text3); }
 .fmt-link-ok {
   width: 26px; height: 26px; border-radius: 6px;
-  background: var(--accent); color: #fff;
-  border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; flex-shrink: 0;
-  transition: opacity .15s;
+  background: var(--accent); color: #fff; border: none;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0; transition: opacity .15s;
 }
 .fmt-link-ok:hover { opacity: .85; }
 
-/* ── Ссылки в сообщениях ── */
+/* ════════════════════════════════════════════
+   MESSAGE TEXT FORMATTING
+════════════════════════════════════════════ */
+.msg-text strong { font-weight: 700; }
+.msg-text em     { font-style: italic; }
+.msg-text u      { text-decoration: underline; text-underline-offset: 2px; }
+.msg-text s      { text-decoration: line-through; opacity: .75; }
+.msg-code {
+  background: rgba(0,0,0,.18);
+  padding: 1px 5px; border-radius: 5px;
+  font-family: 'Geist Mono', monospace; font-size: 12px;
+}
 .msg-link {
   color: var(--accent);
   text-decoration: underline;
-  text-decoration-color: rgba(99,102,241,.4);
+  text-decoration-color: rgba(99,102,241,.45);
   text-underline-offset: 2px;
   word-break: break-all;
   transition: text-decoration-color .15s;
 }
 .msg-link:hover { text-decoration-color: var(--accent); }
-.msg-row.own .msg-link { color: rgba(255,255,255,.9); text-decoration-color: rgba(255,255,255,.4); }
+.msg-row.own .msg-link {
+  color: rgba(255,255,255,.92);
+  text-decoration-color: rgba(255,255,255,.4);
+}
 .msg-row.own .msg-link:hover { text-decoration-color: #fff; }
-
-/* ── Форматирование в сообщениях ── */
-.msg-text strong { font-weight: 700; }
-.msg-text em     { font-style: italic; }
-.msg-text u      { text-decoration: underline; }
-.msg-text s      { text-decoration: line-through; opacity: .75; }
-.msg-text code   { font-size: 12px; }
