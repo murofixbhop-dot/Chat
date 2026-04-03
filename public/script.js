@@ -93,6 +93,29 @@ function buildCustomVideoPlayer(src) {
     const d = fmt(vid.duration);
     timeEl.textContent = `0:00 / ${d}`;
     badge.querySelector('.cvp-badge-dur').textContent = d;
+
+    // Определяем ориентацию и задаём правильные размеры
+    const vw = vid.videoWidth  || 1;
+    const vh = vid.videoHeight || 1;
+    const isPortrait = vh > vw;
+    const ratio = vh / vw;
+
+    if (isPortrait) {
+      // Вертикальное видео — ширина 220px, высота пропорционально, но не больше 400px
+      const w = 220;
+      const h = Math.min(Math.round(w * ratio), 400);
+      wrap.style.width    = w + 'px';
+      wrap.style.maxWidth = w + 'px';
+      vid.style.width     = '100%';
+      vid.style.height    = h + 'px';
+      vid.style.maxHeight = h + 'px';
+      vid.style.objectFit = 'cover';
+    } else {
+      // Горизонтальное — стандартная ширина, ограничиваем высоту
+      wrap.style.maxWidth = '340px';
+      vid.style.maxHeight = '260px';
+      vid.style.objectFit = 'contain';
+    }
   });
   vid.addEventListener('timeupdate', () => {
     if (!vid.duration) return;
@@ -1481,23 +1504,16 @@ socket.on('message', msg => {
 socket.on('system', addSystem);
 
 // Конвертирует URL файла в рабочий src
-// Supabase public URL — оставляем как есть
-// B2 URL — оборачиваем в /api/dl прокси
 function fileUrl(url) {
   if (!url) return url;
-  // Уже прокси — не трогаем
-  if (url.startsWith('/api/dl')) return url;
-  // Supabase public URL — отдаём напрямую (не нужен прокси)
-  if (url.includes('.supabase.co/storage/')) return url;
-  // Относительный путь /uploads/... или /api/... — не трогаем
-  if (url.startsWith('/')) return url;
-  // data: URL — не трогаем
-  if (url.startsWith('data:')) return url;
-  // Извлекаем путь файла из B2 URL: /file/BUCKET/photos/...
+  if (url.startsWith('/api/dl')) return url;         // уже прокси
+  if (url.startsWith('data:'))   return url;         // data URI
+  if (url.startsWith('/'))       return url;         // относительный
+  if (url.includes('.supabase.co/storage/')) return url; // Supabase public — напрямую
+  // B2: /file/BUCKET/path → /api/dl?f=path
   const m = url.match(/\/file\/[^/]+\/(.+?)(\?|$)/);
   if (m) return '/api/dl?f=' + encodeURIComponent(m[1]);
-  // Любой другой внешний URL (например CDN) — напрямую
-  return url;
+  return url; // любой другой внешний URL
 }
 
 
@@ -1630,7 +1646,7 @@ function addMessage(msg) {
 
   if (msg.type === 'image') {
     const u = fileUrl(msg.url);
-    inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="фото" onerror="this.dataset.retry=(+this.dataset.retry||0)+1;if(this.dataset.retry<4){const t=this;setTimeout(()=>{t.src=t.src.split('?')[0]+'?r='+Date.now()},2000*this.dataset.retry)}else{this.style.opacity='.3'}"></div>`;
+    inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="фото" onerror="this.dataset.retry=(+this.dataset.retry||0)+1;if(this.dataset.retry<4){const t=this;setTimeout(()=>{t.src=t.src.split('?')[0]+'?r='+Date.now()},2000*+this.dataset.retry)}else{this.classList.add('img-broken')}"></div>`;
     if (msg.text) inner += `<div class="msg-text">${renderMsgText(msg.text)}</div>`;
   } else if (msg.type === 'video') {
     const u = fileUrl(msg.url);
@@ -7791,16 +7807,16 @@ function vcShowDuration(id) {
     if (!ta || ta._fmtOk) return;
     ta._fmtOk = true;
 
-    // Показываем панель ТОЛЬКО по ПКМ (правая кнопка), если есть выделение
+    // Панель появляется ТОЛЬКО по ПКМ и только если есть выделение
     ta.addEventListener('contextmenu', e => {
       const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
-      if (!sel) return; // нет выделения — стандартное браузерное меню
+      if (!sel) return; // нет выделения — даём браузеру показать стандартное меню
       e.preventDefault();
       e.stopPropagation();
       makeBar(ta, e.clientX, e.clientY);
     });
 
-    // Touch: длинное нажатие с выделением
+    // Touch: показываем после долгого нажатия/выделения
     ta.addEventListener('touchend', () => {
       setTimeout(() => {
         const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
