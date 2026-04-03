@@ -93,6 +93,10 @@ function buildCustomVideoPlayer(src) {
     const d = fmt(vid.duration);
     timeEl.textContent = `0:00 / ${d}`;
     badge.querySelector('.cvp-badge-dur').textContent = d;
+    // Определяем вертикальное видео — меняем класс обёртки
+    if (vid.videoHeight > vid.videoWidth) {
+      wrap.classList.add('cvp-portrait');
+    }
   });
   vid.addEventListener('timeupdate', () => {
     if (!vid.duration) return;
@@ -149,16 +153,19 @@ function buildCustomVideoPlayer(src) {
 
   fsBtn.addEventListener('click', e => {
     e.stopPropagation();
-    if (!document.fullscreenElement) {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
       (wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullScreen)?.call(wrap);
     } else {
       (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
     }
   });
   document.addEventListener('fullscreenchange', () => {
-    fsBtn.innerHTML = document.fullscreenElement
-      ? `<i class="ti ti-arrows-minimize"></i>`
-      : `<i class="ti ti-arrows-maximize"></i>`;
+    const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    fsBtn.innerHTML = inFs ? `<i class="ti ti-arrows-minimize"></i>` : `<i class="ti ti-arrows-maximize"></i>`;
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    fsBtn.innerHTML = inFs ? `<i class="ti ti-arrows-minimize"></i>` : `<i class="ti ti-arrows-maximize"></i>`;
   });
 
   return wrap;
@@ -7564,46 +7571,106 @@ function _vcOpenFullscreen(id) {
   if (_vcExpandedId === id) _vcCollapse(id);
 
   const src = v.src || v.currentSrc;
+  const currentTime = v.currentTime || 0;
+
+  // Определяем ориентацию по видео-элементу
+  const isPortrait = (v.videoHeight || 0) > (v.videoWidth || 1);
+
   const overlay = document.createElement('div');
   overlay.id = id + '_fso';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;animation:fadeIn .2s ease;touch-action:none;';
+  overlay.className = 'vc-fs-overlay';
 
-  const vSize = Math.min(window.innerWidth * 0.92, window.innerHeight * 0.78, 520);
+  // Видео-обёртка с правильным классом
+  const vidWrap = document.createElement('div');
+  vidWrap.className = 'vc-fs-video-wrap' + (isPortrait ? ' vc-fs-portrait' : ' vc-fs-landscape');
+
   const vid2 = document.createElement('video');
   vid2.src = src;
-  vid2.controls = true;
   vid2.autoplay = true;
   vid2.playsInline = true;
   vid2.loop = true;
-  vid2.setAttribute('playsinline','');
-  vid2.style.cssText = `width:${vSize}px;height:${vSize}px;object-fit:cover;border-radius:18px;display:block;box-shadow:0 8px 48px rgba(0,0,0,.6);`;
+  vid2.setAttribute('playsinline', '');
+  vid2.setAttribute('webkit-playsinline', '');
 
-  const hint = document.createElement('div');
-  hint.style.cssText = 'color:rgba(255,255,255,.45);font-size:12px;text-align:center;';
-  hint.textContent = 'Дважды нажмите для закрытия';
-
-  const closeBtn = document.createElement('button');
-  closeBtn.style.cssText = 'background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:9px 28px;border-radius:22px;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);font-family:inherit;';
-  closeBtn.innerHTML = '<i class="ti ti-x"></i> Закрыть';
-  closeBtn.onclick = () => overlay.remove();
-
-  overlay.appendChild(vid2);
-  overlay.appendChild(hint);
-  overlay.appendChild(closeBtn);
-
-  // Закрытие по двойному тапу или клику вне видео
-  let _fsoTaps = 0, _fsoTimer = null;
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay || e.target === hint) {
-      _fsoTaps++;
-      clearTimeout(_fsoTimer);
-      _fsoTimer = setTimeout(() => { _fsoTaps = 0; }, 350);
-      if (_fsoTaps >= 2) overlay.remove();
+  vid2.addEventListener('loadedmetadata', () => {
+    // Перепроверяем ориентацию по реальным размерам
+    if (vid2.videoHeight > vid2.videoWidth) {
+      vidWrap.classList.add('vc-fs-portrait');
+      vidWrap.classList.remove('vc-fs-landscape');
+    } else {
+      vidWrap.classList.add('vc-fs-landscape');
+      vidWrap.classList.remove('vc-fs-portrait');
     }
+    vid2.currentTime = currentTime;
+    vid2.play().catch(() => {});
+    // Обновляем длительность
+    const m = Math.floor(vid2.duration/60), s = Math.floor(vid2.duration%60);
+    durEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
   });
 
+  vidWrap.appendChild(vid2);
+  overlay.appendChild(vidWrap);
+
+  // Прогресс-бар
+  const progWrap = document.createElement('div');
+  progWrap.className = 'vc-fs-progress';
+  const progFill = document.createElement('div');
+  progFill.className = 'vc-fs-progress-fill';
+  progWrap.appendChild(progFill);
+  progWrap.addEventListener('click', e => {
+    const r = progWrap.getBoundingClientRect();
+    if (vid2.duration) vid2.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * vid2.duration;
+  });
+  vid2.addEventListener('timeupdate', () => {
+    if (vid2.duration) progFill.style.width = (vid2.currentTime / vid2.duration * 100) + '%';
+    const m = Math.floor(vid2.currentTime/60), s = Math.floor(vid2.currentTime%60);
+    curEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  });
+  overlay.appendChild(progWrap);
+
+  // Кнопки управления
+  const controls = document.createElement('div');
+  controls.className = 'vc-fs-controls';
+
+  const curEl = document.createElement('span');
+  curEl.style.cssText = 'color:rgba(255,255,255,.6);font-size:12px;font-variant-numeric:tabular-nums;min-width:36px;';
+  curEl.textContent = '0:00';
+
+  const durEl = document.createElement('span');
+  durEl.style.cssText = 'color:rgba(255,255,255,.4);font-size:12px;font-variant-numeric:tabular-nums;min-width:36px;text-align:right;';
+  durEl.textContent = '—';
+
+  const playPauseBtn = document.createElement('button');
+  playPauseBtn.className = 'vc-fs-btn';
+  playPauseBtn.innerHTML = '<i class="ti ti-player-pause"></i>';
+  playPauseBtn.onclick = () => {
+    if (vid2.paused) { vid2.play(); playPauseBtn.innerHTML = '<i class="ti ti-player-pause"></i>'; }
+    else { vid2.pause(); playPauseBtn.innerHTML = '<i class="ti ti-player-play"></i>'; }
+  };
+
+  const muteBtn2 = document.createElement('button');
+  muteBtn2.className = 'vc-fs-btn';
+  muteBtn2.innerHTML = '<i class="ti ti-volume"></i>';
+  muteBtn2.onclick = () => {
+    vid2.muted = !vid2.muted;
+    muteBtn2.innerHTML = vid2.muted ? '<i class="ti ti-volume-off"></i>' : '<i class="ti ti-volume"></i>';
+  };
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'vc-fs-btn danger';
+  closeBtn.innerHTML = '<i class="ti ti-x"></i> Закрыть';
+  closeBtn.onclick = () => { vid2.pause(); overlay.remove(); };
+
+  controls.append(curEl, playPauseBtn, muteBtn2, durEl, closeBtn);
+  overlay.appendChild(controls);
+
+  // Закрытие по клику на фон или Escape
+  overlay.addEventListener('click', e => { if (e.target === overlay) { vid2.pause(); overlay.remove(); } });
+  const onKey = e => { if (e.key === 'Escape') { vid2.pause(); overlay.remove(); document.removeEventListener('keydown', onKey); } };
+  document.addEventListener('keydown', onKey);
+
   document.body.appendChild(overlay);
-  v.pause(); // пауза оригинала
+  v.pause();
 }
 
 function _vcCloseFullscreen(id) {
@@ -7632,8 +7699,205 @@ function vcShowDuration(id) {
 }
 
 // ══════════════════════════════════════════════
-// VOICE PLAYER  ← КРАСОТА + УДОБСТВО
+// TEXT FORMAT BAR — панель форматирования текста
+// Появляется при выделении текста в поле ввода
 // ══════════════════════════════════════════════
+(function initFormatBar() {
+  let _fmtBar = null;
+  let _fmtLinkMode = false;
+
+  function removeFmtBar() {
+    _fmtBar?.remove();
+    _fmtBar = null;
+    _fmtLinkMode = false;
+  }
+
+  // Вставка markdown-тега вокруг выделенного текста
+  function wrapSelection(ta, before, after) {
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    if (start === end) return;
+    const sel = ta.value.slice(start, end);
+    const newVal = ta.value.slice(0, start) + before + sel + after + ta.value.slice(end);
+    ta.value = newVal;
+    ta.selectionStart = start + before.length;
+    ta.selectionEnd   = end   + before.length;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+  }
+
+  function buildFmtBar(ta, x, y) {
+    removeFmtBar();
+    _fmtLinkMode = false;
+
+    const bar = document.createElement('div');
+    bar.className = 'fmt-bar';
+    _fmtBar = bar;
+
+    const btns = [
+      { label: 'B',  title: 'Жирный',       style: 'font-weight:800',             action: () => wrapSelection(ta, '**', '**') },
+      { label: 'I',  title: 'Курсив',        style: 'font-style:italic',           action: () => wrapSelection(ta, '_', '_') },
+      { label: 'U',  title: 'Подчёркнутый',  style: 'text-decoration:underline',   action: () => wrapSelection(ta, '__', '__') },
+      { label: 'S',  title: 'Зачёркнутый',   style: 'text-decoration:line-through',action: () => wrapSelection(ta, '~~', '~~') },
+      { label: '<>', title: 'Моноширинный',   style: 'font-family:monospace',       action: () => wrapSelection(ta, '`', '`') },
+    ];
+
+    btns.forEach(b => {
+      const btn = document.createElement('button');
+      btn.className = 'fmt-btn';
+      btn.title = b.title;
+      btn.style.cssText = b.style;
+      btn.textContent = b.label;
+      btn.addEventListener('mousedown', e => { e.preventDefault(); b.action(); removeFmtBar(); });
+      btn.addEventListener('touchstart', e => { e.preventDefault(); b.action(); removeFmtBar(); }, { passive: false });
+      bar.appendChild(btn);
+    });
+
+    // Разделитель
+    const sep = document.createElement('div');
+    sep.className = 'fmt-sep';
+    bar.appendChild(sep);
+
+    // Кнопка ссылки
+    const linkBtn = document.createElement('button');
+    linkBtn.className = 'fmt-btn';
+    linkBtn.title = 'Вставить ссылку';
+    linkBtn.innerHTML = '<i class="ti ti-link" style="font-weight:400"></i>';
+    linkBtn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      showLinkInput(ta, bar);
+    });
+    linkBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      showLinkInput(ta, bar);
+    }, { passive: false });
+    bar.appendChild(linkBtn);
+
+    // Позиционирование
+    document.body.appendChild(bar);
+    const bw = bar.offsetWidth || 260;
+    const bh = bar.offsetHeight || 44;
+    let left = x - bw / 2;
+    let top  = y - bh - 10;
+    left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
+    top  = Math.max(8, top);
+    bar.style.left = left + 'px';
+    bar.style.top  = top  + 'px';
+  }
+
+  function showLinkInput(ta, bar) {
+    if (_fmtLinkMode) return;
+    _fmtLinkMode = true;
+
+    // Очищаем кнопки, показываем инпут
+    bar.innerHTML = '';
+
+    const row = document.createElement('div');
+    row.className = 'fmt-link-row';
+
+    const inp = document.createElement('input');
+    inp.className = 'fmt-link-input';
+    inp.placeholder = 'https://example.com';
+    inp.type = 'url';
+
+    const okBtn = document.createElement('button');
+    okBtn.className = 'fmt-link-ok';
+    okBtn.innerHTML = '<i class="ti ti-check"></i>';
+    okBtn.title = 'Применить';
+
+    const applyLink = () => {
+      let url = inp.value.trim();
+      if (!url) { removeFmtBar(); ta.focus(); return; }
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      const start = ta.selectionStart;
+      const end   = ta.selectionEnd;
+      const sel   = ta.value.slice(start, end) || url;
+      const md    = `[${sel}](${url})`;
+      ta.value = ta.value.slice(0, start) + md + ta.value.slice(end);
+      ta.selectionStart = ta.selectionEnd = start + md.length;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      removeFmtBar();
+      ta.focus();
+    };
+
+    okBtn.addEventListener('mousedown', e => { e.preventDefault(); applyLink(); });
+    okBtn.addEventListener('touchstart', e => { e.preventDefault(); applyLink(); }, { passive: false });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
+      if (e.key === 'Escape') { removeFmtBar(); ta.focus(); }
+    });
+
+    row.appendChild(inp);
+    row.appendChild(okBtn);
+    bar.appendChild(row);
+
+    // Пересчитываем позицию (стала шире)
+    requestAnimationFrame(() => {
+      const bw = bar.offsetWidth || 260;
+      let left = parseFloat(bar.style.left) - (bw - 44) / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
+      bar.style.left = left + 'px';
+      inp.focus();
+    });
+  }
+
+  // Навешиваем на msgInput
+  function attachTo(ta) {
+    if (!ta) return;
+
+    // Правая кнопка мыши — показываем панель если есть выделение
+    ta.addEventListener('contextmenu', e => {
+      const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
+      if (!sel) { removeFmtBar(); return; } // нет выделения — стандартное меню
+      e.preventDefault();
+      buildFmtBar(ta, e.clientX, e.clientY);
+    });
+
+    // Отпускание кнопки мыши — если есть выделение, показываем над ним
+    ta.addEventListener('mouseup', e => {
+      if (e.button !== 0) return;
+      setTimeout(() => {
+        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
+        if (!sel) { removeFmtBar(); return; }
+        // Позиция — над серединой выделения
+        const r = ta.getBoundingClientRect();
+        buildFmtBar(ta, r.left + r.width / 2, r.top);
+      }, 0);
+    });
+
+    // Touch — конец выделения
+    ta.addEventListener('touchend', () => {
+      setTimeout(() => {
+        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
+        if (!sel) { removeFmtBar(); return; }
+        const r = ta.getBoundingClientRect();
+        buildFmtBar(ta, r.left + r.width / 2, r.top);
+      }, 120);
+    });
+  }
+
+  // Закрытие панели при клике вне
+  document.addEventListener('mousedown', e => {
+    if (_fmtBar && !_fmtBar.contains(e.target)) removeFmtBar();
+  });
+  document.addEventListener('touchstart', e => {
+    if (_fmtBar && !_fmtBar.contains(e.target)) removeFmtBar();
+  }, { passive: true });
+
+  // Прикрепляем после загрузки DOM
+  document.addEventListener('DOMContentLoaded', () => {
+    const ta = document.getElementById('msgInput');
+    attachTo(ta);
+  });
+  if (document.readyState !== 'loading') {
+    const ta = document.getElementById('msgInput');
+    attachTo(ta);
+  }
+})();
+
+
 const _vpAudios = {}; // pid -> Audio element
 
 function _vpGetOrCreate(pid, url) {
