@@ -37,7 +37,7 @@ async function sbUpload(fileName, buffer, contentType) {
   const url = `${SB_URL}/storage/v1/object/${SB_BUCKET}/${fileName}`;
   await axios.post(url, buffer, {
     headers: {
-      'Authorization': Bearer ${SB_KEY},
+      'Authorization': `Bearer ${SB_KEY}`,
       'Content-Type': contentType  'application/octet-stream',
       'x-upsert': 'true'
     },
