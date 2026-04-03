@@ -93,10 +93,6 @@ function buildCustomVideoPlayer(src) {
     const d = fmt(vid.duration);
     timeEl.textContent = `0:00 / ${d}`;
     badge.querySelector('.cvp-badge-dur').textContent = d;
-    // Определяем вертикальное видео — меняем класс обёртки
-    if (vid.videoHeight > vid.videoWidth) {
-      wrap.classList.add('cvp-portrait');
-    }
   });
   vid.addEventListener('timeupdate', () => {
     if (!vid.duration) return;
@@ -153,19 +149,16 @@ function buildCustomVideoPlayer(src) {
 
   fsBtn.addEventListener('click', e => {
     e.stopPropagation();
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    if (!document.fullscreenElement) {
       (wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullScreen)?.call(wrap);
     } else {
       (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
     }
   });
   document.addEventListener('fullscreenchange', () => {
-    const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-    fsBtn.innerHTML = inFs ? `<i class="ti ti-arrows-minimize"></i>` : `<i class="ti ti-arrows-maximize"></i>`;
-  });
-  document.addEventListener('webkitfullscreenchange', () => {
-    const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-    fsBtn.innerHTML = inFs ? `<i class="ti ti-arrows-minimize"></i>` : `<i class="ti ti-arrows-maximize"></i>`;
+    fsBtn.innerHTML = document.fullscreenElement
+      ? `<i class="ti ti-arrows-minimize"></i>`
+      : `<i class="ti ti-arrows-maximize"></i>`;
   });
 
   return wrap;
@@ -1799,32 +1792,23 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
-// Рендер текста сообщения с поддержкой markdown-форматирования и ссылок
+// Рендер текста сообщения: markdown + автоссылки
 function renderMsgText(s) {
-  // Экранируем HTML (без замены \n — делаем ниже)
   let t = String(s)
     .replace(/&/g,'&amp;')
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;');
-
-  // Форматирование (порядок важен: сначала многосимвольные)
   t = t
-    // Жирный: **text** или __text__ (двойной)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*\*(.+?)\*\*/g,  '<strong>$1</strong>')
+    .replace(/~~(.+?)~~/g,         '<s>$1</s>')
     .replace(/(?<![_])__(?!_)(.+?)__(?![_])/g, '<u>$1</u>')
-    // Курсив: _text_ (одиночный)
-    .replace(/(?<![_])_(?!_)(.+?)_(?![_])/g, '<em>$1</em>')
-    // Зачёркнутый: ~~text~~
-    .replace(/~~(.+?)~~/g, '<s>$1</s>')
-    // Моноширинный: `code`
-    .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.18);padding:1px 5px;border-radius:5px;font-family:monospace;font-size:12px">$1</code>')
-    // Markdown-ссылка: [текст](url)
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="msg-link">$1</a>')
-    // Голая ссылка: http(s)://...
-    .replace(/(^|[\s>])(https?:\/\/[^\s<"]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer" class="msg-link">$2</a>');
-
-  // Перевод строки
-  t = t.replace(/\n/g, '<br>');
+    .replace(/(?<![_*])_(?!_)(.+?)_(?![_*])/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code class="msg-code">$1</code>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+             '<a href="$2" target="_blank" rel="noopener" class="msg-link">$1</a>')
+    .replace(/(^|[\s])(https?:\/\/[^\s<"]+)/g,
+             '$1<a href="$2" target="_blank" rel="noopener" class="msg-link">$2</a>');
+  t = t.replace(/\n/g,'<br>');
   return t;
 }
 
@@ -7600,106 +7584,46 @@ function _vcOpenFullscreen(id) {
   if (_vcExpandedId === id) _vcCollapse(id);
 
   const src = v.src || v.currentSrc;
-  const currentTime = v.currentTime || 0;
-
-  // Определяем ориентацию по видео-элементу
-  const isPortrait = (v.videoHeight || 0) > (v.videoWidth || 1);
-
   const overlay = document.createElement('div');
   overlay.id = id + '_fso';
-  overlay.className = 'vc-fs-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;animation:fadeIn .2s ease;touch-action:none;';
 
-  // Видео-обёртка с правильным классом
-  const vidWrap = document.createElement('div');
-  vidWrap.className = 'vc-fs-video-wrap' + (isPortrait ? ' vc-fs-portrait' : ' vc-fs-landscape');
-
+  const vSize = Math.min(window.innerWidth * 0.92, window.innerHeight * 0.78, 520);
   const vid2 = document.createElement('video');
   vid2.src = src;
+  vid2.controls = true;
   vid2.autoplay = true;
   vid2.playsInline = true;
   vid2.loop = true;
-  vid2.setAttribute('playsinline', '');
-  vid2.setAttribute('webkit-playsinline', '');
+  vid2.setAttribute('playsinline','');
+  vid2.style.cssText = `width:${vSize}px;height:${vSize}px;object-fit:cover;border-radius:18px;display:block;box-shadow:0 8px 48px rgba(0,0,0,.6);`;
 
-  vid2.addEventListener('loadedmetadata', () => {
-    // Перепроверяем ориентацию по реальным размерам
-    if (vid2.videoHeight > vid2.videoWidth) {
-      vidWrap.classList.add('vc-fs-portrait');
-      vidWrap.classList.remove('vc-fs-landscape');
-    } else {
-      vidWrap.classList.add('vc-fs-landscape');
-      vidWrap.classList.remove('vc-fs-portrait');
-    }
-    vid2.currentTime = currentTime;
-    vid2.play().catch(() => {});
-    // Обновляем длительность
-    const m = Math.floor(vid2.duration/60), s = Math.floor(vid2.duration%60);
-    durEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
-  });
-
-  vidWrap.appendChild(vid2);
-  overlay.appendChild(vidWrap);
-
-  // Прогресс-бар
-  const progWrap = document.createElement('div');
-  progWrap.className = 'vc-fs-progress';
-  const progFill = document.createElement('div');
-  progFill.className = 'vc-fs-progress-fill';
-  progWrap.appendChild(progFill);
-  progWrap.addEventListener('click', e => {
-    const r = progWrap.getBoundingClientRect();
-    if (vid2.duration) vid2.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * vid2.duration;
-  });
-  vid2.addEventListener('timeupdate', () => {
-    if (vid2.duration) progFill.style.width = (vid2.currentTime / vid2.duration * 100) + '%';
-    const m = Math.floor(vid2.currentTime/60), s = Math.floor(vid2.currentTime%60);
-    curEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
-  });
-  overlay.appendChild(progWrap);
-
-  // Кнопки управления
-  const controls = document.createElement('div');
-  controls.className = 'vc-fs-controls';
-
-  const curEl = document.createElement('span');
-  curEl.style.cssText = 'color:rgba(255,255,255,.6);font-size:12px;font-variant-numeric:tabular-nums;min-width:36px;';
-  curEl.textContent = '0:00';
-
-  const durEl = document.createElement('span');
-  durEl.style.cssText = 'color:rgba(255,255,255,.4);font-size:12px;font-variant-numeric:tabular-nums;min-width:36px;text-align:right;';
-  durEl.textContent = '—';
-
-  const playPauseBtn = document.createElement('button');
-  playPauseBtn.className = 'vc-fs-btn';
-  playPauseBtn.innerHTML = '<i class="ti ti-player-pause"></i>';
-  playPauseBtn.onclick = () => {
-    if (vid2.paused) { vid2.play(); playPauseBtn.innerHTML = '<i class="ti ti-player-pause"></i>'; }
-    else { vid2.pause(); playPauseBtn.innerHTML = '<i class="ti ti-player-play"></i>'; }
-  };
-
-  const muteBtn2 = document.createElement('button');
-  muteBtn2.className = 'vc-fs-btn';
-  muteBtn2.innerHTML = '<i class="ti ti-volume"></i>';
-  muteBtn2.onclick = () => {
-    vid2.muted = !vid2.muted;
-    muteBtn2.innerHTML = vid2.muted ? '<i class="ti ti-volume-off"></i>' : '<i class="ti ti-volume"></i>';
-  };
+  const hint = document.createElement('div');
+  hint.style.cssText = 'color:rgba(255,255,255,.45);font-size:12px;text-align:center;';
+  hint.textContent = 'Дважды нажмите для закрытия';
 
   const closeBtn = document.createElement('button');
-  closeBtn.className = 'vc-fs-btn danger';
+  closeBtn.style.cssText = 'background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:9px 28px;border-radius:22px;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);font-family:inherit;';
   closeBtn.innerHTML = '<i class="ti ti-x"></i> Закрыть';
-  closeBtn.onclick = () => { vid2.pause(); overlay.remove(); };
+  closeBtn.onclick = () => overlay.remove();
 
-  controls.append(curEl, playPauseBtn, muteBtn2, durEl, closeBtn);
-  overlay.appendChild(controls);
+  overlay.appendChild(vid2);
+  overlay.appendChild(hint);
+  overlay.appendChild(closeBtn);
 
-  // Закрытие по клику на фон или Escape
-  overlay.addEventListener('click', e => { if (e.target === overlay) { vid2.pause(); overlay.remove(); } });
-  const onKey = e => { if (e.key === 'Escape') { vid2.pause(); overlay.remove(); document.removeEventListener('keydown', onKey); } };
-  document.addEventListener('keydown', onKey);
+  // Закрытие по двойному тапу или клику вне видео
+  let _fsoTaps = 0, _fsoTimer = null;
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target === hint) {
+      _fsoTaps++;
+      clearTimeout(_fsoTimer);
+      _fsoTimer = setTimeout(() => { _fsoTaps = 0; }, 350);
+      if (_fsoTaps >= 2) overlay.remove();
+    }
+  });
 
   document.body.appendChild(overlay);
-  v.pause();
+  v.pause(); // пауза оригинала
 }
 
 function _vcCloseFullscreen(id) {
@@ -7728,57 +7652,47 @@ function vcShowDuration(id) {
 }
 
 // ══════════════════════════════════════════════
-// TEXT FORMAT BAR — панель форматирования текста
-// Появляется при выделении текста в поле ввода
+// TEXT FORMAT BAR — панель форматирования
+// Появляется при выделении мышью в поле ввода
 // ══════════════════════════════════════════════
-(function initFormatBar() {
-  let _fmtBar = null;
-  let _fmtLinkMode = false;
+(function() {
+  'use strict';
+  let _bar = null;
+  let _skip = false;
 
-  function removeFmtBar() {
-    _fmtBar?.remove();
-    _fmtBar = null;
-    _fmtLinkMode = false;
-  }
+  function removeBar() { _bar && (_bar.remove(), _bar = null); }
 
-  // Вставка markdown-тега вокруг выделенного текста
-  function wrapSelection(ta, before, after) {
-    const start = ta.selectionStart;
-    const end   = ta.selectionEnd;
-    if (start === end) return;
-    const sel = ta.value.slice(start, end);
-    const newVal = ta.value.slice(0, start) + before + sel + after + ta.value.slice(end);
-    ta.value = newVal;
-    ta.selectionStart = start + before.length;
-    ta.selectionEnd   = end   + before.length;
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
+  function wrapSel(ta, before, after) {
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    if (s === e) return;
+    const sel = ta.value.slice(s, e);
+    ta.value = ta.value.slice(0,s) + before + sel + after + ta.value.slice(e);
+    ta.selectionStart = s + before.length;
+    ta.selectionEnd   = e + before.length;
+    ta.dispatchEvent(new Event('input', {bubbles:true}));
     ta.focus();
   }
 
-  function buildFmtBar(ta, x, y) {
-    removeFmtBar();
-    _fmtLinkMode = false;
-
+  function makeBar(ta, x, y) {
+    removeBar();
     const bar = document.createElement('div');
     bar.className = 'fmt-bar';
-    _fmtBar = bar;
+    _bar = bar;
 
-    const btns = [
-      { label: 'B',  title: 'Жирный',       style: 'font-weight:800',             action: () => wrapSelection(ta, '**', '**') },
-      { label: 'I',  title: 'Курсив',        style: 'font-style:italic',           action: () => wrapSelection(ta, '_', '_') },
-      { label: 'U',  title: 'Подчёркнутый',  style: 'text-decoration:underline',   action: () => wrapSelection(ta, '__', '__') },
-      { label: 'S',  title: 'Зачёркнутый',   style: 'text-decoration:line-through',action: () => wrapSelection(ta, '~~', '~~') },
-      { label: '<>', title: 'Моноширинный',   style: 'font-family:monospace',       action: () => wrapSelection(ta, '`', '`') },
+    const BTNS = [
+      { html:'<b>B</b>',   title:'Жирный',        fn:()=>wrapSel(ta,'**','**') },
+      { html:'<i>I</i>',   title:'Курсив',         fn:()=>wrapSel(ta,'_','_') },
+      { html:'<u>U</u>',   title:'Подчёркнутый',   fn:()=>wrapSel(ta,'__','__') },
+      { html:'<s>S</s>',   title:'Зачёркнутый',    fn:()=>wrapSel(ta,'~~','~~') },
+      { html:'<code style="font-size:11px;font-family:monospace">`·`</code>', title:'Моноширинный', fn:()=>wrapSel(ta,'`','`') },
     ];
 
-    btns.forEach(b => {
+    BTNS.forEach(b => {
       const btn = document.createElement('button');
       btn.className = 'fmt-btn';
       btn.title = b.title;
-      btn.style.cssText = b.style;
-      btn.textContent = b.label;
-      btn.addEventListener('mousedown', e => { e.preventDefault(); b.action(); removeFmtBar(); });
-      btn.addEventListener('touchstart', e => { e.preventDefault(); b.action(); removeFmtBar(); }, { passive: false });
+      btn.innerHTML = b.html;
+      btn.addEventListener('mousedown', e => { e.preventDefault(); b.fn(); removeBar(); });
       bar.appendChild(btn);
     });
 
@@ -7788,150 +7702,123 @@ function vcShowDuration(id) {
     bar.appendChild(sep);
 
     // Кнопка ссылки
-    const linkBtn = document.createElement('button');
-    linkBtn.className = 'fmt-btn';
-    linkBtn.title = 'Вставить ссылку';
-    linkBtn.innerHTML = '<i class="ti ti-link" style="font-weight:400"></i>';
-    linkBtn.addEventListener('mousedown', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      showLinkInput(ta, bar);
-    });
-    linkBtn.addEventListener('touchstart', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      showLinkInput(ta, bar);
-    }, { passive: false });
-    bar.appendChild(linkBtn);
+    const lBtn = document.createElement('button');
+    lBtn.className = 'fmt-btn';
+    lBtn.title = 'Вставить ссылку';
+    lBtn.innerHTML = '<i class="ti ti-link"></i>';
+    lBtn.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); showLink(ta, bar, x, y); });
+    bar.appendChild(lBtn);
 
-    // Позиционирование — после рендера чтобы получить реальную ширину
+    // Добавляем в DOM (скрытым), потом позиционируем
     bar.style.visibility = 'hidden';
     document.body.appendChild(bar);
+
     requestAnimationFrame(() => {
-      const bw = bar.offsetWidth || 260;
-      const bh = bar.offsetHeight || 44;
-      let left = x - bw / 2;
-      let top  = y - bh - 12;
-      // Не уходим за края экрана
-      left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
-      // Если выше экрана — показываем снизу от курсора
-      if (top < 8) top = y + 16;
-      bar.style.left = left + 'px';
-      bar.style.top  = top  + 'px';
+      const bw = bar.offsetWidth || 250;
+      const bh = bar.offsetHeight || 42;
+      let lx = x - bw / 2;
+      let ly = y - bh - 10;
+      lx = Math.max(6, Math.min(lx, window.innerWidth  - bw - 6));
+      ly = ly < 6 ? y + 10 : ly;
+      bar.style.left = lx + 'px';
+      bar.style.top  = ly + 'px';
       bar.style.visibility = '';
     });
   }
 
-  function showLinkInput(ta, bar) {
-    if (_fmtLinkMode) return;
-    _fmtLinkMode = true;
-
-    // Очищаем кнопки, показываем инпут
+  function showLink(ta, bar, ox, oy) {
+    // Сохраняем позицию выделения
+    const ss = ta.selectionStart, se = ta.selectionEnd;
     bar.innerHTML = '';
-
     const row = document.createElement('div');
     row.className = 'fmt-link-row';
-
     const inp = document.createElement('input');
     inp.className = 'fmt-link-input';
-    inp.placeholder = 'https://example.com';
-    inp.type = 'url';
+    inp.placeholder = 'https://...';
+    inp.type = 'text';
+    const ok = document.createElement('button');
+    ok.className = 'fmt-link-ok';
+    ok.innerHTML = '<i class="ti ti-check"></i>';
 
-    const okBtn = document.createElement('button');
-    okBtn.className = 'fmt-link-ok';
-    okBtn.innerHTML = '<i class="ti ti-check"></i>';
-    okBtn.title = 'Применить';
-
-    const applyLink = () => {
+    const apply = () => {
       let url = inp.value.trim();
-      if (!url) { removeFmtBar(); ta.focus(); return; }
+      if (!url) { removeBar(); ta.focus(); return; }
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-      const start = ta.selectionStart;
-      const end   = ta.selectionEnd;
-      const sel   = ta.value.slice(start, end) || url;
-      const md    = `[${sel}](${url})`;
-      ta.value = ta.value.slice(0, start) + md + ta.value.slice(end);
-      ta.selectionStart = ta.selectionEnd = start + md.length;
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      removeFmtBar();
-      ta.focus();
+      const sel = ta.value.slice(ss, se) || url;
+      const md  = '[' + sel + '](' + url + ')';
+      ta.value = ta.value.slice(0, ss) + md + ta.value.slice(se);
+      ta.selectionStart = ta.selectionEnd = ss + md.length;
+      ta.dispatchEvent(new Event('input', {bubbles:true}));
+      removeBar(); ta.focus();
     };
 
-    okBtn.addEventListener('mousedown', e => { e.preventDefault(); applyLink(); });
-    okBtn.addEventListener('touchstart', e => { e.preventDefault(); applyLink(); }, { passive: false });
+    ok.addEventListener('mousedown', e => { e.preventDefault(); apply(); });
     inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
-      if (e.key === 'Escape') { removeFmtBar(); ta.focus(); }
+      if (e.key === 'Enter')  { e.preventDefault(); apply(); }
+      if (e.key === 'Escape') { removeBar(); ta.focus(); }
     });
 
-    row.appendChild(inp);
-    row.appendChild(okBtn);
+    row.appendChild(inp); row.appendChild(ok);
     bar.appendChild(row);
 
-    // Пересчитываем позицию (стала шире)
     requestAnimationFrame(() => {
-      const bw = bar.offsetWidth || 260;
-      let left = parseFloat(bar.style.left) - (bw - 44) / 2;
-      left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
-      bar.style.left = left + 'px';
+      const bw = bar.offsetWidth || 240;
+      let lx = ox - bw / 2;
+      lx = Math.max(6, Math.min(lx, window.innerWidth - bw - 6));
+      bar.style.left = lx + 'px';
       inp.focus();
     });
   }
 
-  // Навешиваем на msgInput
-  function attachTo(ta) {
-    if (!ta || ta._fmtAttached) return;
-    ta._fmtAttached = true;
+  // Закрытие по клику вне
+  document.addEventListener('mousedown', e => {
+    if (_skip) return;
+    if (_bar && !_bar.contains(e.target)) removeBar();
+  });
 
-    // Отпускание ЛКМ — показываем если есть выделение
+  // Инициализация — вешаем на msgInput
+  function init() {
+    const ta = document.getElementById('msgInput');
+    if (!ta || ta._fmtOk) return;
+    ta._fmtOk = true;
+
+    // Показываем панель после отпускания кнопки мыши (если есть выделение)
     ta.addEventListener('mouseup', e => {
       if (e.button !== 0) return;
       setTimeout(() => {
-        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
-        if (!sel) { removeFmtBar(); return; }
+        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+        if (!sel.trim()) { removeBar(); return; }
         const r = ta.getBoundingClientRect();
-        _skipNextClose = true;
-        buildFmtBar(ta, r.left + r.width / 2, r.top);
-        setTimeout(() => { _skipNextClose = false; }, 300);
+        const cx = r.left + r.width / 2;
+        const cy = r.top;
+        _skip = true;
+        makeBar(ta, cx, cy);
+        setTimeout(() => { _skip = false; }, 200);
       }, 20);
     });
 
-    // Touch — конец выделения
+    // Тоже для touch
     ta.addEventListener('touchend', () => {
       setTimeout(() => {
-        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
-        if (!sel) { removeFmtBar(); return; }
+        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+        if (!sel.trim()) { removeBar(); return; }
         const r = ta.getBoundingClientRect();
-        buildFmtBar(ta, r.left + r.width / 2, r.top);
-      }, 150);
+        makeBar(ta, r.left + r.width / 2, r.top);
+      }, 180);
     });
   }
 
-  let _skipNextClose = false;
-
-  // Закрытие панели при клике вне
-  document.addEventListener('mousedown', e => {
-    if (_skipNextClose) return;
-    if (_fmtBar && !_fmtBar.contains(e.target)) removeFmtBar();
-  });
-  document.addEventListener('touchstart', e => {
-    if (_fmtBar && !_fmtBar.contains(e.target)) removeFmtBar();
-  }, { passive: true });
-
-  // Прикрепляем — ищем элемент несколькими способами
-  function tryAttach() {
-    const ta = document.getElementById('msgInput');
-    if (ta) { attachTo(ta); return true; }
-    return false;
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
-  if (!tryAttach()) {
-    document.addEventListener('DOMContentLoaded', tryAttach);
-  }
-  // Дополнительный fallback — через 500ms после load
-  window.addEventListener('load', () => setTimeout(tryAttach, 500));
+  window.addEventListener('load', init);
 })();
 
-
+// ══════════════════════════════════════════════
+// VOICE PLAYER  ← КРАСОТА + УДОБСТВО
+// ══════════════════════════════════════════════
 const _vpAudios = {}; // pid -> Audio element
 
 function _vpGetOrCreate(pid, url) {
