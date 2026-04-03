@@ -594,12 +594,7 @@ async function saveUsers() {
   try {
     const usersObj = Object.fromEntries(users);
     const jsonBuffer = Buffer.from(JSON.stringify(usersObj, null, 2), 'utf-8');
-    if (USE_B2) {
-      const { bucketName } = b2GetBucketForFile(USERS_FILE);
-      await b2S3Upload(bucketName, USERS_FILE, jsonBuffer, 'application/json');
-    } else {
-      await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
-    }
+    await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
     console.log('💾 Пользователи сохранены');
   } catch (err) {
     console.error('Ошибка сохранения пользователей:', err.message);
