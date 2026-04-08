@@ -31,6 +31,21 @@ function buildCustomVideoPlayer(src) {
   badge.innerHTML = `<i class="ti ti-video"></i><span class="cvp-badge-dur">—</span>`;
   wrap.appendChild(badge);
 
+  // Вертикальный блок громкости для portrait видео
+  const volPortrait = document.createElement('div');
+  volPortrait.className = 'cvp-vol-portrait';
+  const volPortraitSlider = document.createElement('input');
+  volPortraitSlider.type = 'range';
+  volPortraitSlider.className = 'cvp-vol-portrait-slider';
+  volPortraitSlider.min = 0; volPortraitSlider.max = 1;
+  volPortraitSlider.step = 0.05; volPortraitSlider.value = 1;
+  const volPortraitBtn = document.createElement('button');
+  volPortraitBtn.className = 'cvp-btn cvp-vol-portrait-btn';
+  volPortraitBtn.innerHTML = `<i class="ti ti-volume"></i>`;
+  volPortrait.appendChild(volPortraitSlider);
+  volPortrait.appendChild(volPortraitBtn);
+  wrap.appendChild(volPortrait);
+
   const bar = document.createElement('div');
   bar.className = 'cvp-bar';
 
@@ -101,18 +116,20 @@ function buildCustomVideoPlayer(src) {
     const ratio = vh / vw;
 
     if (isPortrait) {
-      // Вертикальное видео — ширина 220px, высота пропорционально, но не больше 400px
+      wrap.classList.add('cvp-portrait');
       const w = 220;
       const h = Math.min(Math.round(w * ratio), 400);
       wrap.style.width    = w + 'px';
       wrap.style.maxWidth = w + 'px';
+      wrap.style.height   = h + 'px';
       vid.style.width     = '100%';
-      vid.style.height    = h + 'px';
-      vid.style.maxHeight = h + 'px';
+      vid.style.height    = '100%';
+      vid.style.maxHeight = 'none';
       vid.style.objectFit = 'cover';
     } else {
-      // Горизонтальное — стандартная ширина, ограничиваем высоту
+      wrap.classList.remove('cvp-portrait');
       wrap.style.maxWidth = '340px';
+      wrap.style.height   = '';
       vid.style.maxHeight = '260px';
       vid.style.objectFit = 'contain';
     }
@@ -127,12 +144,14 @@ function buildCustomVideoPlayer(src) {
   vid.addEventListener('play',  () => { playBtn.innerHTML = `<i class="ti ti-player-pause"></i>`; bigPlay.classList.add('hidden'); showCtrls(); });
   vid.addEventListener('pause', () => { playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;  bigPlay.classList.remove('hidden'); showCtrls(); });
   vid.addEventListener('ended', () => { playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;  bigPlay.classList.remove('hidden'); wrap.classList.remove('controls-hidden'); });
-  vid.addEventListener('volumechange', () => {
-    muteBtn.innerHTML = vid.muted || vid.volume === 0
-      ? `<i class="ti ti-volume-off"></i>`
-      : vid.volume < 0.4 ? `<i class="ti ti-volume-2"></i>` : `<i class="ti ti-volume"></i>`;
-    if (!vid.muted) volSlider.value = vid.volume;
-  });
+  const syncVolIcon = () => {
+    const ico = vid.muted || vid.volume === 0
+      ? 'ti-volume-off' : vid.volume < 0.4 ? 'ti-volume-2' : 'ti-volume';
+    muteBtn.innerHTML = `<i class="ti ${ico}"></i>`;
+    volPortraitBtn.innerHTML = `<i class="ti ${ico}"></i>`;
+    if (!vid.muted) { volSlider.value = vid.volume; volPortraitSlider.value = vid.volume; }
+  };
+  vid.addEventListener('volumechange', syncVolIcon);
 
   vid.addEventListener('click', e => { e.stopPropagation(); vid.paused ? vid.play() : vid.pause(); showCtrls(); });
   vid.addEventListener('dblclick', e => { e.stopPropagation(); fsBtn.click(); });
@@ -162,6 +181,26 @@ function buildCustomVideoPlayer(src) {
 
   volSlider.addEventListener('input', e => { e.stopPropagation(); vid.volume = parseFloat(volSlider.value); vid.muted = vid.volume === 0; });
   muteBtn.addEventListener('click', e => { e.stopPropagation(); vid.muted = !vid.muted; if (!vid.muted) volSlider.value = vid.volume || 0.7; });
+
+  // Portrait volume listeners
+  volPortraitSlider.addEventListener('input', e => {
+    e.stopPropagation();
+    vid.volume = parseFloat(volPortraitSlider.value);
+    vid.muted = vid.volume === 0;
+  });
+  volPortraitBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    vid.muted = !vid.muted;
+    if (!vid.muted) volPortraitSlider.value = vid.volume || 0.7;
+  });
+  // Touch: показываем portrait vol при тапе
+  wrap.addEventListener('touchend', () => {
+    if (wrap.classList.contains('cvp-portrait')) {
+      wrap.classList.add('cvp-vol-show');
+      clearTimeout(wrap._volTimer);
+      wrap._volTimer = setTimeout(() => wrap.classList.remove('cvp-vol-show'), 3000);
+    }
+  }, { passive: true });
 
   speedBtn.addEventListener('click', e => {
     e.stopPropagation();
@@ -1669,11 +1708,16 @@ function addMessage(msg) {
   } else if (msg.type === 'audio') {
     const u = fileUrl(msg.url);
     const pid = 'vp_' + (msg.id || Math.random().toString(36).slice(2));
+    const durSec = msg.duration || 0;
+    const durStr = durSec > 0 ? `${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}` : '—';
     inner += `<div class="voice-player" id="${pid}">
       <button class="vp-play" onclick="vpToggle('${pid}','${u}')"><i class="ti ti-player-play"></i></button>
       <div class="vp-body">
-        <div class="vp-waveform" onclick="vpSeek(event,'${pid}','${u}')">${Array.from({length:30},(_,i)=>`<div class="vp-bar" style="height:${8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8)}px"></div>`).join('')}</div>
-        <div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">—</span></div>
+        <div class="vp-waveform-row">
+          <div class="vp-waveform" onclick="vpSeek(event,'${pid}','${u}')">${Array.from({length:30},(_,i)=>`<div class="vp-bar" style="height:${8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8)}px"></div>`).join('')}</div>
+          <span class="vp-dur">${durStr}</span>
+        </div>
+        <div class="vp-meta"><span class="vp-pos">0:00</span></div>
       </div>
     </div>`;
   } else if (msg.type === 'file') {
@@ -1723,7 +1767,7 @@ function addMessage(msg) {
     if (!url) return;
     const vp = document.createElement('div');
     vp.className = 'voice-player'; vp.id = pid;
-    vp.innerHTML = `<button class="vp-play" onclick="vpToggle('${pid}','${url}')"><i class="ti ti-player-play"></i></button><div class="vp-body"><div class="vp-waveform" onclick="vpSeek(event,'${pid}','${url}')">${Array.from({length:30},(_,i)=>'<div class="vp-bar" style="height:'+(8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8))+'px"></div>').join('')}</div><div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">—</span></div></div>`;
+    vp.innerHTML = `<button class="vp-play" onclick="vpToggle('${pid}','${url}')"><i class="ti ti-player-play"></i></button><div class="vp-body"><div class="vp-waveform-row"><div class="vp-waveform" onclick="vpSeek(event,'${pid}','${url}')">${Array.from({length:30},(_,i)=>'<div class="vp-bar" style="height:'+(8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8))+'px"></div>').join('')}</div><span class="vp-dur">—</span></div><div class="vp-meta"><span class="vp-pos">0:00</span></div></div>`;
     a.replaceWith(vp);
   });
 
@@ -2460,6 +2504,22 @@ function resetSendBtn() {
 }
 
 async function uploadVoice(blob, ext) {
+  // Вычисляем длительность до загрузки
+  let duration = 0;
+  try {
+    const tmpUrl = URL.createObjectURL(blob);
+    await new Promise(res => {
+      const a = new Audio(tmpUrl);
+      a.addEventListener('loadedmetadata', () => {
+        if (isFinite(a.duration)) duration = Math.round(a.duration);
+        URL.revokeObjectURL(tmpUrl);
+        res();
+      });
+      a.addEventListener('error', () => { URL.revokeObjectURL(tmpUrl); res(); });
+      setTimeout(res, 3000);
+    });
+  } catch {}
+
   const fd = new FormData();
   fd.append('file', blob, `voice.${ext}`);
   try {
@@ -2467,7 +2527,7 @@ async function uploadVoice(blob, ext) {
     const d = await r.json();
     if (d.success) {
       socket.emit('media-message', {
-        mediaData: { type: 'audio', url: d.url, fileName: d.name, text: '' },
+        mediaData: { type: 'audio', url: d.url, fileName: d.name, text: '', duration },
         room: currentRoom
       });
     } else toast('Ошибка загрузки голосового', 'error');
