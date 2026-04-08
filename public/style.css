@@ -792,16 +792,20 @@ option { background: var(--surface2); color: var(--text); }
   /* JS меняет height/max-height для вертикальных видео */
 }
 /* Вертикальное видео — JS задаёт размеры, CSS не мешает */
-.cvp-wrap.cvp-portrait video {
-  max-height: none;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.cvp-wrap.cvp-portrait {
+  overflow: hidden;
 }
-/* Скрываем горизонтальный слайдер у portrait */
-.cvp-wrap.cvp-portrait .cvp-vol-wrap { display: none; }
+.cvp-wrap.cvp-portrait video {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  object-fit: cover;
+  display: block;
+}
+/* Горизонтальный слайдер скрыт у portrait */
+.cvp-wrap.cvp-portrait .cvp-vol-wrap { display: none !important; }
 
-/* Вертикальный слайдер громкости (portrait) */
+/* Вертикальный слайдер громкости */
 .cvp-vol-portrait {
   position: absolute;
   right: 10px;
@@ -811,24 +815,22 @@ option { background: var(--surface2); color: var(--text); }
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  z-index: 5;
-  /* Скрыт по умолчанию */
+  z-index: 6;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .2s;
+  transition: opacity .18s;
 }
 /* Показываем при hover (десктоп) */
 .cvp-wrap.cvp-portrait:hover .cvp-vol-portrait {
   opacity: 1;
   pointer-events: all;
 }
-/* Показываем при тапе (мобильный) через JS класс */
-.cvp-wrap.cvp-portrait.cvp-vol-show .cvp-vol-portrait,
-.cvp-wrap.cvp-portrait:not(.controls-hidden) .cvp-vol-portrait {
+/* Показываем при controls visible (любой девайс) */
+.cvp-wrap.cvp-portrait:not(.controls-hidden) .cvp-vol-portrait,
+.cvp-wrap.cvp-portrait.cvp-vol-touch .cvp-vol-portrait {
   opacity: 1;
   pointer-events: all;
 }
-/* Вертикальный range */
 .cvp-vol-portrait-slider {
   writing-mode: vertical-lr;
   direction: rtl;
@@ -1781,28 +1783,22 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
 .msg-row:not(.own) .vp-bar { background: var(--border2); }
 .msg-row:not(.own) .vp-bar.played { background: var(--accent); }
 .msg-row:not(.own) .vp-play { background: var(--accent); color: #fff; }
-.vp-waveform-row {
+.vp-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-.vp-waveform-row .vp-waveform {
-  flex: 1;
-  margin-bottom: 0;
-}
-.vp-dur {
+  justify-content: flex-start;
+  gap: 4px;
   font-size: 10px;
-  font-weight: 600;
-  color: rgba(255,255,255,.65);
-  white-space: nowrap;
+  color: var(--text2);
+  min-height: 14px;
   font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  min-width: 30px;
-  text-align: right;
-  line-height: 1;
 }
-.msg-row:not(.own) .vp-dur { color: var(--text2); }
-.vp-meta { display: flex; justify-content: flex-start; font-size: 9px; color: var(--text2); margin-top: 2px; }
+/* pos скрыт по умолчанию, dur виден */
+.vp-pos-hidden { display: none !important; }
+.vp-dur-hidden { display: none !important; }
+.msg-row.own .vp-meta { color: rgba(255,255,255,.6); }
+.msg-row.own .vp-dur,
+.msg-row.own .vp-pos { color: rgba(255,255,255,.6); font-weight: 600; }
 
 /* File message — compact */
 .msg-file-body { min-width: 0; }
