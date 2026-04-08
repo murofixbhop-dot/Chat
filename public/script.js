@@ -1,14 +1,14 @@
-// ═══════════════════════════════════════════════════
-// AURA MESSENGER — script.js
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// AURA MESSENGER вЂ” script.js
 // Principal Engineer / UI Lead  2026
-// ← КРАСОТА: код как архитектура
-// ═══════════════════════════════════════════════════
+// в†ђ РљР РђРЎРћРўРђ: РєРѕРґ РєР°Рє Р°СЂС…РёС‚РµРєС‚СѓСЂР°
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 'use strict';
 
-// ═══════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // CUSTOM VIDEO PLAYER
-// ═══════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 function buildCustomVideoPlayer(src) {
   const wrap = document.createElement('div');
@@ -28,7 +28,7 @@ function buildCustomVideoPlayer(src) {
 
   const badge = document.createElement('div');
   badge.className = 'cvp-badge';
-  badge.innerHTML = `<i class="ti ti-video"></i><span class="cvp-badge-dur">—</span>`;
+  badge.innerHTML = `<i class="ti ti-video"></i><span class="cvp-badge-dur">вЂ”</span>`;
   wrap.appendChild(badge);
 
   const bar = document.createElement('div');
@@ -58,7 +58,7 @@ function buildCustomVideoPlayer(src) {
 
   const speedBtn = document.createElement('button');
   speedBtn.className = 'cvp-btn cvp-speed-btn';
-  speedBtn.textContent = '1×';
+  speedBtn.textContent = '1Г—';
   const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
   let speedIdx = 2;
 
@@ -94,14 +94,14 @@ function buildCustomVideoPlayer(src) {
     timeEl.textContent = `0:00 / ${d}`;
     badge.querySelector('.cvp-badge-dur').textContent = d;
 
-    // Определяем ориентацию и задаём правильные размеры
+    // РћРїСЂРµРґРµР»СЏРµРј РѕСЂРёРµРЅС‚Р°С†РёСЋ Рё Р·Р°РґР°С‘Рј РїСЂР°РІРёР»СЊРЅС‹Рµ СЂР°Р·РјРµСЂС‹
     const vw = vid.videoWidth  || 1;
     const vh = vid.videoHeight || 1;
     const isPortrait = vh > vw;
     const ratio = vh / vw;
 
     if (isPortrait) {
-      // Вертикальное видео — ширина 220px, высота пропорционально, но не больше 400px
+      // Р’РµСЂС‚РёРєР°Р»СЊРЅРѕРµ РІРёРґРµРѕ вЂ” С€РёСЂРёРЅР° 220px, РІС‹СЃРѕС‚Р° РїСЂРѕРїРѕСЂС†РёРѕРЅР°Р»СЊРЅРѕ, РЅРѕ РЅРµ Р±РѕР»СЊС€Рµ 400px
       const w = 220;
       const h = Math.min(Math.round(w * ratio), 400);
       wrap.style.width    = w + 'px';
@@ -111,7 +111,7 @@ function buildCustomVideoPlayer(src) {
       vid.style.maxHeight = h + 'px';
       vid.style.objectFit = 'cover';
     } else {
-      // Горизонтальное — стандартная ширина, ограничиваем высоту
+      // Р“РѕСЂРёР·РѕРЅС‚Р°Р»СЊРЅРѕРµ вЂ” СЃС‚Р°РЅРґР°СЂС‚РЅР°СЏ С€РёСЂРёРЅР°, РѕРіСЂР°РЅРёС‡РёРІР°РµРј РІС‹СЃРѕС‚Сѓ
       wrap.style.maxWidth = '340px';
       vid.style.maxHeight = '260px';
       vid.style.objectFit = 'contain';
@@ -167,7 +167,7 @@ function buildCustomVideoPlayer(src) {
     e.stopPropagation();
     speedIdx = (speedIdx + 1) % speeds.length;
     vid.playbackRate = speeds[speedIdx];
-    speedBtn.textContent = speeds[speedIdx] + '×';
+    speedBtn.textContent = speeds[speedIdx] + 'Г—';
   });
 
   fsBtn.addEventListener('click', e => {
@@ -187,7 +187,7 @@ function buildCustomVideoPlayer(src) {
   return wrap;
 }
 
-// Авто-патч: заменяем все video.msg-video на кастомный плеер
+// РђРІС‚Рѕ-РїР°С‚С‡: Р·Р°РјРµРЅСЏРµРј РІСЃРµ video.msg-video РЅР° РєР°СЃС‚РѕРјРЅС‹Р№ РїР»РµРµСЂ
 (function patchVideoPlayer() {
   function upgradeVideos(root) {
     root.querySelectorAll('video.msg-video').forEach(v => {
@@ -215,9 +215,9 @@ function buildCustomVideoPlayer(src) {
   }
 })();
 
-// ═══════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // SMART FILE TYPE DETECTION
-// ═══════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const _FILE_CAT = {
   // images
   jpg:'image',jpeg:'image',png:'image',gif:'image',webp:'image',avif:'image',
@@ -252,20 +252,20 @@ const _FILE_CAT = {
   psd:'3d',ai:'3d',sketch:'3d',fig:'3d',
 };
 const _FILE_META = {
-  image:{ icon:'ti-photo',         cls:'mft-image',  label:'Изображение' },
-  video:{ icon:'ti-video',         cls:'mft-video',  label:'Видео'       },
-  audio:{ icon:'ti-music',         cls:'mft-audio',  label:'Аудио'       },
+  image:{ icon:'ti-photo',         cls:'mft-image',  label:'РР·РѕР±СЂР°Р¶РµРЅРёРµ' },
+  video:{ icon:'ti-video',         cls:'mft-video',  label:'Р’РёРґРµРѕ'       },
+  audio:{ icon:'ti-music',         cls:'mft-audio',  label:'РђСѓРґРёРѕ'       },
   pdf:  { icon:'ti-file-type-pdf', cls:'mft-pdf',    label:'PDF'         },
-  doc:  { icon:'ti-file-word',     cls:'mft-doc',    label:'Документ'    },
-  sheet:{ icon:'ti-table',         cls:'mft-sheet',  label:'Таблица'     },
-  slide:{ icon:'ti-presentation',  cls:'mft-slide',  label:'Презентация' },
-  arch: { icon:'ti-file-zip',      cls:'mft-arch',   label:'Архив'       },
-  code: { icon:'ti-code',          cls:'mft-code',   label:'Код'         },
-  text: { icon:'ti-file-text',     cls:'mft-text',   label:'Текст'       },
-  apk:  { icon:'ti-device-mobile', cls:'mft-apk',    label:'Приложение'  },
-  font: { icon:'ti-letter-case',   cls:'mft-font',   label:'Шрифт'       },
-  '3d': { icon:'ti-box',           cls:'mft-3d',     label:'3D/Дизайн'   },
-  file: { icon:'ti-file',          cls:'mft-file',   label:'Файл'        },
+  doc:  { icon:'ti-file-word',     cls:'mft-doc',    label:'Р”РѕРєСѓРјРµРЅС‚'    },
+  sheet:{ icon:'ti-table',         cls:'mft-sheet',  label:'РўР°Р±Р»РёС†Р°'     },
+  slide:{ icon:'ti-presentation',  cls:'mft-slide',  label:'РџСЂРµР·РµРЅС‚Р°С†РёСЏ' },
+  arch: { icon:'ti-file-zip',      cls:'mft-arch',   label:'РђСЂС…РёРІ'       },
+  code: { icon:'ti-code',          cls:'mft-code',   label:'РљРѕРґ'         },
+  text: { icon:'ti-file-text',     cls:'mft-text',   label:'РўРµРєСЃС‚'       },
+  apk:  { icon:'ti-device-mobile', cls:'mft-apk',    label:'РџСЂРёР»РѕР¶РµРЅРёРµ'  },
+  font: { icon:'ti-letter-case',   cls:'mft-font',   label:'РЁСЂРёС„С‚'       },
+  '3d': { icon:'ti-box',           cls:'mft-3d',     label:'3D/Р”РёР·Р°Р№РЅ'   },
+  file: { icon:'ti-file',          cls:'mft-file',   label:'Р¤Р°Р№Р»'        },
 };
 function _detectFileCat(name, mime) {
   const m = (mime || '').toLowerCase();
@@ -285,12 +285,12 @@ function _buildFileIconHtml(name, mime) {
 
 
 
-// ── Socket (must be first) ──────────────────────────
+// в”Ђв”Ђ Socket (must be first) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const socket = io({ reconnectionAttempts: Infinity, timeout: 20000, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
 
-// ══════════════════════════════════════════════
-// SPLASH / LOADING  ← КРАСОТА
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// SPLASH / LOADING  в†ђ РљР РђРЎРћРўРђ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const splash     = document.getElementById('loadingScreen');
 const splashText = document.getElementById('loadingText');
 const splashFill = document.getElementById('splashFill');
@@ -319,7 +319,7 @@ function hideSplash() {
 }
 
 socket.on('connect', () => {
-  if (splashText) splashText.textContent = 'Подключено ✓';
+  if (splashText) splashText.textContent = 'РџРѕРґРєР»СЋС‡РµРЅРѕ вњ“';
   if (currentUser) {
     socket.emit('identify', currentUser);
     if (currentRoom) socket.emit('join-room', currentRoom);
@@ -331,7 +331,7 @@ socket.on('connect', () => {
 document.addEventListener('visibilitychange', () => {
   if (!currentUser) return;
   if (document.visibilityState === 'visible') {
-    // Вернулись — переподключаемся если нужно и обновляем данные
+    // Р’РµСЂРЅСѓР»РёСЃСЊ вЂ” РїРµСЂРµРїРѕРґРєР»СЋС‡Р°РµРјСЃСЏ РµСЃР»Рё РЅСѓР¶РЅРѕ Рё РѕР±РЅРѕРІР»СЏРµРј РґР°РЅРЅС‹Рµ
     if (!socket.connected) {
       socket.connect();
     } else {
@@ -341,13 +341,13 @@ document.addEventListener('visibilitychange', () => {
     if (!_inCall) loadUserData();
     if (currentRoom) _sendReadReceipt(currentRoom);
   } else {
-    // Уходим на другую вкладку — явно говорим серверу что онлайн
-    // (таймеры в фоне throttle-ятся, поэтому шлём identify сразу)
+    // РЈС…РѕРґРёРј РЅР° РґСЂСѓРіСѓСЋ РІРєР»Р°РґРєСѓ вЂ” СЏРІРЅРѕ РіРѕРІРѕСЂРёРј СЃРµСЂРІРµСЂСѓ С‡С‚Рѕ РѕРЅР»Р°Р№РЅ
+    // (С‚Р°Р№РјРµСЂС‹ РІ С„РѕРЅРµ throttle-СЏС‚СЃСЏ, РїРѕСЌС‚РѕРјСѓ С€Р»С‘Рј identify СЃСЂР°Р·Сѓ)
     if (socket.connected) socket.emit('identify', currentUser);
   }
 });
 socket.on('connect_error', () => {
-  if (splashText) splashText.textContent = 'Ошибка соединения…';
+  if (splashText) splashText.textContent = 'РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏвЂ¦';
   setTimeout(hideSplash, 1200);
 });
 socket.on('reconnect_failed', () => hideSplash());
@@ -355,9 +355,9 @@ socket.on('reconnect_failed', () => hideSplash());
 // Hide splash after max 2500ms regardless (covers slow B2 response)
 setTimeout(hideSplash, 2500);
 
-// ══════════════════════════════════════════════
-// PALETTE / THEME BOOTSTRAP  ← КРАСОТА
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// PALETTE / THEME BOOTSTRAP  в†ђ РљР РђРЎРћРўРђ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 (function bootstrap() {
   const theme  = localStorage.getItem('aura_theme')  || 'dark';
   const accent = localStorage.getItem('aura_accent') || '#6366f1';
@@ -377,23 +377,23 @@ setTimeout(hideSplash, 2500);
   });
 })();
 
-// ══════════════════════════════════════════════
-// STATE  ← single source of truth
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// STATE  в†ђ single source of truth
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let currentUser    = null;
-let _historyLoading = false; // true while loading history — подавляем уведомления
+let _historyLoading = false; // true while loading history вЂ” РїРѕРґР°РІР»СЏРµРј СѓРІРµРґРѕРјР»РµРЅРёСЏ
 let userData       = { nickname:'', avatar:null, theme:'dark' };
 let currentRoom    = null;
 let _chatPartner    = null;
-const onlineUsersSet = new Set(); // кто сейчас онлайн
-const unreadCounts      = new Map(); // username -> кол-во непрочитанных
-const groupUnreadCounts = new Map(); // groupId -> кол-во непрочитанных
-const _chatOrder        = [];        // порядок чатов по активности
-const _groupOrder       = [];        // порядок групп по активности
+const onlineUsersSet = new Set(); // РєС‚Рѕ СЃРµР№С‡Р°СЃ РѕРЅР»Р°Р№РЅ
+const unreadCounts      = new Map(); // username -> РєРѕР»-РІРѕ РЅРµРїСЂРѕС‡РёС‚Р°РЅРЅС‹С…
+const groupUnreadCounts = new Map(); // groupId -> РєРѕР»-РІРѕ РЅРµРїСЂРѕС‡РёС‚Р°РЅРЅС‹С…
+const _chatOrder        = [];        // РїРѕСЂСЏРґРѕРє С‡Р°С‚РѕРІ РїРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё
+const _groupOrder       = [];        // РїРѕСЂСЏРґРѕРє РіСЂСѓРїРї РїРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё
 let friends        = [];
 let groups         = [];
 let friendRequests = [];
-// Аватарки и ники — загружаем из localStorage для мгновенной отрисовки
+// РђРІР°С‚Р°СЂРєРё Рё РЅРёРєРё вЂ” Р·Р°РіСЂСѓР¶Р°РµРј РёР· localStorage РґР»СЏ РјРіРЅРѕРІРµРЅРЅРѕР№ РѕС‚СЂРёСЃРѕРІРєРё
 let userAvatars   = {};
 let userNicknames = {};
 try {
@@ -407,7 +407,7 @@ function _saveAvatarCache() {
   try {
     localStorage.setItem('aura_avatars',   JSON.stringify(userAvatars));
     localStorage.setItem('aura_nicknames', JSON.stringify(userNicknames));
-  } catch(e) {} // если localStorage переполнен — молча пропускаем
+  } catch(e) {} // РµСЃР»Рё localStorage РїРµСЂРµРїРѕР»РЅРµРЅ вЂ” РјРѕР»С‡Р° РїСЂРѕРїСѓСЃРєР°РµРј
 }
 
 function _setAvatar(username, avatarUrl, nickname) {
@@ -444,9 +444,9 @@ let peer           = null;
 let currentCall    = null;
 let localStream    = null;
 
-// ══════════════════════════════════════════════
-// DOM REFS  ← keep it clean
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// DOM REFS  в†ђ keep it clean
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const $ = id => document.getElementById(id);
 
 const msgInput      = $('msgInput');
@@ -478,9 +478,9 @@ const searchBox     = $('searchBox');
 const app           = $('app');
 const loginScreen   = $('loginScreen');
 
-// ══════════════════════════════════════════════
-// TOAST  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// TOAST  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function toast(msg, type = 'info', dur = 3500) {
   const icons = { info:'ti-info-circle', success:'ti-circle-check', error:'ti-circle-x', warning:'ti-alert-triangle' };
   const el = document.createElement('div');
@@ -493,9 +493,9 @@ function toast(msg, type = 'info', dur = 3500) {
   }, dur);
 }
 
-// ══════════════════════════════════════════════
-// DIALOG  ← УДОБСТВО: кастомные окна (no alert!)
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// DIALOG  в†ђ РЈР”РћР‘РЎРўР’Рћ: РєР°СЃС‚РѕРјРЅС‹Рµ РѕРєРЅР° (no alert!)
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function dialog({ icon = 'ti-info-circle', iconType = 'info', title, msg, input = false, placeholder = '', ok = 'OK', cancel = null, danger = false }) {
   return new Promise(resolve => {
     const overlay = $('dialogOverlay');
@@ -519,9 +519,9 @@ function dialog({ icon = 'ti-info-circle', iconType = 'info', title, msg, input 
   });
 }
 
-// ══════════════════════════════════════════════
-// PALETTE / ACCENT  ← КРАСОТА
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// PALETTE / ACCENT  в†ђ РљР РђРЎРћРўРђ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const accentSecond = { '#6366f1':'#8b5cf6','#06b6d4':'#0891b2','#f43f5e':'#e11d48','#10b981':'#059669','#f59e0b':'#d97706','#ec4899':'#db2777' };
 const palMap       = { violet:'#6366f1', cyan:'#06b6d4', rose:'#f43f5e' };
 
@@ -542,11 +542,11 @@ function applyPalette(name) {
   document.querySelectorAll('.pal').forEach(b => b.classList.toggle('active', b.dataset.pal === name));
 }
 
-// ══════════════════════════════════════════════
-// LOGIN  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// LOGIN  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function showLogin() {
-  hideSplash(); // ← ИСПРАВЛЕНИЕ: всегда прячем splash перед показом логина
+  hideSplash(); // в†ђ РРЎРџР РђР’Р›Р•РќРР•: РІСЃРµРіРґР° РїСЂСЏС‡РµРј splash РїРµСЂРµРґ РїРѕРєР°Р·РѕРј Р»РѕРіРёРЅР°
   loginScreen.style.display = 'flex';
   loginScreen.classList.add('open');
   setTimeout(() => $('loginInput')?.focus(), 100);
@@ -560,17 +560,17 @@ async function doLogin() {
   errEl.textContent = '';
 
   if (!username) {
-    errEl.textContent = 'Введите имя пользователя';
+    errEl.textContent = 'Р’РІРµРґРёС‚Рµ РёРјСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ';
     $('loginInput').focus();
     return;
   }
   if (password.length < 4) {
-    errEl.textContent = 'Пароль должен быть не менее 4 символов';
+    errEl.textContent = 'РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РјРµРЅРµРµ 4 СЃРёРјРІРѕР»РѕРІ';
     $('loginPassInput').focus();
     return;
   }
   if (_isRegisterMode && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errEl.textContent = 'Введите корректный email';
+    errEl.textContent = 'Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ email';
     $('loginEmailInput').focus();
     return;
   }
@@ -589,7 +589,7 @@ async function doLogin() {
       localStorage.setItem('aura_user', d.user.username);
       localStorage.setItem('aura_pass', password);
       if (d.isNew) {
-        toast(`Добро пожаловать, ${d.user.username}!`, 'success');
+        toast(`Р”РѕР±СЂРѕ РїРѕР¶Р°Р»РѕРІР°С‚СЊ, ${d.user.username}!`, 'success');
         if (d.needsEmailVerify) {
           const emailVal = $('loginEmailInput')?.value?.trim();
           setTimeout(() => openEmailVerifyModal(emailVal || '', 'register'), 500);
@@ -600,24 +600,24 @@ async function doLogin() {
       const emailWrap = $('loginEmailWrap');
       if (emailWrap) emailWrap.style.display = 'none';
       const subText = $('loginSubText');
-      if (subText) subText.textContent = 'Введите имя и пароль';
+      if (subText) subText.textContent = 'Р’РІРµРґРёС‚Рµ РёРјСЏ Рё РїР°СЂРѕР»СЊ';
       const registerLink = $('registerLink');
-      if (registerLink) registerLink.textContent = 'Регистрация';
+      if (registerLink) registerLink.textContent = 'Р РµРіРёСЃС‚СЂР°С†РёСЏ';
       const forgotLink = $('forgotLink');
       if (forgotLink) forgotLink.style.display = '';
       const loginBtnEl = $('loginBtn');
-      if (loginBtnEl) loginBtnEl.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
+      if (loginBtnEl) loginBtnEl.innerHTML = 'Р’РѕР№С‚Рё <i class="ti ti-arrow-right"></i>';
       startSession(d.user);
     } else {
-      errEl.textContent = d.error || 'Ошибка входа';
+      errEl.textContent = d.error || 'РћС€РёР±РєР° РІС…РѕРґР°';
       $('loginPassInput').focus();
       $('loginPassInput').select();
     }
   } catch {
-    errEl.textContent = 'Нет соединения с сервером';
+    errEl.textContent = 'РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј';
   } finally {
     btn.disabled = false;
-    if (!_isRegisterMode) btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
+    if (!_isRegisterMode) btn.innerHTML = 'Р’РѕР№С‚Рё <i class="ti ti-arrow-right"></i>';
   }
 }
 
@@ -641,21 +641,21 @@ function toggleRegisterMode() {
 
   if (_isRegisterMode) {
     emailWrap.style.display = 'flex';
-    subText.textContent = 'Создайте аккаунт';
-    btn.innerHTML = 'Зарегистрироваться <i class="ti ti-user-plus"></i>';
-    if (regText) regText.textContent = 'Войти';
+    subText.textContent = 'РЎРѕР·РґР°Р№С‚Рµ Р°РєРєР°СѓРЅС‚';
+    btn.innerHTML = 'Р—Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°С‚СЊСЃСЏ <i class="ti ti-user-plus"></i>';
+    if (regText) regText.textContent = 'Р’РѕР№С‚Рё';
     forgotLink.style.display = 'none';
     $('loginEmailInput')?.focus();
   } else {
     emailWrap.style.display = 'none';
-    subText.textContent = 'Введите имя и пароль';
-    btn.innerHTML = 'Войти <i class="ti ti-arrow-right"></i>';
-    if (regText) regText.textContent = 'Регистрация';
+    subText.textContent = 'Р’РІРµРґРёС‚Рµ РёРјСЏ Рё РїР°СЂРѕР»СЊ';
+    btn.innerHTML = 'Р’РѕР№С‚Рё <i class="ti ti-arrow-right"></i>';
+    if (regText) regText.textContent = 'Р РµРіРёСЃС‚СЂР°С†РёСЏ';
     forgotLink.style.display = '';
   }
 }
 
-// ── FORGOT PASSWORD — красивый модал ──────────────────────────────────────
+// в”Ђв”Ђ FORGOT PASSWORD вЂ” РєСЂР°СЃРёРІС‹Р№ РјРѕРґР°Р» в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _forgotUsername = '';
 let _forgotCode     = '';
 
@@ -682,7 +682,7 @@ function closeForgotPass() {
   if (m) m.classList.remove('open');
 }
 
-// Закрытие по клику на фон
+// Р—Р°РєСЂС‹С‚РёРµ РїРѕ РєР»РёРєСѓ РЅР° С„РѕРЅ
 document.addEventListener('DOMContentLoaded', () => {
   const m = $('forgotModal');
   if (m) m.addEventListener('click', e => { if (e.target === m) closeForgotPass(); });
@@ -695,11 +695,11 @@ document.addEventListener('DOMContentLoaded', () => {
 async function sendForgotCode() {
   const username = $('forgotUsername')?.value?.trim();
   const err = $('forgotErr1');
-  if (!username) { if (err) err.textContent = 'Введите имя пользователя'; return; }
+  if (!username) { if (err) err.textContent = 'Р’РІРµРґРёС‚Рµ РёРјСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ'; return; }
   if (err) err.textContent = '';
 
   const btn = document.querySelector('#forgotStep1 .btn-primary');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Отправка…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> РћС‚РїСЂР°РІРєР°вЂ¦'; }
 
   try {
     const r = await fetch('/api/request-password-reset', {
@@ -713,24 +713,24 @@ async function sendForgotCode() {
       $('forgotStep1').classList.remove('active');
       $('forgotStep2').classList.add('active');
       setTimeout(() => document.querySelector('.code-digit')?.focus(), 80);
-      toast('Код отправлен на email', 'success');
+      toast('РљРѕРґ РѕС‚РїСЂР°РІР»РµРЅ РЅР° email', 'success');
     } else {
-      if (err) err.textContent = d.error || 'Ошибка. Проверьте имя пользователя.';
+      if (err) err.textContent = d.error || 'РћС€РёР±РєР°. РџСЂРѕРІРµСЂСЊС‚Рµ РёРјСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.';
     }
   } catch {
-    if (err) err.textContent = 'Нет соединения с сервером';
+    if (err) err.textContent = 'РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј';
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-send"></i> Отправить код'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-send"></i> РћС‚РїСЂР°РІРёС‚СЊ РєРѕРґ'; }
   }
 }
 
-// Автопереход между цифрами кода
+// РђРІС‚РѕРїРµСЂРµС…РѕРґ РјРµР¶РґСѓ С†РёС„СЂР°РјРё РєРѕРґР°
 function codeDigit(input, idx) {
   const digits = document.querySelectorAll('.code-digit');
   const val = input.value.replace(/\D/g, '');
   input.value = val.slice(-1);
   if (val && idx < 5) digits[idx + 1]?.focus();
-  // Если все заполнены — автосабмит
+  // Р•СЃР»Рё РІСЃРµ Р·Р°РїРѕР»РЅРµРЅС‹ вЂ” Р°РІС‚РѕСЃР°Р±РјРёС‚
   const code = [...digits].map(d => d.value).join('');
   if (code.length === 6) verifyForgotCode();
 }
@@ -747,7 +747,7 @@ async function verifyForgotCode() {
   const digits = document.querySelectorAll('.code-digit');
   const code = [...digits].map(d => d.value).join('');
   const err = $('forgotErr2');
-  if (code.length < 6) { if (err) err.textContent = 'Введите все 6 цифр'; return; }
+  if (code.length < 6) { if (err) err.textContent = 'Р’РІРµРґРёС‚Рµ РІСЃРµ 6 С†РёС„СЂ'; return; }
   if (err) err.textContent = '';
   _forgotCode = code;
   // Go to step 3
@@ -768,7 +768,7 @@ async function resetPassword() {
   const newPass = $('forgotNewPass')?.value?.trim();
   const err = $('forgotErr3');
   if (!newPass || newPass.length < 4) {
-    if (err) err.textContent = 'Пароль должен быть не менее 4 символов';
+    if (err) err.textContent = 'РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РјРµРЅРµРµ 4 СЃРёРјРІРѕР»РѕРІ';
     return;
   }
   if (err) err.textContent = '';
@@ -784,12 +784,12 @@ async function resetPassword() {
     const d = await r.json();
     if (d.success) {
       closeForgotPass();
-      toast('Пароль изменён! Войдите с новым паролем.', 'success');
+      toast('РџР°СЂРѕР»СЊ РёР·РјРµРЅС‘РЅ! Р’РѕР№РґРёС‚Рµ СЃ РЅРѕРІС‹Рј РїР°СЂРѕР»РµРј.', 'success');
       // Prefill username
       const inp = $('loginInput');
       if (inp) { inp.value = _forgotUsername; $('loginPassInput')?.focus(); }
     } else {
-      if (err) err.textContent = d.error || 'Неверный или просроченный код';
+      if (err) err.textContent = d.error || 'РќРµРІРµСЂРЅС‹Р№ РёР»Рё РїСЂРѕСЃСЂРѕС‡РµРЅРЅС‹Р№ РєРѕРґ';
       // Go back to step 2
       $('forgotStep3').classList.remove('active');
       $('forgotStep2').classList.add('active');
@@ -797,14 +797,14 @@ async function resetPassword() {
       document.querySelector('.code-digit')?.focus();
     }
   } catch {
-    if (err) err.textContent = 'Нет соединения с сервером';
+    if (err) err.textContent = 'РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј';
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-lock-check"></i> Сменить пароль'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-lock-check"></i> РЎРјРµРЅРёС‚СЊ РїР°СЂРѕР»СЊ'; }
   }
 }
 
 function startSession(user) {
-  hideSplash(); // ← ИСПРАВЛЕНИЕ: прячем splash при старте сессии
+  hideSplash(); // в†ђ РРЎРџР РђР’Р›Р•РќРР•: РїСЂСЏС‡РµРј splash РїСЂРё СЃС‚Р°СЂС‚Рµ СЃРµСЃСЃРёРё
   currentUser = user.username;
   userData    = user;
   if (user.avatar) userAvatars[user.username] = user.avatar;
@@ -813,13 +813,13 @@ function startSession(user) {
   app.classList.remove('hidden');
   app.style.display = 'flex';
   updateProfileUI();
-  switchTab('friends'); // явно инициализируем таб без мигания
+  switchTab('friends'); // СЏРІРЅРѕ РёРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј С‚Р°Р± Р±РµР· РјРёРіР°РЅРёСЏ
   socket.emit('identify', currentUser);
-  // Загружаем данные, затем восстанавливаем последний чат
+  // Р—Р°РіСЂСѓР¶Р°РµРј РґР°РЅРЅС‹Рµ, Р·Р°С‚РµРј РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РїРѕСЃР»РµРґРЅРёР№ С‡Р°С‚
   loadUserData().then(() => {
     const lastRoom = localStorage.getItem('aura_last_room');
     if (lastRoom && lastRoom.startsWith('private:')) {
-      // Проверяем что собеседник всё ещё в друзьях
+      // РџСЂРѕРІРµСЂСЏРµРј С‡С‚Рѕ СЃРѕР±РµСЃРµРґРЅРёРє РІСЃС‘ РµС‰С‘ РІ РґСЂСѓР·СЊСЏС…
       const parts = lastRoom.split(':');
       const other = parts.slice(1).find(p => p !== currentUser) || parts[1];
       if (friends.includes(other)) {
@@ -833,16 +833,16 @@ function startSession(user) {
         return;
       }
     }
-    // Нет сохранённого чата или друг удалён — открываем первый чат из списка
+    // РќРµС‚ СЃРѕС…СЂР°РЅС‘РЅРЅРѕРіРѕ С‡Р°С‚Р° РёР»Рё РґСЂСѓРі СѓРґР°Р»С‘РЅ вЂ” РѕС‚РєСЂС‹РІР°РµРј РїРµСЂРІС‹Р№ С‡Р°С‚ РёР· СЃРїРёСЃРєР°
     if (friends.length > 0) {
       gotoRoom(getRoomId(friends[0]));
     } else {
       currentRoom = null;
-      if (roomName)  roomName.textContent  = 'Выберите чат';
+      if (roomName)  roomName.textContent  = 'Р’С‹Р±РµСЂРёС‚Рµ С‡Р°С‚';
       if (roomSub)   roomSub.textContent   = '';
       if (hdrRight)  hdrRight.innerHTML    = '';
       if (messagesDiv) messagesDiv.innerHTML = '';
-      if (msgsEmpty) { msgsEmpty.style.display = 'flex'; msgsEmpty.innerHTML = '<i class="ti ti-message-circle" style="font-size:48px;opacity:.2"></i><p>Добавьте друга чтобы начать общение</p>'; }
+      if (msgsEmpty) { msgsEmpty.style.display = 'flex'; msgsEmpty.innerHTML = '<i class="ti ti-message-circle" style="font-size:48px;opacity:.2"></i><p>Р”РѕР±Р°РІСЊС‚Рµ РґСЂСѓРіР° С‡С‚РѕР±С‹ РЅР°С‡Р°С‚СЊ РѕР±С‰РµРЅРёРµ</p>'; }
       if (onlinePill) onlinePill.style.display = 'none';
     }
   });
@@ -886,7 +886,7 @@ function showPushNotification(title, body, tag) {
 const savedUser = localStorage.getItem('aura_user');
 const savedPass = localStorage.getItem('aura_pass');
 if (savedUser && savedPass) {
-  // Timeout: если B2 / сервер не отвечает за 4с — показываем логин
+  // Timeout: РµСЃР»Рё B2 / СЃРµСЂРІРµСЂ РЅРµ РѕС‚РІРµС‡Р°РµС‚ Р·Р° 4СЃ вЂ” РїРѕРєР°Р·С‹РІР°РµРј Р»РѕРіРёРЅ
   const restoreTimeout = setTimeout(() => showLogin(), 4000);
   fetch('/api/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -897,11 +897,11 @@ if (savedUser && savedPass) {
     clearTimeout(restoreTimeout);
     if (d.success) { startSession(d.user); }
     else {
-      // Password changed or account deleted — show login
+      // Password changed or account deleted вЂ” show login
       localStorage.removeItem('aura_user');
       localStorage.removeItem('aura_pass');
       localStorage.removeItem('aura_last_room');
-      // НЕ удаляем aura_avatars/nicknames — они полезны для любого пользователя на этом устройстве
+      // РќР• СѓРґР°Р»СЏРµРј aura_avatars/nicknames вЂ” РѕРЅРё РїРѕР»РµР·РЅС‹ РґР»СЏ Р»СЋР±РѕРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РЅР° СЌС‚РѕРј СѓСЃС‚СЂРѕР№СЃС‚РІРµ
       showLogin();
     }
   })
@@ -910,9 +910,9 @@ if (savedUser && savedPass) {
   showLogin();
 }
 
-// ══════════════════════════════════════════════
-// USER DATA  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// USER DATA  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function loadUserData() {
   try {
     const r = await fetch('/api/get-user-data', {
@@ -923,7 +923,7 @@ async function loadUserData() {
     friends        = d.friends        || [];
     friendRequests = d.friendRequests || [];
     groups         = d.groups         || [];
-    // Сохраняем email восстановления если вернулся с сервера
+    // РЎРѕС…СЂР°РЅСЏРµРј email РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РµСЃР»Рё РІРµСЂРЅСѓР»СЃСЏ СЃ СЃРµСЂРІРµСЂР°
     if (d.recoveryEmail !== undefined) {
       userData.recoveryEmail = d.recoveryEmail;
     }
@@ -935,13 +935,13 @@ async function loadUserData() {
     renderRequests();
     updateReqBadge();
 
-    // Обновляем поле email в настройках если открыты
+    // РћР±РЅРѕРІР»СЏРµРј РїРѕР»Рµ email РІ РЅР°СЃС‚СЂРѕР№РєР°С… РµСЃР»Рё РѕС‚РєСЂС‹С‚С‹
     const emailField = $('stRecoveryEmail');
     if (emailField && document.activeElement !== emailField) {
       emailField.value = userData.recoveryEmail || '';
     }
 
-    // Загружаем аватарки только тех кто ещё не был загружен
+    // Р—Р°РіСЂСѓР¶Р°РµРј Р°РІР°С‚Р°СЂРєРё С‚РѕР»СЊРєРѕ С‚РµС… РєС‚Рѕ РµС‰С‘ РЅРµ Р±С‹Р» Р·Р°РіСЂСѓР¶РµРЅ
     friends.forEach(f => {
       if (userAvatars[f] === undefined || userNicknames[f] === undefined) fetchUserAvatar(f);
     });
@@ -970,10 +970,10 @@ function setAvatar(el, name, url) {
   }
 }
 
-// ══════════════════════════════════════════════
-// RENDER LISTS  ← УДОБСТВО
-// ══════════════════════════════════════════════
-// Двигаем чат собеседника на первое место в списке
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// RENDER LISTS  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// Р”РІРёРіР°РµРј С‡Р°С‚ СЃРѕР±РµСЃРµРґРЅРёРєР° РЅР° РїРµСЂРІРѕРµ РјРµСЃС‚Рѕ РІ СЃРїРёСЃРєРµ
 function _moveChatToTop(username) {
   const idx = _chatOrder.indexOf(username);
   if (idx > -1) _chatOrder.splice(idx, 1);
@@ -995,7 +995,7 @@ function renderFriends(filter = '') {
       })
     : friends;
 
-  // Сортируем: сначала с непрочитанными/последними сообщениями
+  // РЎРѕСЂС‚РёСЂСѓРµРј: СЃРЅР°С‡Р°Р»Р° СЃ РЅРµРїСЂРѕС‡РёС‚Р°РЅРЅС‹РјРё/РїРѕСЃР»РµРґРЅРёРјРё СЃРѕРѕР±С‰РµРЅРёСЏРјРё
   const sortedList = [...list].sort((a, b) => {
     const ai = _chatOrder.indexOf(a);
     const bi = _chatOrder.indexOf(b);
@@ -1006,7 +1006,7 @@ function renderFriends(filter = '') {
   });
   const list2 = filter ? list : sortedList;
 
-  // ── Smart diff: не перерисовываем если список не изменился ──
+  // в”Ђв”Ђ Smart diff: РЅРµ РїРµСЂРµСЂРёСЃРѕРІС‹РІР°РµРј РµСЃР»Рё СЃРїРёСЃРѕРє РЅРµ РёР·РјРµРЅРёР»СЃСЏ в”Ђв”Ђ
   const unreadKey = [...unreadCounts.entries()].map(([k,v])=>k+':'+v).join(',');
   const onlineKey = list2.filter(f => onlineUsersSet.has(f)).join(',');
   const newKey = list2.join('|') + '|' + (currentRoom || '') + '|' + unreadKey + '|' + onlineKey;
@@ -1015,17 +1015,17 @@ function renderFriends(filter = '') {
 
   if (!list.length) {
     ul.innerHTML = `<li class="msgs-empty" style="padding:24px;font-size:13px;">
-      <i class="ti ti-user-off"></i><p>${filter ? 'Не найдено' : 'Нет друзей'}</p></li>`;
+      <i class="ti ti-user-off"></i><p>${filter ? 'РќРµ РЅР°Р№РґРµРЅРѕ' : 'РќРµС‚ РґСЂСѓР·РµР№'}</p></li>`;
     return;
   }
 
-  // Строим map существующих элементов
+  // РЎС‚СЂРѕРёРј map СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёС… СЌР»РµРјРµРЅС‚РѕРІ
   const existing = {};
   ul.querySelectorAll('li[data-friend]').forEach(li => {
     existing[li.dataset.friend] = li;
   });
 
-  // Добавляем/обновляем без удаления — просто переставляем порядок
+  // Р”РѕР±Р°РІР»СЏРµРј/РѕР±РЅРѕРІР»СЏРµРј Р±РµР· СѓРґР°Р»РµРЅРёСЏ вЂ” РїСЂРѕСЃС‚Рѕ РїРµСЂРµСЃС‚Р°РІР»СЏРµРј РїРѕСЂСЏРґРѕРє
   list2.forEach((f, idx) => {
     const room     = getRoomId(f);
     const dispName = userNicknames[f] || f;
@@ -1033,7 +1033,7 @@ function renderFriends(filter = '') {
 
     let li = existing[f];
     if (!li) {
-      // Новый элемент
+      // РќРѕРІС‹Р№ СЌР»РµРјРµРЅС‚
       li = document.createElement('li');
       li.dataset.friend = f;
       li.className = 'chat-item' + (isActive ? ' active' : '');
@@ -1043,21 +1043,21 @@ function renderFriends(filter = '') {
       setAvatar(avaEl, f, userAvatars[f]);
       const isOnNow = onlineUsersSet.has(f);
       const subText = isOnNow
-        ? '<span style="color:#22c55e;font-weight:500">● онлайн</span>'
-        : (dispName !== f ? '<span style="color:var(--text3)">@' + esc(f) + '</span>' : 'Личный чат');
+        ? '<span style="color:#22c55e;font-weight:500">в—Џ РѕРЅР»Р°Р№РЅ</span>'
+        : (dispName !== f ? '<span style="color:var(--text3)">@' + esc(f) + '</span>' : 'Р›РёС‡РЅС‹Р№ С‡Р°С‚');
       li.innerHTML = `<div class="ci-body">
         <span class="ci-name">${esc(dispName)}</span>
         <span class="ci-sub">${subText}</span>
       </div>
       <div class="ci-badge" id="badge_${f}" style="display:none"></div>`;
-      // Онлайн-точка на аватарке
+      // РћРЅР»Р°Р№РЅ-С‚РѕС‡РєР° РЅР° Р°РІР°С‚Р°СЂРєРµ
       const avaWrap = li.querySelector('.ci-ava');
       if (avaWrap && !avaWrap.querySelector('.online-dot')) {
         const dot = document.createElement('span');
         dot.className = 'online-dot';
         dot.dataset.onlineFor = f;
         dot.style.cssText = 'position:absolute;bottom:1px;right:1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--surface);background:#6b7280;';
-        dot.title = 'Не в сети';
+        dot.title = 'РќРµ РІ СЃРµС‚Рё';
         avaWrap.style.position = 'relative';
         avaWrap.appendChild(dot);
       }
@@ -1072,20 +1072,20 @@ function renderFriends(filter = '') {
       li.addEventListener('touchend', () => { if(_lptF){clearTimeout(_lptF);_lptF=null;} }, { passive:true });
       li.addEventListener('touchmove', () => { if(_lptF){clearTimeout(_lptF);_lptF=null;} }, { passive:true });
     } else {
-      // Обновляем существующий без мигания
+      // РћР±РЅРѕРІР»СЏРµРј СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ Р±РµР· РјРёРіР°РЅРёСЏ
       li.classList.toggle('active', isActive);
       const nameEl = li.querySelector('.ci-name');
       if (nameEl && nameEl.textContent !== dispName) nameEl.textContent = dispName;
-      // Обновляем статус онлайн в подписи
+      // РћР±РЅРѕРІР»СЏРµРј СЃС‚Р°С‚СѓСЃ РѕРЅР»Р°Р№РЅ РІ РїРѕРґРїРёСЃРё
       const subEl = li.querySelector('.ci-sub');
       if (subEl) {
         const isOnNow2 = onlineUsersSet.has(f);
         subEl.innerHTML = isOnNow2
-          ? '<span style="color:#22c55e;font-weight:500">● онлайн</span>'
-          : (dispName !== f ? `<span style="color:var(--text3)">@${esc(f)}</span>` : 'Личный чат');
+          ? '<span style="color:#22c55e;font-weight:500">в—Џ РѕРЅР»Р°Р№РЅ</span>'
+          : (dispName !== f ? `<span style="color:var(--text3)">@${esc(f)}</span>` : 'Р›РёС‡РЅС‹Р№ С‡Р°С‚');
       }
     }
-    // Обновляем бейдж непрочитанных
+    // РћР±РЅРѕРІР»СЏРµРј Р±РµР№РґР¶ РЅРµРїСЂРѕС‡РёС‚Р°РЅРЅС‹С…
     const badge = li.querySelector('.ci-badge') || document.getElementById('badge_' + f);
     if (badge) {
       const cnt = unreadCounts.get(f) || 0;
@@ -1099,20 +1099,20 @@ function renderFriends(filter = '') {
       }
     }
 
-    // Убеждаемся что порядок правильный
+    // РЈР±РµР¶РґР°РµРјСЃСЏ С‡С‚Рѕ РїРѕСЂСЏРґРѕРє РїСЂР°РІРёР»СЊРЅС‹Р№
     const atIdx = ul.children[idx];
     if (atIdx !== li) ul.insertBefore(li, atIdx || null);
   });
 
-  // Удаляем исчезнувших друзей
+  // РЈРґР°Р»СЏРµРј РёСЃС‡РµР·РЅСѓРІС€РёС… РґСЂСѓР·РµР№
   ul.querySelectorAll('li[data-friend]').forEach(li => {
     if (!list2.includes(li.dataset.friend)) li.remove();
   });
 
-  // Убираем пустой-стейт li если он есть
+  // РЈР±РёСЂР°РµРј РїСѓСЃС‚РѕР№-СЃС‚РµР№С‚ li РµСЃР»Рё РѕРЅ РµСЃС‚СЊ
   ul.querySelectorAll('li.msgs-empty').forEach(li => li.remove());
 
-  // Загружаем аватарки только для тех кто ещё не загружен
+  // Р—Р°РіСЂСѓР¶Р°РµРј Р°РІР°С‚Р°СЂРєРё С‚РѕР»СЊРєРѕ РґР»СЏ С‚РµС… РєС‚Рѕ РµС‰С‘ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ
   list.forEach(f => {
     if (userAvatars[f] === undefined || userNicknames[f] === undefined) fetchUserAvatar(f);
   });
@@ -1122,13 +1122,13 @@ function renderGroups() {
   const ul = groupsList;
   if (!groups.length) {
     ul.innerHTML = `<li class="msgs-empty" style="padding:24px;font-size:13px;">
-      <i class="ti ti-users"></i><p>Нет групп</p></li>`;
+      <i class="ti ti-users"></i><p>РќРµС‚ РіСЂСѓРїРї</p></li>`;
     return;
   }
   const existing = {};
   ul.querySelectorAll('li[data-group]').forEach(li => { existing[li.dataset.group] = li; });
 
-  // Сортируем группы по активности
+  // РЎРѕСЂС‚РёСЂСѓРµРј РіСЂСѓРїРїС‹ РїРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё
   const sortedGroups = [...groups].sort((a, b) => {
     const ai = _groupOrder.indexOf(a.id);
     const bi = _groupOrder.indexOf(b.id);
@@ -1137,7 +1137,7 @@ function renderGroups() {
     if (bi === -1) return -1;
     return ai - bi;
   });
-  // Обновляем ключ с учётом непрочитанных
+  // РћР±РЅРѕРІР»СЏРµРј РєР»СЋС‡ СЃ СѓС‡С‘С‚РѕРј РЅРµРїСЂРѕС‡РёС‚Р°РЅРЅС‹С…
   const gUnreadKey = [...groupUnreadCounts.entries()].map(([k,v])=>k+':'+v).join(',');
   const newGKey = sortedGroups.map(g => g.id + g.name).join('|') + '|' + (currentRoom||'') + '|' + gUnreadKey;
   if (ul._lastKey === newGKey) return;
@@ -1160,14 +1160,14 @@ function renderGroups() {
       }
       li.innerHTML = `<div class="ci-body">
         <span class="ci-name">${esc(g.name)}</span>
-        <span class="ci-sub">${(g.members||[]).length} участников</span>
+        <span class="ci-sub">${(g.members||[]).length} СѓС‡Р°СЃС‚РЅРёРєРѕРІ</span>
       </div>
       <div class="ci-badge" id="gbadge_${g.id}" style="display:none"></div>`;
       li.prepend(avaEl);
       li.onclick = () => {
       if (groupUnreadCounts.has(g.id)) {
         groupUnreadCounts.delete(g.id);
-        // Обновим бейдж немедленно
+        // РћР±РЅРѕРІРёРј Р±РµР№РґР¶ РЅРµРјРµРґР»РµРЅРЅРѕ
         const badge = li.querySelector('.ci-badge');
         if (badge) { badge.style.display = 'none'; }
         li.classList.remove('has-unread');
@@ -1185,7 +1185,7 @@ function renderGroups() {
       const nameEl = li.querySelector('.ci-name');
       if (nameEl) nameEl.textContent = g.name;
     }
-    // Обновляем бейдж (и для новых и для существующих li)
+    // РћР±РЅРѕРІР»СЏРµРј Р±РµР№РґР¶ (Рё РґР»СЏ РЅРѕРІС‹С… Рё РґР»СЏ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёС… li)
     const badge2 = document.getElementById('gbadge_' + g.id) || li.querySelector('.ci-badge');
     const cnt2 = groupUnreadCounts.get(g.id) || 0;
     if (badge2) {
@@ -1212,7 +1212,7 @@ function renderRequests() {
   ul.innerHTML = '';
   if (!friendRequests.length) {
     ul.innerHTML = `<li class="msgs-empty" style="padding:24px;font-size:13px;">
-      <i class="ti ti-bell-off"></i><p>Нет заявок</p></li>`;
+      <i class="ti ti-bell-off"></i><p>РќРµС‚ Р·Р°СЏРІРѕРє</p></li>`;
     updateReqBadge();
     return;
   }
@@ -1224,7 +1224,7 @@ function renderRequests() {
     setAvatar(ava, req, userAvatars[req]);
     li.appendChild(ava);
     li.innerHTML += `
-      <div class="ci-body"><span class="ci-name">${req}</span><span class="ci-sub">Хочет добавить вас</span></div>
+      <div class="ci-body"><span class="ci-name">${req}</span><span class="ci-sub">РҐРѕС‡РµС‚ РґРѕР±Р°РІРёС‚СЊ РІР°СЃ</span></div>
       <div class="req-btns">
         <button class="req-acc" onclick="acceptReq('${req}')"><i class="ti ti-check"></i></button>
         <button class="req-rej" onclick="rejectReq('${req}')"><i class="ti ti-x"></i></button>
@@ -1244,14 +1244,14 @@ function updateReqBadge() {
   }
 }
 
-// ← УДОБСТВО: live search
+// в†ђ РЈР”РћР‘РЎРўР’Рћ: live search
 function filterChats(q) {
   renderFriends(q);
 }
 
-// ══════════════════════════════════════════════
-// SIDEBAR TABS  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// SIDEBAR TABS  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const tabMap = {
   friends:  { tab: 'stFriends', pane: 'pFriends'  },
   groups:   { tab: 'stGroups',  pane: 'pGroups'   },
@@ -1270,15 +1270,15 @@ function switchTab(name) {
   if (name === 'requests' && reqBadge) reqBadge.style.display = 'none';
 }
 
-// ══════════════════════════════════════════════
-// ROOMS  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// ROOMS  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function getRoomId(friend) {
   return 'private:' + [currentUser, friend].sort().join(':');
 }
 
 function gotoPrivate(friend) {
-  // Сброс бейджа напрямую в DOM
+  // РЎР±СЂРѕСЃ Р±РµР№РґР¶Р° РЅР°РїСЂСЏРјСѓСЋ РІ DOM
   unreadCounts.delete(friend);
   const badge = document.getElementById('badge_' + friend)
              || friendsList?.querySelector(`li[data-friend="${friend}"] .ci-badge`);
@@ -1292,15 +1292,15 @@ function gotoPrivate(friend) {
 function gotoRoom(room) {
   if (currentRoom === room) return;
   currentRoom = room;
-  // Запоминаем последний чат
+  // Р—Р°РїРѕРјРёРЅР°РµРј РїРѕСЃР»РµРґРЅРёР№ С‡Р°С‚
   try { localStorage.setItem('aura_last_room', room); } catch(e) {}
-  // Сбрасываем кэш рендера чтобы обновить выделение активного чата
+  // РЎР±СЂР°СЃС‹РІР°РµРј РєСЌС€ СЂРµРЅРґРµСЂР° С‡С‚РѕР±С‹ РѕР±РЅРѕРІРёС‚СЊ РІС‹РґРµР»РµРЅРёРµ Р°РєС‚РёРІРЅРѕРіРѕ С‡Р°С‚Р°
   if (friendsList) friendsList._lastKey = '';
   if (groupsList)  groupsList._lastKey  = '';
 
   const callBtnsHtml = `
-    <button class="icon-btn" title="Аудиозвонок" onclick="startCall(false)"><i class="ti ti-phone"></i></button>
-    <button class="icon-btn" title="Видеозвонок" onclick="startCall(true)"><i class="ti ti-video"></i></button>`;
+    <button class="icon-btn" title="РђСѓРґРёРѕР·РІРѕРЅРѕРє" onclick="startCall(false)"><i class="ti ti-phone"></i></button>
+    <button class="icon-btn" title="Р’РёРґРµРѕР·РІРѕРЅРѕРє" onclick="startCall(true)"><i class="ti ti-video"></i></button>`;
 
   if (room.startsWith('private:')) {
     const parts = room.split(':');
@@ -1308,22 +1308,22 @@ function gotoRoom(room) {
     _chatPartner = other;
     const dispName = userNicknames[other] || other;
     roomName.textContent = dispName;
-    // Онлайн-статус в подзаголовке
+    // РћРЅР»Р°Р№РЅ-СЃС‚Р°С‚СѓСЃ РІ РїРѕРґР·Р°РіРѕР»РѕРІРєРµ
     const isOnlineNow = onlineUsersSet.has(other);
     roomSub.innerHTML = `<span id="chatOnlineStatus" style="color:${isOnlineNow?'#22c55e':'var(--text3)'}">
-      ${isOnlineNow ? 'онлайн' : 'не в сети'}</span>`;
+      ${isOnlineNow ? 'РѕРЅР»Р°Р№РЅ' : 'РЅРµ РІ СЃРµС‚Рё'}</span>`;
     setAvatar(roomAvatar, other, userAvatars[other]);
     if (onlinePill) onlinePill.style.display = 'none';
     hdrRight.innerHTML = callBtnsHtml;
-    // Клик по аватарке/нику → профиль
+    // РљР»РёРє РїРѕ Р°РІР°С‚Р°СЂРєРµ/РЅРёРєСѓ в†’ РїСЂРѕС„РёР»СЊ
     roomAvatar.style.cursor = 'pointer';
     roomAvatar.onclick = () => openUserProfile(other);
     roomName.style.cursor = 'pointer';
     roomName.onclick = () => openUserProfile(other);
   } else if (room.startsWith('group:')) {
     const g = groups.find(g => g.id === room.replace('group:', ''));
-    roomName.textContent = g?.name || 'Группа';
-    roomSub.textContent  = g ? `${(g.members||[]).length} участников` : 'Группа';
+    roomName.textContent = g?.name || 'Р“СЂСѓРїРїР°';
+    roomSub.textContent  = g ? `${(g.members||[]).length} СѓС‡Р°СЃС‚РЅРёРєРѕРІ` : 'Р“СЂСѓРїРїР°';
     if (g?.avatar) {
       setAvatar(roomAvatar, `group:${g.id}`, g.avatar);
     } else {
@@ -1333,42 +1333,42 @@ function gotoRoom(room) {
     }
     roomAvatar.style.borderRadius = '12px';
     if (onlinePill) onlinePill.style.display = 'none';
-    // Клик по аватарке/названию → профиль группы
+    // РљР»РёРє РїРѕ Р°РІР°С‚Р°СЂРєРµ/РЅР°Р·РІР°РЅРёСЋ в†’ РїСЂРѕС„РёР»СЊ РіСЂСѓРїРїС‹
     roomAvatar.style.cursor = 'pointer';
     roomAvatar.onclick = () => g && openGroupProfile(g);
     roomName.style.cursor = 'pointer';
     roomName.onclick = () => g && openGroupProfile(g);
     const isCreator = g?.creator === currentUser;
     const editBtn = isCreator
-      ? `<button class="icon-btn" title="Редактировать группу" onclick="openGroupEdit('${g.id}')"><i class="ti ti-settings"></i></button>`
+      ? `<button class="icon-btn" title="Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РіСЂСѓРїРїСѓ" onclick="openGroupEdit('${g.id}')"><i class="ti ti-settings"></i></button>`
       : '';
     hdrRight.innerHTML = editBtn + callBtnsHtml;
   }
 
   socket.emit('join-room', room);
-  _sendReadReceipt(room); // сообщаем что прочитали
+  _sendReadReceipt(room); // СЃРѕРѕР±С‰Р°РµРј С‡С‚Рѕ РїСЂРѕС‡РёС‚Р°Р»Рё
   renderFriends();
   renderGroups();
 }
 
-// ══════════════════════════════════════════════
-// MESSAGES  ← КРАСОТА + УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// MESSAGES  в†ђ РљР РђРЎРћРўРђ + РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 socket.on('online-count', n => { if (onlineCount) onlineCount.textContent = n; });
 let _onlineUpdateTimer = null;
 socket.on('online-users', users => {
   onlineUsersSet.clear();
   users.forEach(u => onlineUsersSet.add(u));
   
-  // Обновляем точки на аватарках сразу
+  // РћР±РЅРѕРІР»СЏРµРј С‚РѕС‡РєРё РЅР° Р°РІР°С‚Р°СЂРєР°С… СЃСЂР°Р·Сѓ
   document.querySelectorAll('[data-online-for]').forEach(dot => {
     const u = dot.dataset.onlineFor;
     const isOn = onlineUsersSet.has(u);
     dot.style.background = isOn ? '#22c55e' : '#6b7280';
-    dot.title = isOn ? 'Онлайн' : 'Не в сети';
+    dot.title = isOn ? 'РћРЅР»Р°Р№РЅ' : 'РќРµ РІ СЃРµС‚Рё';
   });
 
-  // renderFriends обновит ci-sub через cache key (включает onlineKey)
+  // renderFriends РѕР±РЅРѕРІРёС‚ ci-sub С‡РµСЂРµР· cache key (РІРєР»СЋС‡Р°РµС‚ onlineKey)
   if (friendsList) friendsList._lastKey = '';
   renderFriends();
   _updateChatOnlineStatus();
@@ -1378,14 +1378,14 @@ function _updateChatOnlineStatus() {
   if (!_chatPartner || !roomSub) return;
   const isOnline = onlineUsersSet.has(_chatPartner);
   const color = isOnline ? '#22c55e' : 'var(--text3)';
-  const text = isOnline ? 'онлайн' : 'не в сети';
-  // Обновляем или пересоздаём span
+  const text = isOnline ? 'РѕРЅР»Р°Р№РЅ' : 'РЅРµ РІ СЃРµС‚Рё';
+  // РћР±РЅРѕРІР»СЏРµРј РёР»Рё РїРµСЂРµСЃРѕР·РґР°С‘Рј span
   let statusEl = document.getElementById('chatOnlineStatus');
   if (statusEl) {
     statusEl.textContent = text;
     statusEl.style.color = color;
   } else {
-    // span не существует — пересоздаём roomSub
+    // span РЅРµ СЃСѓС‰РµСЃС‚РІСѓРµС‚ вЂ” РїРµСЂРµСЃРѕР·РґР°С‘Рј roomSub
     roomSub.innerHTML = `<span id="chatOnlineStatus" style="color:${color}">${text}</span>`;
   }
 }
@@ -1396,23 +1396,23 @@ socket.on('history', msgs => {
   _lastMsgDate = null;
   if (msgsEmpty) msgsEmpty.style.display = msgs.length ? 'none' : 'flex';
   msgs.forEach(addMessage);
-  // После отрисовки истории — разрешаем уведомления для новых сообщений
+  // РџРѕСЃР»Рµ РѕС‚СЂРёСЃРѕРІРєРё РёСЃС‚РѕСЂРёРё вЂ” СЂР°Р·СЂРµС€Р°РµРј СѓРІРµРґРѕРјР»РµРЅРёСЏ РґР»СЏ РЅРѕРІС‹С… СЃРѕРѕР±С‰РµРЅРёР№
   requestAnimationFrame(() => {
     _historyLoading = false;
-    _applyHiddenMessages(); // скрываем удалённые у себя
-    // Синхронизируем _lastMsgDate с последним видимым разделителем в DOM
+    _applyHiddenMessages(); // СЃРєСЂС‹РІР°РµРј СѓРґР°Р»С‘РЅРЅС‹Рµ Сѓ СЃРµР±СЏ
+    // РЎРёРЅС…СЂРѕРЅРёР·РёСЂСѓРµРј _lastMsgDate СЃ РїРѕСЃР»РµРґРЅРёРј РІРёРґРёРјС‹Рј СЂР°Р·РґРµР»РёС‚РµР»РµРј РІ DOM
     const seps = messagesDiv?.querySelectorAll('.msg-day-sep');
     const lastSep = seps?.length ? seps[seps.length - 1] : null;
     if (lastSep) {
-      // Обратно конвертируем текст разделителя в дату
+      // РћР±СЂР°С‚РЅРѕ РєРѕРЅРІРµСЂС‚РёСЂСѓРµРј С‚РµРєСЃС‚ СЂР°Р·РґРµР»РёС‚РµР»СЏ РІ РґР°С‚Сѓ
       const txt = lastSep.textContent.trim();
       const today = new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' });
       const yesterday = new Date(Date.now()-86400000).toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' });
-      if (txt === 'Сегодня') _lastMsgDate = today;
-      else if (txt === 'Вчера') _lastMsgDate = yesterday;
+      if (txt === 'РЎРµРіРѕРґРЅСЏ') _lastMsgDate = today;
+      else if (txt === 'Р’С‡РµСЂР°') _lastMsgDate = yesterday;
       else _lastMsgDate = txt;
     } else {
-      _lastMsgDate = null; // нет разделителей — сбрасываем
+      _lastMsgDate = null; // РЅРµС‚ СЂР°Р·РґРµР»РёС‚РµР»РµР№ вЂ” СЃР±СЂР°СЃС‹РІР°РµРј
     }
   });
 });
@@ -1426,12 +1426,12 @@ socket.on('message', msg => {
     if (room.startsWith('private:')) {
       const partner = room.split(':').slice(1).find(p => p !== currentUser);
       if (partner) {
-        // Обновляем счётчик
+        // РћР±РЅРѕРІР»СЏРµРј СЃС‡С‘С‚С‡РёРє
         const cnt = (unreadCounts.get(partner) || 0) + 1;
         unreadCounts.set(partner, cnt);
         _moveChatToTop(partner);
 
-        // Обновляем бейдж НАПРЯМУЮ в DOM — без renderFriends
+        // РћР±РЅРѕРІР»СЏРµРј Р±РµР№РґР¶ РќРђРџР РЇРњРЈР® РІ DOM вЂ” Р±РµР· renderFriends
         const badge = document.getElementById('badge_' + partner)
                    || friendsList?.querySelector(`li[data-friend="${partner}"] .ci-badge`);
         if (badge) {
@@ -1440,19 +1440,19 @@ socket.on('message', msg => {
           badge.closest('li')?.classList.add('has-unread');
         }
 
-        // Поднимаем чат наверх — переставляем li
+        // РџРѕРґРЅРёРјР°РµРј С‡Р°С‚ РЅР°РІРµСЂС… вЂ” РїРµСЂРµСЃС‚Р°РІР»СЏРµРј li
         const li = friendsList?.querySelector(`li[data-friend="${partner}"]`);
         if (li && friendsList?.firstChild !== li) {
           friendsList.prepend(li);
         }
 
-        // Звук уведомления
+        // Р—РІСѓРє СѓРІРµРґРѕРјР»РµРЅРёСЏ
         playNotifSound();
 
-        // Push-уведомление если вкладка скрыта
+        // Push-СѓРІРµРґРѕРјР»РµРЅРёРµ РµСЃР»Рё РІРєР»Р°РґРєР° СЃРєСЂС‹С‚Р°
         if (document.hidden) {
           const senderNick = userNicknames?.[msg.user] || msg.user || '';
-          const preview = msg.text ? msg.text.slice(0, 60) : '📎 Вложение';
+          const preview = msg.text ? msg.text.slice(0, 60) : 'рџ“Ћ Р’Р»РѕР¶РµРЅРёРµ';
           showPushNotification(senderNick, preview, room);
         }
       }
@@ -1462,7 +1462,7 @@ socket.on('message', msg => {
       groupUnreadCounts.set(gid, cnt2);
       _moveGroupToTop(gid);
 
-      // Обновляем бейдж группы НАПРЯМУЮ
+      // РћР±РЅРѕРІР»СЏРµРј Р±РµР№РґР¶ РіСЂСѓРїРїС‹ РќРђРџР РЇРњРЈР®
       const gbadge = document.getElementById('gbadge_' + gid)
                   || groupsList?.querySelector(`li[data-group="${gid}"] .ci-badge`);
       if (gbadge) {
@@ -1471,31 +1471,31 @@ socket.on('message', msg => {
         gbadge.closest('li')?.classList.add('has-unread');
       }
 
-      // Поднимаем группу наверх
+      // РџРѕРґРЅРёРјР°РµРј РіСЂСѓРїРїСѓ РЅР°РІРµСЂС…
       const gli = groupsList?.querySelector(`[data-group="${gid}"]`);
       if (gli && groupsList?.firstChild !== gli) {
         groupsList.prepend(gli);
       }
 
-      // Звук уведомления
+      // Р—РІСѓРє СѓРІРµРґРѕРјР»РµРЅРёСЏ
       playNotifSound();
 
-      // Push-уведомление если вкладка скрыта
+      // Push-СѓРІРµРґРѕРјР»РµРЅРёРµ РµСЃР»Рё РІРєР»Р°РґРєР° СЃРєСЂС‹С‚Р°
       if (document.hidden) {
         const grp = groups?.find(g => g.id === gid);
-        const grpName = grp?.name || 'Группа';
+        const grpName = grp?.name || 'Р“СЂСѓРїРїР°';
         const senderNick = userNicknames?.[msg.user] || msg.user || '';
         const preview = msg.text
           ? (senderNick ? `${senderNick}: ${msg.text.slice(0,60)}` : msg.text.slice(0,60))
-          : `${senderNick}: 📎 Вложение`;
+          : `${senderNick}: рџ“Ћ Р’Р»РѕР¶РµРЅРёРµ`;
         showPushNotification(grpName, preview, `group:${gid}`);
       }
     }
   }
-  // Рендерим только если сообщение из текущей комнаты
+  // Р РµРЅРґРµСЂРёРј С‚РѕР»СЊРєРѕ РµСЃР»Рё СЃРѕРѕР±С‰РµРЅРёРµ РёР· С‚РµРєСѓС‰РµР№ РєРѕРјРЅР°С‚С‹
   if (isActive) {
     addMessage(msg);
-    // Если мы уже в этом чате — сразу отмечаем прочитанным
+    // Р•СЃР»Рё РјС‹ СѓР¶Рµ РІ СЌС‚РѕРј С‡Р°С‚Рµ вЂ” СЃСЂР°Р·Сѓ РѕС‚РјРµС‡Р°РµРј РїСЂРѕС‡РёС‚Р°РЅРЅС‹Рј
     if (!document.hidden) {
       _sendReadReceipt(room);
     }
@@ -1503,46 +1503,46 @@ socket.on('message', msg => {
 });
 socket.on('system', addSystem);
 
-// Конвертирует URL файла в рабочий src
+// РљРѕРЅРІРµСЂС‚РёСЂСѓРµС‚ URL С„Р°Р№Р»Р° РІ СЂР°Р±РѕС‡РёР№ src
 function fileUrl(url) {
   if (!url) return url;
-  if (url.startsWith('/api/dl')) return url;         // уже прокси
+  if (url.startsWith('/api/dl')) return url;         // СѓР¶Рµ РїСЂРѕРєСЃРё
   if (url.startsWith('data:'))   return url;         // data URI
-  if (url.startsWith('/'))       return url;         // относительный
-  if (url.includes('.supabase.co/storage/')) return url; // Supabase public — напрямую
-  // B2: /file/BUCKET/path → /api/dl?f=path
+  if (url.startsWith('/'))       return url;         // РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅС‹Р№
+  if (url.includes('.supabase.co/storage/')) return url; // Supabase public вЂ” РЅР°РїСЂСЏРјСѓСЋ
+  // B2: /file/BUCKET/path в†’ /api/dl?f=path
   const m = url.match(/\/file\/[^/]+\/(.+?)(\?|$)/);
   if (m) return '/api/dl?f=' + encodeURIComponent(m[1]);
-  return url; // любой другой внешний URL
+  return url; // Р»СЋР±РѕР№ РґСЂСѓРіРѕР№ РІРЅРµС€РЅРёР№ URL
 }
 
 
-// ── Read receipts ─────────────────────────────────────────────────────────
-// Когда партнёр открывает чат — помечаем наши сообщения как прочитанные
+// в”Ђв”Ђ Read receipts в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РљРѕРіРґР° РїР°СЂС‚РЅС‘СЂ РѕС‚РєСЂС‹РІР°РµС‚ С‡Р°С‚ вЂ” РїРѕРјРµС‡Р°РµРј РЅР°С€Рё СЃРѕРѕР±С‰РµРЅРёСЏ РєР°Рє РїСЂРѕС‡РёС‚Р°РЅРЅС‹Рµ
 socket.on('messages-read', ({ room, by }) => {
   if (room !== currentRoom) return;
-  // Обновляем точки только для сообщений в этой комнате
+  // РћР±РЅРѕРІР»СЏРµРј С‚РѕС‡РєРё С‚РѕР»СЊРєРѕ РґР»СЏ СЃРѕРѕР±С‰РµРЅРёР№ РІ СЌС‚РѕР№ РєРѕРјРЅР°С‚Рµ
   document.querySelectorAll(`.msg-status[data-room="${room}"]`).forEach(el => {
     const dots = el.querySelectorAll('.msg-dot');
     dots.forEach(d => { d.className = 'msg-dot msg-dot-2'; });
   });
-  // Также обновляем сообщения без data-room (старые)
+  // РўР°РєР¶Рµ РѕР±РЅРѕРІР»СЏРµРј СЃРѕРѕР±С‰РµРЅРёСЏ Р±РµР· data-room (СЃС‚Р°СЂС‹Рµ)
   document.querySelectorAll('.msg-status:not([data-room])').forEach(el => {
     const dots = el.querySelectorAll('.msg-dot');
     dots.forEach(d => { d.className = 'msg-dot msg-dot-2'; });
   });
 });
 
-// Когда МЫ открываем чат — сообщаем отправителю что прочитали
+// РљРѕРіРґР° РњР« РѕС‚РєСЂС‹РІР°РµРј С‡Р°С‚ вЂ” СЃРѕРѕР±С‰Р°РµРј РѕС‚РїСЂР°РІРёС‚РµР»СЋ С‡С‚Рѕ РїСЂРѕС‡РёС‚Р°Р»Рё
 function _sendReadReceipt(room) {
   if (!room || !currentUser) return;
   socket.emit('messages-read', { room, by: currentUser });
 }
 
-// Звонок от сервера (из истории или реалтайм)
+// Р—РІРѕРЅРѕРє РѕС‚ СЃРµСЂРІРµСЂР° (РёР· РёСЃС‚РѕСЂРёРё РёР»Рё СЂРµР°Р»С‚Р°Р№Рј)
 socket.on('call-record', msg => {
   if (msg.room !== currentRoom) return;
-  // cr_to = кому звонили. Если я — callee, показываем свою метку
+  // cr_to = РєРѕРјСѓ Р·РІРѕРЅРёР»Рё. Р•СЃР»Рё СЏ вЂ” callee, РїРѕРєР°Р·С‹РІР°РµРј СЃРІРѕСЋ РјРµС‚РєСѓ
   const isCallee = msg.cr_to === currentUser;
   if (isCallee && msg.cr_label_callee) {
     msg = Object.assign({}, msg, {
@@ -1553,12 +1553,12 @@ socket.on('call-record', msg => {
   addMessage(msg);
 });
 
-let _lastMsgDate = null; // Для разделителей по дням
+let _lastMsgDate = null; // Р”Р»СЏ СЂР°Р·РґРµР»РёС‚РµР»РµР№ РїРѕ РґРЅСЏРј
 
 function addMessage(msg) {
   if (msgsEmpty) msgsEmpty.style.display = 'none';
 
-  // ── День-разделитель ──
+  // в”Ђв”Ђ Р”РµРЅСЊ-СЂР°Р·РґРµР»РёС‚РµР»СЊ в”Ђв”Ђ
   const msgDate = msg.date || (msg.ts
     ? new Date(msg.ts).toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' })
     : null);
@@ -1568,7 +1568,7 @@ function addMessage(msg) {
     sep.className = 'msg-day-sep';
     const today    = new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' });
     const yesterday = new Date(Date.now()-86400000).toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' });
-    sep.textContent = msgDate === today ? 'Сегодня' : msgDate === yesterday ? 'Вчера' : msgDate;
+    sep.textContent = msgDate === today ? 'РЎРµРіРѕРґРЅСЏ' : msgDate === yesterday ? 'Р’С‡РµСЂР°' : msgDate;
     messagesDiv?.appendChild(sep);
   }
 
@@ -1578,7 +1578,7 @@ function addMessage(msg) {
   row.dataset.id = msg.id;
   _replyStore.set(String(msg.id), msg);
 
-  // Avatar — mark with data-user so avatar-updated can refresh it
+  // Avatar вЂ” mark with data-user so avatar-updated can refresh it
   const ava = document.createElement('div');
   ava.className = 'avatar sm msg-ava';
   ava.dataset.user = msg.user;
@@ -1593,16 +1593,16 @@ function addMessage(msg) {
   const bub = document.createElement('div');
   bub.className = 'msg-bubble';
 
-  // В личных чатах не показываем ник и аватарку собеседника
+  // Р’ Р»РёС‡РЅС‹С… С‡Р°С‚Р°С… РЅРµ РїРѕРєР°Р·С‹РІР°РµРј РЅРёРє Рё Р°РІР°С‚Р°СЂРєСѓ СЃРѕР±РµСЃРµРґРЅРёРєР°
   const isPrivateChat = currentRoom?.startsWith('private:');
   let inner = (!own && !isPrivateChat) ? `<div class="msg-sender">${esc(userNicknames[msg.user] || msg.user)}</div>` : '';
 
-  // ── Цитата ответа ──
-  // Метка "Переслано" над сообщением
+  // в”Ђв”Ђ Р¦РёС‚Р°С‚Р° РѕС‚РІРµС‚Р° в”Ђв”Ђ
+  // РњРµС‚РєР° "РџРµСЂРµСЃР»Р°РЅРѕ" РЅР°Рґ СЃРѕРѕР±С‰РµРЅРёРµРј
   if (msg.forwarded || msg.mediaData?.forwarded) {
     const fwdFrom = msg.fwdFrom || msg.mediaData?.fwdFrom || '';
     const fwdNick = fwdFrom ? (userNicknames?.[fwdFrom] || fwdFrom) : '';
-    inner += `<div class="fwd-label"><i class="ti ti-share"></i> Переслано${fwdNick ? ' от <b>' + esc(fwdNick) + '</b>' : ''}</div>`;
+    inner += `<div class="fwd-label"><i class="ti ti-share"></i> РџРµСЂРµСЃР»Р°РЅРѕ${fwdNick ? ' РѕС‚ <b>' + esc(fwdNick) + '</b>' : ''}</div>`;
   }
 
   if (msg.replyTo) {
@@ -1610,9 +1610,9 @@ function addMessage(msg) {
     const rNick = esc(userNicknames?.[rt.user] || rt.user || '?');
     const rText = rt.text
       ? esc(rt.text.slice(0, 80))
-      : (rt.type === 'audio' ? '🎤 Голосовое'
-        : rt.type === 'video_circle' ? '📹 Видео'
-        : '📎 Вложение');
+      : (rt.type === 'audio' ? 'рџЋ¤ Р“РѕР»РѕСЃРѕРІРѕРµ'
+        : rt.type === 'video_circle' ? 'рџ“№ Р’РёРґРµРѕ'
+        : 'рџ“Ћ Р’Р»РѕР¶РµРЅРёРµ');
     const rtId = String(rt.id || '').replace(/'/g, '');
     inner += `<div class="reply-quote" onclick="scrollToMsg('${rtId}')">
       <span class="rq-name">${rNick}</span>
@@ -1620,9 +1620,9 @@ function addMessage(msg) {
     </div>`;
   }
 
-  // ── Запись о звонке (из истории) ───────────────────────
+  // в”Ђв”Ђ Р—Р°РїРёСЃСЊ Рѕ Р·РІРѕРЅРєРµ (РёР· РёСЃС‚РѕСЂРёРё) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   if (msg.type === 'call_record') {
-    const crLabel = msg.cr_label || 'Звонок';
+    const crLabel = msg.cr_label || 'Р—РІРѕРЅРѕРє';
     const crExtra = msg.cr_extra || '';
     bub.classList.add('call-rec-bub');
     inner = `<div class="call-rec-wrap">
@@ -1632,10 +1632,10 @@ function addMessage(msg) {
       </div>
     </div>`;
     bub.innerHTML = inner;
-    // Контекстное меню для записи звонка (удалить у себя / выбрать)
+    // РљРѕРЅС‚РµРєСЃС‚РЅРѕРµ РјРµРЅСЋ РґР»СЏ Р·Р°РїРёСЃРё Р·РІРѕРЅРєР° (СѓРґР°Р»РёС‚СЊ Сѓ СЃРµР±СЏ / РІС‹Р±СЂР°С‚СЊ)
     bub.addEventListener('contextmenu', e => {
         e.preventDefault();
-        // Правая кнопка не должна добавлять в выделение
+        // РџСЂР°РІР°СЏ РєРЅРѕРїРєР° РЅРµ РґРѕР»Р¶РЅР° РґРѕР±Р°РІР»СЏС‚СЊ РІ РІС‹РґРµР»РµРЅРёРµ
         showCtxMsg(e, msg);
       });
     row.appendChild(bub);
@@ -1646,7 +1646,7 @@ function addMessage(msg) {
 
   if (msg.type === 'image') {
     const u = fileUrl(msg.url);
-    inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="фото" onerror="this.dataset.retry=(+this.dataset.retry||0)+1;if(this.dataset.retry<4){const t=this;setTimeout(()=>{t.src=t.src.split('?')[0]+'?r='+Date.now()},2000*+this.dataset.retry)}else{this.classList.add('img-broken')}"></div>`;
+    inner += `<div class="msg-img-wrap"><img class="msg-img" src="${u}" loading="lazy" onclick="viewMedia('${u}','image')" alt="С„РѕС‚Рѕ" onerror="this.dataset.retry=(+this.dataset.retry||0)+1;if(this.dataset.retry<4){const t=this;setTimeout(()=>{t.src=t.src.split('?')[0]+'?r='+Date.now()},2000*+this.dataset.retry)}else{this.classList.add('img-broken')}"></div>`;
     if (msg.text) inner += `<div class="msg-text">${renderMsgText(msg.text)}</div>`;
   } else if (msg.type === 'video') {
     const u = fileUrl(msg.url);
@@ -1673,12 +1673,12 @@ function addMessage(msg) {
       <button class="vp-play" onclick="vpToggle('${pid}','${u}')"><i class="ti ti-player-play"></i></button>
       <div class="vp-body">
         <div class="vp-waveform" onclick="vpSeek(event,'${pid}','${u}')">${Array.from({length:30},(_,i)=>`<div class="vp-bar" style="height:${8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8)}px"></div>`).join('')}</div>
-        <div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">—</span></div>
+        <div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">вЂ”</span></div>
       </div>
     </div>`;
   } else if (msg.type === 'file') {
     const u = fileUrl(msg.url);
-    const fname = esc(msg.fileName || 'Файл');
+    const fname = esc(msg.fileName || 'Р¤Р°Р№Р»');
     const ext = (msg.fileName||'').split('.').pop().toUpperCase().slice(0,6) || 'FILE';
     const iconHtml = _buildFileIconHtml(msg.fileName || '', '');
     inner += `<a class="msg-file" href="${u}" target="_blank" rel="noopener" download>
@@ -1692,19 +1692,19 @@ function addMessage(msg) {
     inner += `<div class="msg-text">${renderMsgText(msg.text)}</div>`;
   }
 
-  // Точки статуса (только для своих сообщений в личных чатах)
+  // РўРѕС‡РєРё СЃС‚Р°С‚СѓСЃР° (С‚РѕР»СЊРєРѕ РґР»СЏ СЃРІРѕРёС… СЃРѕРѕР±С‰РµРЅРёР№ РІ Р»РёС‡РЅС‹С… С‡Р°С‚Р°С…)
   const isPriv  = (msg.room||'').startsWith('private:');
   const isGroup = (msg.room||'').startsWith('group:');
   let statusHtml = '';
 
   if (own && (isPriv || isGroup)) {
-    // Только сервер — источник истины. partnerInChat НЕ используем при рендере
+    // РўРѕР»СЊРєРѕ СЃРµСЂРІРµСЂ вЂ” РёСЃС‚РѕС‡РЅРёРє РёСЃС‚РёРЅС‹. partnerInChat РќР• РёСЃРїРѕР»СЊР·СѓРµРј РїСЂРё СЂРµРЅРґРµСЂРµ
     let isRead = false;
     if (isPriv) {
       const partner = (msg.room||'').split(':').slice(1).find(p => p !== currentUser);
       isRead = Array.isArray(msg.readBy) && !!partner && msg.readBy.includes(partner);
     } else {
-      // Группа: хотя бы один прочитал
+      // Р“СЂСѓРїРїР°: С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ РїСЂРѕС‡РёС‚Р°Р»
       isRead = Array.isArray(msg.readBy) && msg.readBy.length > 0;
     }
     statusHtml = `<span class="msg-status" data-msg-id="${msg.id}" data-room="${msg.room||''}">
@@ -1712,7 +1712,7 @@ function addMessage(msg) {
       <span class="msg-dot ${isRead ? 'msg-dot-2' : 'msg-dot-grey'}"></span>
     </span>`;
   }
-  const editedHtml = msg.edited ? '<span class="msg-edited">ред.</span>' : '';
+  const editedHtml = msg.edited ? '<span class="msg-edited">СЂРµРґ.</span>' : '';
   inner += `<div class="msg-meta"><span class="msg-time">${msg.time}</span>${editedHtml}${statusHtml}</div>`;
   bub.innerHTML = inner;
 
@@ -1723,24 +1723,24 @@ function addMessage(msg) {
     if (!url) return;
     const vp = document.createElement('div');
     vp.className = 'voice-player'; vp.id = pid;
-    vp.innerHTML = `<button class="vp-play" onclick="vpToggle('${pid}','${url}')"><i class="ti ti-player-play"></i></button><div class="vp-body"><div class="vp-waveform" onclick="vpSeek(event,'${pid}','${url}')">${Array.from({length:30},(_,i)=>'<div class="vp-bar" style="height:'+(8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8))+'px"></div>').join('')}</div><div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">—</span></div></div>`;
+    vp.innerHTML = `<button class="vp-play" onclick="vpToggle('${pid}','${url}')"><i class="ti ti-player-play"></i></button><div class="vp-body"><div class="vp-waveform" onclick="vpSeek(event,'${pid}','${url}')">${Array.from({length:30},(_,i)=>'<div class="vp-bar" style="height:'+(8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8))+'px"></div>').join('')}</div><div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">вЂ”</span></div></div>`;
     a.replaceWith(vp);
   });
 
-  // ── Правая кнопка — контекстное меню ──────────────────────────
+  // в”Ђв”Ђ РџСЂР°РІР°СЏ РєРЅРѕРїРєР° вЂ” РєРѕРЅС‚РµРєСЃС‚РЅРѕРµ РјРµРЅСЋ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   bub.addEventListener('contextmenu', e => {
       e.preventDefault();
-      // Правая кнопка не должна добавлять в выделение
+      // РџСЂР°РІР°СЏ РєРЅРѕРїРєР° РЅРµ РґРѕР»Р¶РЅР° РґРѕР±Р°РІР»СЏС‚СЊ РІ РІС‹РґРµР»РµРЅРёРµ
       showCtxMsg(e, msg);
     });
 
-  // ── Зажатие левой кнопки мыши — начало выделения (desktop) ───
+  // в”Ђв”Ђ Р—Р°Р¶Р°С‚РёРµ Р»РµРІРѕР№ РєРЅРѕРїРєРё РјС‹С€Рё вЂ” РЅР°С‡Р°Р»Рѕ РІС‹РґРµР»РµРЅРёСЏ (desktop) в”Ђв”Ђв”Ђ
   let _mholdTimer = null;
   bub.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     _mholdTimer = setTimeout(() => {
       _mholdTimer = null;
-      // Зажатие левой кнопки — начинаем/добавляем к выделению (тихо, без меню)
+      // Р—Р°Р¶Р°С‚РёРµ Р»РµРІРѕР№ РєРЅРѕРїРєРё вЂ” РЅР°С‡РёРЅР°РµРј/РґРѕР±Р°РІР»СЏРµРј Рє РІС‹РґРµР»РµРЅРёСЋ (С‚РёС…Рѕ, Р±РµР· РјРµРЅСЋ)
       if (_selectMode) {
         _toggleMsgSelect(String(msg.id), row);
       } else {
@@ -1751,7 +1751,7 @@ function addMessage(msg) {
   bub.addEventListener('mouseup',   () => { clearTimeout(_mholdTimer); _mholdTimer = null; });
   bub.addEventListener('mouseleave',() => { clearTimeout(_mholdTimer); _mholdTimer = null; });
 
-  // ── Клик в режиме выделения ───────────────────────────────────
+  // в”Ђв”Ђ РљР»РёРє РІ СЂРµР¶РёРјРµ РІС‹РґРµР»РµРЅРёСЏ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   bub.addEventListener('click', e => {
     if (_selectMode) {
       e.stopPropagation();
@@ -1759,7 +1759,7 @@ function addMessage(msg) {
     }
   });
 
-  // ── Touch: long-press (mobile) + swipe-right → ответить ──────
+  // в”Ђв”Ђ Touch: long-press (mobile) + swipe-right в†’ РѕС‚РІРµС‚РёС‚СЊ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   let _lpt = null, _tx0 = 0, _ty0 = 0, _didSwipe = false;
   bub.addEventListener('touchstart', e => {
     _tx0 = e.touches[0].clientX; _ty0 = e.touches[0].clientY; _didSwipe = false;
@@ -1768,7 +1768,7 @@ function addMessage(msg) {
         _lpt = null;
         const t = e.touches[0];
         navigator.vibrate?.(30);
-        // Зажатие на мобиле = правая кнопка: открываем контекстное меню
+        // Р—Р°Р¶Р°С‚РёРµ РЅР° РјРѕР±РёР»Рµ = РїСЂР°РІР°СЏ РєРЅРѕРїРєР°: РѕС‚РєСЂС‹РІР°РµРј РєРѕРЅС‚РµРєСЃС‚РЅРѕРµ РјРµРЅСЋ
         showCtxMsg({ clientX: t.clientX, clientY: t.clientY, preventDefault: ()=>{} }, msg);
       }
     }, 500);
@@ -1789,18 +1789,18 @@ function addMessage(msg) {
   }, { passive: true });
   bub.addEventListener('touchend', () => { clearTimeout(_lpt); _lpt = null; }, { passive: true });
 
-  // В личных чатах не показываем аватарку собеседника
+  // Р’ Р»РёС‡РЅС‹С… С‡Р°С‚Р°С… РЅРµ РїРѕРєР°Р·С‹РІР°РµРј Р°РІР°С‚Р°СЂРєСѓ СЃРѕР±РµСЃРµРґРЅРёРєР°
   if (!own && !isPrivateChat) row.appendChild(ava);
   row.appendChild(bub);
   messagesDiv.appendChild(row);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  // Уведомление только для реально новых сообщений (не при загрузке истории)
+  // РЈРІРµРґРѕРјР»РµРЅРёРµ С‚РѕР»СЊРєРѕ РґР»СЏ СЂРµР°Р»СЊРЅРѕ РЅРѕРІС‹С… СЃРѕРѕР±С‰РµРЅРёР№ (РЅРµ РїСЂРё Р·Р°РіСЂСѓР·РєРµ РёСЃС‚РѕСЂРёРё)
   if (!_historyLoading && msg.user !== currentUser && msg.room !== currentRoom) {
     playCallSound('message');
   }
   if (!_historyLoading && msg.user !== currentUser && document.visibilityState !== 'visible') {
     const nick = userNicknames[msg.user] || msg.user;
-    const txt  = msg.type === 'text' ? msg.text : (msg.type === 'audio' ? 'Голосовое сообщение' : 'Медиафайл');
+    const txt  = msg.type === 'text' ? msg.text : (msg.type === 'audio' ? 'Р“РѕР»РѕСЃРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ' : 'РњРµРґРёР°С„Р°Р№Р»');
     showPushNotification(nick, txt, 'msg-' + msg.user);
   }
 }
@@ -1817,7 +1817,7 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
-// Рендер текста сообщения: markdown + автоссылки
+// Р РµРЅРґРµСЂ С‚РµРєСЃС‚Р° СЃРѕРѕР±С‰РµРЅРёСЏ: markdown + Р°РІС‚РѕСЃСЃС‹Р»РєРё
 function renderMsgText(s) {
   let t = String(s)
     .replace(/&/g,'&amp;')
@@ -1837,9 +1837,9 @@ function renderMsgText(s) {
   return t;
 }
 
-// ══════════════════════════════════════════════
-// SENDING  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// SENDING  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function enableInput() {
   msgInput.disabled = false;
   attachBtn.disabled = false;
@@ -1850,7 +1850,7 @@ function refreshSendBtn() {
   const hasText  = msgInput.value.trim().length > 0;
   const hasFiles = selectedFiles.length > 0;
   const canSend  = hasText || hasFiles;
-  sendBtn.disabled = false; // always enabled — mic when empty
+  sendBtn.disabled = false; // always enabled вЂ” mic when empty
   if (canSend) {
     sendIco.className = 'ti ti-send';
     sendBtn.classList.remove('mic-mode');
@@ -1861,9 +1861,9 @@ function refreshSendBtn() {
 }
 
 
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // MESSAGE SELECTION
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let _selectedMsgs = new Set();
 let _selectMode = false;
 
@@ -1872,12 +1872,12 @@ function startMsgSelect(id) {
   _selectedMsgs.clear();
   _selectedMsgs.add(String(id));
   _renderSelectMode();
-  // Показываем панель выделения
+  // РџРѕРєР°Р·С‹РІР°РµРј РїР°РЅРµР»СЊ РІС‹РґРµР»РµРЅРёСЏ
   _showSelectBar();
 }
 
 function _renderSelectMode() {
-  // Каждое сообщение — кликабельно для выделения
+  // РљР°Р¶РґРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ вЂ” РєР»РёРєР°Р±РµР»СЊРЅРѕ РґР»СЏ РІС‹РґРµР»РµРЅРёСЏ
   document.querySelectorAll('.msg-row').forEach(row => {
     const id = row.dataset.id;
     if (!id) return;
@@ -1899,8 +1899,8 @@ function _toggleMsgSelect(id, row) {
 }
 
 function _showSelectBar() {
-  // Панель не нужна — действия через правую кнопку мыши / контекстное меню
-  // Показываем лёгкий счётчик в заголовке чата
+  // РџР°РЅРµР»СЊ РЅРµ РЅСѓР¶РЅР° вЂ” РґРµР№СЃС‚РІРёСЏ С‡РµСЂРµР· РїСЂР°РІСѓСЋ РєРЅРѕРїРєСѓ РјС‹С€Рё / РєРѕРЅС‚РµРєСЃС‚РЅРѕРµ РјРµРЅСЋ
+  // РџРѕРєР°Р·С‹РІР°РµРј Р»С‘РіРєРёР№ СЃС‡С‘С‚С‡РёРє РІ Р·Р°РіРѕР»РѕРІРєРµ С‡Р°С‚Р°
   const sub = document.getElementById('roomSub');
   if (sub) sub.dataset.origText = sub.dataset.origText || sub.textContent;
   _updateSelectCount();
@@ -1910,7 +1910,7 @@ function _updateSelectCount() {
   const sub = document.getElementById('roomSub');
   if (!sub) return;
   if (_selectMode && _selectedMsgs.size > 0) {
-    sub.textContent = `Выбрано: ${_selectedMsgs.size}`;
+    sub.textContent = `Р’С‹Р±СЂР°РЅРѕ: ${_selectedMsgs.size}`;
     sub.style.color = 'var(--accent)';
   } else if (!_selectMode) {
     sub.textContent = sub.dataset.origText || '';
@@ -1936,14 +1936,14 @@ function copySelectedMsgs() {
     const bub = row?.querySelector('.msg-text,.msg-bubble');
     if (bub) texts.push(bub.innerText.trim());
   });
-  navigator.clipboard?.writeText(texts.join('\n---\n')).then(() => toast('Скопировано', 'success', 1500));
+  navigator.clipboard?.writeText(texts.join('\n---\n')).then(() => toast('РЎРєРѕРїРёСЂРѕРІР°РЅРѕ', 'success', 1500));
   cancelMsgSelect();
 }
 
 async function deleteSelectedMsgsAll() {
   const ids = [..._selectedMsgs];
   cancelMsgSelect();
-  // Delete for all — only own messages
+  // Delete for all вЂ” only own messages
   for (const id of ids) {
     const row = document.querySelector(`[data-id="${id}"]`);
     const isOwn = row?.classList.contains('own');
@@ -1972,7 +1972,7 @@ async function deleteSelectedMsgs() {
     const row = document.querySelector(`[data-id="${id}"]`);
     if (row) { row.style.transition = 'opacity .2s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 200); }
   });
-  toast(`Удалено ${ids.length} сообщений`, 'success', 2000);
+  toast(`РЈРґР°Р»РµРЅРѕ ${ids.length} СЃРѕРѕР±С‰РµРЅРёР№`, 'success', 2000);
 }
 
 function showForwardPicker() {
@@ -1986,12 +1986,12 @@ function showForwardPicker() {
       modal.innerHTML = `
         <div class="modal-card forward-card">
           <div class="modal-hd">
-            <span style="display:flex;align-items:center;gap:8px"><i class="ti ti-share" style="color:var(--accent)"></i> Переслать</span>
+            <span style="display:flex;align-items:center;gap:8px"><i class="ti ti-share" style="color:var(--accent)"></i> РџРµСЂРµСЃР»Р°С‚СЊ</span>
             <button class="icon-btn" id="fwCloseBtn"><i class="ti ti-x"></i></button>
           </div>
           <div class="fw-search-wrap">
             <i class="ti ti-search" style="color:var(--text3);font-size:14px"></i>
-            <input id="fwSearchInput" class="fw-search" placeholder="Поиск" autocomplete="off">
+            <input id="fwSearchInput" class="fw-search" placeholder="РџРѕРёСЃРє" autocomplete="off">
           </div>
           <div class="forward-list" id="fwList"></div>
         </div>`;
@@ -2013,24 +2013,24 @@ function showForwardPicker() {
     if (list) list.innerHTML = '';
 
     const items = [];
-    // Только реальные личные чаты и группы (без "Общего чата")
+    // РўРѕР»СЊРєРѕ СЂРµР°Р»СЊРЅС‹Рµ Р»РёС‡РЅС‹Рµ С‡Р°С‚С‹ Рё РіСЂСѓРїРїС‹ (Р±РµР· "РћР±С‰РµРіРѕ С‡Р°С‚Р°")
     (friends || []).forEach(f => {
       const name = userNicknames?.[f] || f;
-      items.push({ title: name, sub: 'Личный чат', room: getRoomId(f), av: userAvatars?.[f] || null });
+      items.push({ title: name, sub: 'Р›РёС‡РЅС‹Р№ С‡Р°С‚', room: getRoomId(f), av: userAvatars?.[f] || null });
     });
     (groups || []).forEach(g => {
-      items.push({ title: g.name || `Группа ${g.id}`, sub: 'Группа', room: `group:${g.id}`, av: g.avatar || null });
+      items.push({ title: g.name || `Р“СЂСѓРїРїР° ${g.id}`, sub: 'Р“СЂСѓРїРїР°', room: `group:${g.id}`, av: g.avatar || null });
     });
 
     if (!items.length && list) {
-      list.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">Нет доступных чатов</div>';
+      list.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… С‡Р°С‚РѕРІ</div>';
     } else if (list) {
       items.forEach(it => {
         const row = document.createElement('div');
         row.className = 'forward-item';
         const avHtml = it.av
           ? `<div class="fi-av" style="background-image:url(${it.av});background-size:cover;border-radius:50%;width:36px;height:36px;flex-shrink:0"></div>`
-          : `<div class="fi-av" style="border-radius:${it.sub==='Группа'?'10px':'50%'};width:36px;height:36px;flex-shrink:0;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700">${esc(it.title[0]||'?')}</div>`;
+          : `<div class="fi-av" style="border-radius:${it.sub==='Р“СЂСѓРїРїР°'?'10px':'50%'};width:36px;height:36px;flex-shrink:0;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700">${esc(it.title[0]||'?')}</div>`;
         row.innerHTML = `${avHtml}<div class="fi-info"><div class="fi-title">${esc(it.title)}</div><div class="fi-sub">${esc(it.sub)}</div></div>`;
         row.addEventListener('click', () => done(it.room));
         list.appendChild(row);
@@ -2082,14 +2082,14 @@ async function forwardSelectedMsgs() {
 
   cancelMsgSelect();
   closeCtx();
-  if (sent) toast(`Переслано: ${sent}`, 'success', 2000);
-  if (skipped) toast(`Не переслано: ${skipped}`, 'info', 2000);
+  if (sent) toast(`РџРµСЂРµСЃР»Р°РЅРѕ: ${sent}`, 'success', 2000);
+  if (skipped) toast(`РќРµ РїРµСЂРµСЃР»Р°РЅРѕ: ${skipped}`, 'info', 2000);
 }
 
-// ── Вставка из буфера обмена (Ctrl+V / Command+V) ─────────────────────────
+// в”Ђв”Ђ Р’СЃС‚Р°РІРєР° РёР· Р±СѓС„РµСЂР° РѕР±РјРµРЅР° (Ctrl+V / Command+V) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 document.addEventListener('paste', (e) => {
   if (!currentRoom || !currentUser) return;
-  // Не перехватываем если фокус в чужом поле
+  // РќРµ РїРµСЂРµС…РІР°С‚С‹РІР°РµРј РµСЃР»Рё С„РѕРєСѓСЃ РІ С‡СѓР¶РѕРј РїРѕР»Рµ
   const activeEl = document.activeElement;
   if (activeEl && (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT') && activeEl.id !== 'msgInput') return;
 
@@ -2099,11 +2099,11 @@ document.addEventListener('paste', (e) => {
 
   e.preventDefault();
 
-  // Добавляем файлы в очередь прикреплений — как при нажатии кнопки скрепки
+  // Р”РѕР±Р°РІР»СЏРµРј С„Р°Р№Р»С‹ РІ РѕС‡РµСЂРµРґСЊ РїСЂРёРєСЂРµРїР»РµРЅРёР№ вЂ” РєР°Рє РїСЂРё РЅР°Р¶Р°С‚РёРё РєРЅРѕРїРєРё СЃРєСЂРµРїРєРё
   for (const item of fileItems) {
     const file = item.getAsFile();
     if (!file) continue;
-    // Именуем файл если нет имени (скриншот из буфера)
+    // РРјРµРЅСѓРµРј С„Р°Р№Р» РµСЃР»Рё РЅРµС‚ РёРјРµРЅРё (СЃРєСЂРёРЅС€РѕС‚ РёР· Р±СѓС„РµСЂР°)
     const named = file.name && file.name !== 'image.png'
       ? file
       : new File([file], file.type.startsWith('image/') ? `screenshot_${Date.now()}.png` : `file_${Date.now()}`, { type: file.type });
@@ -2114,7 +2114,7 @@ function handleSend() {
   const text = msgInput.value.trim();
 
   if (_editMsgId) {
-    if (!text) { toast('Текст не может быть пустым', 'warning', 1600); return; }
+    if (!text) { toast('РўРµРєСЃС‚ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј', 'warning', 1600); return; }
     socket.emit('edit-message', { messageId: _editMsgId, text, room: _editRoom || currentRoom });
     cancelEdit();
     msgInput.value = '';
@@ -2136,7 +2136,7 @@ function handleSend() {
   refreshSendBtn();
 }
 
-// ← УДОБСТВО: Cmd+Enter sends, Enter adds newline only if Shift
+// в†ђ РЈР”РћР‘РЎРўР’Рћ: Cmd+Enter sends, Enter adds newline only if Shift
 function onMsgKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -2146,22 +2146,22 @@ function onMsgKey(e) {
   }
 }
 
-// ← КРАСОТА: auto-growing textarea
+// в†ђ РљР РђРЎРћРўРђ: auto-growing textarea
 function autoGrow(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 180) + 'px';
 }
 
-// ══════════════════════════════════════════════
-// FILE HANDLING  ← УДОБСТВО
-// ══════════════════════════════════════════════
-// Attach menu ← КРАСОТА
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// FILE HANDLING  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// Attach menu в†ђ РљР РђРЎРћРўРђ
 attachMenu.innerHTML = `
-  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('image/*')"><i class="ti ti-photo"></i> Фото</div>
-  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('video/*')"><i class="ti ti-video"></i> Видео</div>
-  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('audio/*')"><i class="ti ti-music"></i> Аудио</div>
-  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('*/*')"><i class="ti ti-file"></i> Файл</div>
-  <div class="att-item" onmousedown="event.preventDefault()" onclick="startCircleRecord()"><i class="ti ti-square-rounded"></i> Квадрат</div>`;
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('image/*')"><i class="ti ti-photo"></i> Р¤РѕС‚Рѕ</div>
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('video/*')"><i class="ti ti-video"></i> Р’РёРґРµРѕ</div>
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('audio/*')"><i class="ti ti-music"></i> РђСѓРґРёРѕ</div>
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="pickFiles('*/*')"><i class="ti ti-file"></i> Р¤Р°Р№Р»</div>
+  <div class="att-item" onmousedown="event.preventDefault()" onclick="startCircleRecord()"><i class="ti ti-square-rounded"></i> РљРІР°РґСЂР°С‚</div>`;
 
 attachBtn.addEventListener('mousedown', e => e.preventDefault()); // prevent text selection popup
 attachBtn.addEventListener('click', e => {
@@ -2207,7 +2207,7 @@ function pickFiles(accept) {
 }
 
 function addFile(file) {
-  if (file.size > 50 * 1024 * 1024) { toast(`Файл слишком большой: ${file.name}`, 'warning'); return; }
+  if (file.size > 50 * 1024 * 1024) { toast(`Р¤Р°Р№Р» СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№: ${file.name}`, 'warning'); return; }
   const cat = _detectFileCat(file.name, file.type);
   let type = 'file';
   if (cat === 'image') type = 'image';
@@ -2230,7 +2230,7 @@ function renderFilePreviews() {
     item.className = 'fp-item';
     let thumb = `<i class="ti ti-file" style="font-size:24px;color:var(--accent)"></i>`;
     if (f.type === 'image') thumb = `<img src="${f.dataUrl}" alt="">`;
-    item.innerHTML = `${thumb}<span class="fp-item-name">${f.name}</span><button class="fp-remove" onclick="removeFile(${i})" title="Удалить"><i class="ti ti-x"></i></button>`;
+    item.innerHTML = `${thumb}<span class="fp-item-name">${f.name}</span><button class="fp-remove" onclick="removeFile(${i})" title="РЈРґР°Р»РёС‚СЊ"><i class="ti ti-x"></i></button>`;
     fpBar.appendChild(item);
   });
 }
@@ -2253,15 +2253,15 @@ async function sendFiles() {
           mediaData: { type: d.type, url: d.url, fileName: d.name, text: '' },
           room: currentRoom
         });
-      } else toast(`Ошибка загрузки: ${f.name}`, 'error');
-    } catch { toast(`Ошибка загрузки: ${f.name}`, 'error'); }
+      } else toast(`РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё: ${f.name}`, 'error');
+    } catch { toast(`РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё: ${f.name}`, 'error'); }
   }
   selectedFiles = [];
   renderFilePreviews();
   refreshSendBtn();
 }
 
-// ← УДОБСТВО: Drag & Drop
+// в†ђ РЈР”РћР‘РЎРўР’Рћ: Drag & Drop
 function setupDragDrop() {
   const zone = $('dropZone');
   const main = document.querySelector('.main');
@@ -2276,12 +2276,12 @@ function setupDragDrop() {
   });
 }
 
-// ══════════════════════════════════════════════
-// RECORDING (Voice + Circle)  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// RECORDING (Voice + Circle)  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const isMobile = 'ontouchstart' in window;
 
-// ── Visual Viewport API — предотвращаем прыжок при появлении клавиатуры ──────
+// в”Ђв”Ђ Visual Viewport API вЂ” РїСЂРµРґРѕС‚РІСЂР°С‰Р°РµРј РїСЂС‹Р¶РѕРє РїСЂРё РїРѕСЏРІР»РµРЅРёРё РєР»Р°РІРёР°С‚СѓСЂС‹ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 if (window.visualViewport && /Android/i.test(navigator.userAgent)) {
   let _lastVVH = window.visualViewport.height;
   let _kbOpen = false;
@@ -2292,7 +2292,7 @@ if (window.visualViewport && /Android/i.test(navigator.userAgent)) {
     _lastVVH = newH;
 
     if (diff > 100 && !_kbOpen) {
-      // Клавиатура открылась — фиксируем нижнюю часть интерфейса
+      // РљР»Р°РІРёР°С‚СѓСЂР° РѕС‚РєСЂС‹Р»Р°СЃСЊ вЂ” С„РёРєСЃРёСЂСѓРµРј РЅРёР¶РЅСЋСЋ С‡Р°СЃС‚СЊ РёРЅС‚РµСЂС„РµР№СЃР°
       _kbOpen = true;
       const chatApp = document.getElementById('chatApp');
       const msgs = document.getElementById('messages');
@@ -2301,10 +2301,10 @@ if (window.visualViewport && /Android/i.test(navigator.userAgent)) {
         chatApp.style.position = 'fixed';
         chatApp.style.top = window.visualViewport.offsetTop + 'px';
       }
-      // Скроллим сообщения вниз после анимации клавиатуры
+      // РЎРєСЂРѕР»Р»РёРј СЃРѕРѕР±С‰РµРЅРёСЏ РІРЅРёР· РїРѕСЃР»Рµ Р°РЅРёРјР°С†РёРё РєР»Р°РІРёР°С‚СѓСЂС‹
       if (msgs) setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 300);
     } else if (diff < -100 && _kbOpen) {
-      // Клавиатура закрылась — восстанавливаем
+      // РљР»Р°РІРёР°С‚СѓСЂР° Р·Р°РєСЂС‹Р»Р°СЃСЊ вЂ” РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј
       _kbOpen = false;
       const chatApp = document.getElementById('chatApp');
       if (chatApp) {
@@ -2315,7 +2315,7 @@ if (window.visualViewport && /Android/i.test(navigator.userAgent)) {
     }
   });
 
-  // iOS/Android: при фокусе на инпуте скроллим вниз
+  // iOS/Android: РїСЂРё С„РѕРєСѓСЃРµ РЅР° РёРЅРїСѓС‚Рµ СЃРєСЂРѕР»Р»РёРј РІРЅРёР·
   document.addEventListener('focusin', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
       const msgs = document.getElementById('messages');
@@ -2340,7 +2340,7 @@ function audioConstraints() {
   return c;
 }
 
-// ── Desktop: hold to record, right-click for circle ──
+// в”Ђв”Ђ Desktop: hold to record, right-click for circle в”Ђв”Ђ
 if (!isMobile) {
   let holdT = null, didRecord = false;
 
@@ -2366,7 +2366,7 @@ if (!isMobile) {
   });
 }
 
-// ── Mobile: hold = voice, swipe up = circle ──
+// в”Ђв”Ђ Mobile: hold = voice, swipe up = circle в”Ђв”Ђ
 if (isMobile) {
   let ty0 = 0, holdT = null, mode = null;
   sendBtn.addEventListener('touchstart', e => {
@@ -2414,7 +2414,7 @@ async function startVoice() {
     };
     mediaRecorder.start(250);
     recBar.classList.remove('hidden');
-    recType_el.textContent = 'Голосовое';
+    recType_el.textContent = 'Р“РѕР»РѕСЃРѕРІРѕРµ';
     recSeconds = 0;
     recTimer_el.textContent = '0:00';
     recTimer = setInterval(() => {
@@ -2423,7 +2423,7 @@ async function startVoice() {
       recTimer_el.textContent = `${m}:${s.toString().padStart(2,'0')}`;
     }, 1000);
   } catch {
-    toast('Нет доступа к микрофону', 'error');
+    toast('РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РјРёРєСЂРѕС„РѕРЅСѓ', 'error');
     isRecording = false;
     resetSendBtn();
   }
@@ -2470,11 +2470,11 @@ async function uploadVoice(blob, ext) {
         mediaData: { type: 'audio', url: d.url, fileName: d.name, text: '' },
         room: currentRoom
       });
-    } else toast('Ошибка загрузки голосового', 'error');
-  } catch { toast('Ошибка загрузки голосового', 'error'); }
+    } else toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РіРѕР»РѕСЃРѕРІРѕРіРѕ', 'error');
+  } catch { toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РіРѕР»РѕСЃРѕРІРѕРіРѕ', 'error'); }
 }
 
-// ── Circle  ← КРАСОТА
+// в”Ђв”Ђ Circle  в†ђ РљР РђРЎРћРўРђ
 const circleOverlay = $('circleOverlay');
 const circlePreview = $('circlePreview');
 const circleFg      = $('cFg');
@@ -2497,7 +2497,7 @@ async function startCircleRecord() {
     circleRec.ondataavailable = e => e.data.size && circleChunks.push(e.data);
     circleRec.start(200);
     circleSecs = 0;
-    const PERIM = 813.7; // периметр прямоугольника 212x212 rx=20
+    const PERIM = 813.7; // РїРµСЂРёРјРµС‚СЂ РїСЂСЏРјРѕСѓРіРѕР»СЊРЅРёРєР° 212x212 rx=20
     if (circleFg) { circleFg.style.strokeDasharray = PERIM; circleFg.style.strokeDashoffset = '0'; }
     circleTimerID = setInterval(() => {
       circleSecs++;
@@ -2506,7 +2506,7 @@ async function startCircleRecord() {
       if (circleFg) circleFg.style.strokeDashoffset = PERIM * (circleSecs / MAX_CIRCLE);
       if (circleSecs >= MAX_CIRCLE) sendCircleRecord();
     }, 1000);
-  } catch { toast('Нет доступа к камере', 'error'); }
+  } catch { toast('РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РєР°РјРµСЂРµ', 'error'); }
 }
 
 function cancelCircleRecord() {
@@ -2529,7 +2529,7 @@ async function sendCircleRecord() {
   const ext  = mime.includes('mp4') ? 'mp4' : 'webm';
   const fd   = new FormData();
   fd.append('file', blob, `circle.${ext}`);
-  toast('Отправка кружка…', 'info', 2000);
+  toast('РћС‚РїСЂР°РІРєР° РєСЂСѓР¶РєР°вЂ¦', 'info', 2000);
   try {
     const r = await fetch('/upload', { method: 'POST', body: fd });
     const d = await r.json();
@@ -2538,17 +2538,17 @@ async function sendCircleRecord() {
         mediaData: { type: 'video_circle', url: d.url, fileName: d.name, text: '' },
         room: currentRoom
       });
-    } else toast('Ошибка отправки кружка', 'error');
-  } catch { toast('Ошибка отправки кружка', 'error'); }
+    } else toast('РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё РєСЂСѓР¶РєР°', 'error');
+  } catch { toast('РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё РєСЂСѓР¶РєР°', 'error'); }
   circleChunks = [];
 }
 
-// ══════════════════════════════════════════════
-// EMOJI  ← УДОБСТВО
-// ══════════════════════════════════════════════
-const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','😅','🥲','😭','😤','🤯','🥳','😴','🙄','😏','🫡',
-  '👍','👎','❤️','🔥','💯','✅','🎉','🎊','💪','🙏','👀','💀','🤝','✌️','🫶','💫',
-  '😸','🐶','🌟','⚡','🌈','🎵','🎮','🏆','🚀','💻','📱','🎯','💡','🌙','☀️','🌊'];
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// EMOJI  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+const EMOJIS = ['рџЂ','рџ‚','рџЌ','рџҐ°','рџЋ','рџ¤”','рџ…','рџҐІ','рџ­','рџ¤','рџ¤Ї','рџҐі','рџґ','рџ™„','рџЏ','рџ«Ў',
+  'рџ‘Ќ','рџ‘Ћ','вќ¤пёЏ','рџ”Ґ','рџ’Ї','вњ…','рџЋ‰','рџЋЉ','рџ’Є','рџ™Џ','рџ‘Ђ','рџ’Ђ','рџ¤ќ','вњЊпёЏ','рџ«¶','рџ’«',
+  'рџё','рџђ¶','рџЊџ','вљЎ','рџЊ€','рџЋµ','рџЋ®','рџЏ†','рџљЂ','рџ’»','рџ“±','рџЋЇ','рџ’Ў','рџЊ™','вЂпёЏ','рџЊЉ'];
 
 const emojiPicker = $('emojiPicker');
 emojiPicker.innerHTML = `<div class="emoji-grid">${EMOJIS.map(e =>
@@ -2573,15 +2573,15 @@ function insertEmoji(em) {
   refreshSendBtn();
 }
 
-// ══════════════════════════════════════════════
-// CONTEXT MENUS  ← УДОБСТВО: Telegram Desktop feel
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// CONTEXT MENUS  в†ђ РЈР”РћР‘РЎРўР’Рћ: Telegram Desktop feel
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const ctxMenu = $('ctxMenu');
 
 let _replyMsg = null;
 let _editMsgId = null;
 let _editRoom = null;
-const _replyStore = new Map(); // id -> msg snapshot для ответа
+const _replyStore = new Map(); // id -> msg snapshot РґР»СЏ РѕС‚РІРµС‚Р°
 
 function startReply(msg) {
   _replyMsg = msg;
@@ -2589,7 +2589,7 @@ function startReply(msg) {
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'replyBar';
-    // Вставляем перед input-row
+    // Р’СЃС‚Р°РІР»СЏРµРј РїРµСЂРµРґ input-row
     const inputRow = document.querySelector('.input-zone .input-row');
     if (inputRow) inputRow.parentElement.insertBefore(bar, inputRow);
     else document.querySelector('.input-zone')?.prepend(bar);
@@ -2597,7 +2597,7 @@ function startReply(msg) {
   const nick = userNicknames?.[msg.user] || msg.user;
   const prev = msg.text
     ? msg.text.slice(0, 60)
-    : (msg.type === 'audio' ? '🎤 Голосовое' : msg.type === 'video_circle' ? '📹 Видео' : '📎 Вложение');
+    : (msg.type === 'audio' ? 'рџЋ¤ Р“РѕР»РѕСЃРѕРІРѕРµ' : msg.type === 'video_circle' ? 'рџ“№ Р’РёРґРµРѕ' : 'рџ“Ћ Р’Р»РѕР¶РµРЅРёРµ');
   bar.innerHTML = `
     <i class="ti ti-arrow-back-up" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
     <div style="flex:1;min-width:0;overflow:hidden">
@@ -2628,7 +2628,7 @@ function startMsgEdit(id) {
   const cached = _replyStore.get(msgId) || {};
   const row = document.querySelector(`[data-id="${msgId}"]`);
   const text = (cached.text ?? row?.querySelector('.msg-text')?.textContent ?? '').toString();
-  if (!text.trim()) { toast('Нечего редактировать', 'info', 1500); return; }
+  if (!text.trim()) { toast('РќРµС‡РµРіРѕ СЂРµРґР°РєС‚РёСЂРѕРІР°С‚СЊ', 'info', 1500); return; }
   if (cached.user && cached.user !== currentUser) return;
 
   _editMsgId = msgId;
@@ -2650,7 +2650,7 @@ function startMsgEdit(id) {
   bar.innerHTML = `
     <i class="ti ti-edit" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
     <div style="flex:1;min-width:0;overflow:hidden">
-      <div style="color:var(--accent);font-size:11px;font-weight:700;line-height:1.4">Редактирование</div>
+      <div style="color:var(--accent);font-size:11px;font-weight:700;line-height:1.4">Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ</div>
       <div style="color:var(--text2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4">${esc(prev)}</div>
     </div>
     <button onclick="cancelEdit()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;padding:0 4px;line-height:1;flex-shrink:0"><i class="ti ti-x"></i></button>`;
@@ -2666,7 +2666,7 @@ function startMsgEdit(id) {
 
 function scrollToMsg(id) {
   const el = document.querySelector('[data-id="' + id + '"]');
-  if (!el) { toast('Сообщение не найдено', 'info', 1500); return; }
+  if (!el) { toast('РЎРѕРѕР±С‰РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ', 'info', 1500); return; }
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const bub = el.querySelector('.msg-bubble');
   if (bub) {
@@ -2676,48 +2676,48 @@ function scrollToMsg(id) {
   }
 }
 
-// Безопасное хранение msg для ответа (без JSON в атрибутах)
+// Р‘РµР·РѕРїР°СЃРЅРѕРµ С…СЂР°РЅРµРЅРёРµ msg РґР»СЏ РѕС‚РІРµС‚Р° (Р±РµР· JSON РІ Р°С‚СЂРёР±СѓС‚Р°С…)
 function _replyFromId(id) {
   const msg = _replyStore.get(String(id));
   if (msg) startReply(msg);
 }
 
 function showCtxMsg(e, msg) {
-  // Сохраняем в Map для _replyFromId
+  // РЎРѕС…СЂР°РЅСЏРµРј РІ Map РґР»СЏ _replyFromId
   _replyStore.set(String(msg.id), msg);
   e.preventDefault();
   const own = msg.user === currentUser;
   const canEdit = own && (msg.type || 'text') === 'text';
   const msgId = String(msg.id).replace(/'/g,'');
-  // В режиме выделения — показываем действия для всех выделенных
+  // Р’ СЂРµР¶РёРјРµ РІС‹РґРµР»РµРЅРёСЏ вЂ” РїРѕРєР°Р·С‹РІР°РµРј РґРµР№СЃС‚РІРёСЏ РґР»СЏ РІСЃРµС… РІС‹РґРµР»РµРЅРЅС‹С…
   if (_selectMode && _selectedMsgs.size > 0) {
     ctxMenu.innerHTML = `
       <div class="ctx-item" style="font-size:11px;color:var(--text3);pointer-events:none;padding:4px 14px">
-        ${_selectedMsgs.size} выбрано
+        ${_selectedMsgs.size} РІС‹Р±СЂР°РЅРѕ
       </div>
       <div class="ctx-sep"></div>
-      <div class="ctx-item" onclick="copySelectedMsgs();closeCtx()"><i class="ti ti-copy"></i> Копировать</div>
-      <div class="ctx-item" onclick="forwardSelectedMsgs()"><i class="ti ti-share"></i> Переслать</div>
+      <div class="ctx-item" onclick="copySelectedMsgs();closeCtx()"><i class="ti ti-copy"></i> РљРѕРїРёСЂРѕРІР°С‚СЊ</div>
+      <div class="ctx-item" onclick="forwardSelectedMsgs()"><i class="ti ti-share"></i> РџРµСЂРµСЃР»Р°С‚СЊ</div>
       <div class="ctx-sep"></div>
-      <div class="ctx-item danger" onclick="deleteSelectedMsgsAll();closeCtx()"><i class="ti ti-trash"></i> Удалить у всех</div>
-      <div class="ctx-item danger" onclick="deleteSelectedMsgs();closeCtx()"><i class="ti ti-trash" style="opacity:.6"></i> Удалить у себя</div>
+      <div class="ctx-item danger" onclick="deleteSelectedMsgsAll();closeCtx()"><i class="ti ti-trash"></i> РЈРґР°Р»РёС‚СЊ Сѓ РІСЃРµС…</div>
+      <div class="ctx-item danger" onclick="deleteSelectedMsgs();closeCtx()"><i class="ti ti-trash" style="opacity:.6"></i> РЈРґР°Р»РёС‚СЊ Сѓ СЃРµР±СЏ</div>
       <div class="ctx-sep"></div>
-      <div class="ctx-item" onclick="cancelMsgSelect();closeCtx()"><i class="ti ti-x"></i> Отменить выбор</div>
+      <div class="ctx-item" onclick="cancelMsgSelect();closeCtx()"><i class="ti ti-x"></i> РћС‚РјРµРЅРёС‚СЊ РІС‹Р±РѕСЂ</div>
     `;
     showCtx(e);
     return;
   }
   ctxMenu.innerHTML = `
-    <div class="ctx-item" onclick="_replyFromId('${msgId}');closeCtx()"><i class="ti ti-arrow-back-up"></i> Ответить</div>
-    <div class="ctx-item" onclick="copyMsgText('${msg.id}');closeCtx()"><i class="ti ti-copy"></i> Копировать текст</div>
-    ${canEdit ? `<div class="ctx-item" onclick="startMsgEdit('${msgId}');closeCtx()"><i class="ti ti-edit"></i> Редактировать</div>` : ''}
-    <div class="ctx-item" onclick="startMsgSelect('${msgId}');closeCtx()"><i class="ti ti-checkbox"></i> Выбрать</div>
+    <div class="ctx-item" onclick="_replyFromId('${msgId}');closeCtx()"><i class="ti ti-arrow-back-up"></i> РћС‚РІРµС‚РёС‚СЊ</div>
+    <div class="ctx-item" onclick="copyMsgText('${msg.id}');closeCtx()"><i class="ti ti-copy"></i> РљРѕРїРёСЂРѕРІР°С‚СЊ С‚РµРєСЃС‚</div>
+    ${canEdit ? `<div class="ctx-item" onclick="startMsgEdit('${msgId}');closeCtx()"><i class="ti ti-edit"></i> Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ</div>` : ''}
+    <div class="ctx-item" onclick="startMsgSelect('${msgId}');closeCtx()"><i class="ti ti-checkbox"></i> Р’С‹Р±СЂР°С‚СЊ</div>
     <div class="ctx-sep"></div>
     ${own ? `
-      <div class="ctx-item danger" onclick="deleteMsgForAll('${msgId}');closeCtx()"><i class="ti ti-trash"></i> Удалить у всех</div>
-      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}');closeCtx()"><i class="ti ti-trash" style="opacity:.6"></i> Удалить у себя</div>
+      <div class="ctx-item danger" onclick="deleteMsgForAll('${msgId}');closeCtx()"><i class="ti ti-trash"></i> РЈРґР°Р»РёС‚СЊ Сѓ РІСЃРµС…</div>
+      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}');closeCtx()"><i class="ti ti-trash" style="opacity:.6"></i> РЈРґР°Р»РёС‚СЊ Сѓ СЃРµР±СЏ</div>
     ` : `
-      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}');closeCtx()"><i class="ti ti-trash"></i> Удалить у себя</div>
+      <div class="ctx-item danger" onclick="deleteMsgForMe('${msgId}');closeCtx()"><i class="ti ti-trash"></i> РЈРґР°Р»РёС‚СЊ Сѓ СЃРµР±СЏ</div>
     `}`;
   showCtx(e);
 }
@@ -2726,9 +2726,9 @@ async function deleteMsgForAll(id) {
   closeCtx();
   const ok = await dialog({
     icon: 'ti-trash', iconType: 'error',
-    title: 'Удалить у всех?',
-    msg: 'Сообщение исчезнет у всех участников чата.',
-    ok: 'Удалить', cancel: 'Отмена', danger: true
+    title: 'РЈРґР°Р»РёС‚СЊ Сѓ РІСЃРµС…?',
+    msg: 'РЎРѕРѕР±С‰РµРЅРёРµ РёСЃС‡РµР·РЅРµС‚ Сѓ РІСЃРµС… СѓС‡Р°СЃС‚РЅРёРєРѕРІ С‡Р°С‚Р°.',
+    ok: 'РЈРґР°Р»РёС‚СЊ', cancel: 'РћС‚РјРµРЅР°', danger: true
   });
   if (!ok) return;
   try {
@@ -2737,13 +2737,13 @@ async function deleteMsgForAll(id) {
       body: JSON.stringify({ messageId: id, username: currentUser, forAll: true })
     });
     const d = await r.json();
-    if (!d.success) toast(d.error || 'Ошибка удаления', 'error');
-  } catch { toast('Ошибка соединения', 'error'); }
+    if (!d.success) toast(d.error || 'РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ', 'error');
+  } catch { toast('РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ', 'error'); }
 }
 
 async function deleteMsgForMe(id) {
   closeCtx();
-  // Просто скрываем из DOM локально — не отправляем на сервер
+  // РџСЂРѕСЃС‚Рѕ СЃРєСЂС‹РІР°РµРј РёР· DOM Р»РѕРєР°Р»СЊРЅРѕ вЂ” РЅРµ РѕС‚РїСЂР°РІР»СЏРµРј РЅР° СЃРµСЂРІРµСЂ
   const row = document.querySelector(`[data-id="${id}"]`);
   if (row) {
     row.style.transition = 'opacity .2s, transform .2s';
@@ -2751,7 +2751,7 @@ async function deleteMsgForMe(id) {
     row.style.transform = 'scale(.95)';
     setTimeout(() => row.remove(), 200);
   }
-  // Сохраняем id в localStorage чтобы не показывать после перезагрузки
+  // РЎРѕС…СЂР°РЅСЏРµРј id РІ localStorage С‡С‚РѕР±С‹ РЅРµ РїРѕРєР°Р·С‹РІР°С‚СЊ РїРѕСЃР»Рµ РїРµСЂРµР·Р°РіСЂСѓР·РєРё
   try {
     const key = 'aura_hidden:' + (currentRoom || 'all');
     const hidden = JSON.parse(localStorage.getItem(key) || '[]');
@@ -2760,7 +2760,7 @@ async function deleteMsgForMe(id) {
   } catch {}
 }
 
-// При загрузке истории — скрываем удалённые у себя
+// РџСЂРё Р·Р°РіСЂСѓР·РєРµ РёСЃС‚РѕСЂРёРё вЂ” СЃРєСЂС‹РІР°РµРј СѓРґР°Р»С‘РЅРЅС‹Рµ Сѓ СЃРµР±СЏ
 function _applyHiddenMessages() {
   try {
     const key = 'aura_hidden:' + (currentRoom || 'all');
@@ -2769,7 +2769,7 @@ function _applyHiddenMessages() {
     document.querySelectorAll('[data-id]').forEach(row => {
       if (hidden.has(row.dataset.id)) row.remove();
     });
-    // Удаляем осиротевшие разделители дней
+    // РЈРґР°Р»СЏРµРј РѕСЃРёСЂРѕС‚РµРІС€РёРµ СЂР°Р·РґРµР»РёС‚РµР»Рё РґРЅРµР№
     _cleanOrphanSeparators();
   } catch {}
 }
@@ -2777,15 +2777,15 @@ function _applyHiddenMessages() {
 function _cleanOrphanSeparators() {
   const msgs = document.getElementById('messages');
   if (!msgs) return;
-  // Разделитель — сирота если после него нет сообщений до следующего разделителя
+  // Р Р°Р·РґРµР»РёС‚РµР»СЊ вЂ” СЃРёСЂРѕС‚Р° РµСЃР»Рё РїРѕСЃР»Рµ РЅРµРіРѕ РЅРµС‚ СЃРѕРѕР±С‰РµРЅРёР№ РґРѕ СЃР»РµРґСѓСЋС‰РµРіРѕ СЂР°Р·РґРµР»РёС‚РµР»СЏ
   const children = Array.from(msgs.children);
   for (let i = 0; i < children.length; i++) {
     const el = children[i];
     if (!el.classList.contains('msg-day-sep')) continue;
-    // Ищем следующий элемент который является сообщением (не разделителем)
+    // РС‰РµРј СЃР»РµРґСѓСЋС‰РёР№ СЌР»РµРјРµРЅС‚ РєРѕС‚РѕСЂС‹Р№ СЏРІР»СЏРµС‚СЃСЏ СЃРѕРѕР±С‰РµРЅРёРµРј (РЅРµ СЂР°Р·РґРµР»РёС‚РµР»РµРј)
     let hasMsg = false;
     for (let j = i + 1; j < children.length; j++) {
-      if (children[j].classList.contains('msg-day-sep')) break; // следующий разделитель
+      if (children[j].classList.contains('msg-day-sep')) break; // СЃР»РµРґСѓСЋС‰РёР№ СЂР°Р·РґРµР»РёС‚РµР»СЊ
       if (children[j].dataset.id || children[j].classList.contains('call-record')) {
         hasMsg = true; break;
       }
@@ -2794,7 +2794,7 @@ function _cleanOrphanSeparators() {
   }
 }
 
-// Старая функция для совместимости
+// РЎС‚Р°СЂР°СЏ С„СѓРЅРєС†РёСЏ РґР»СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚Рё
 async function deleteMsg(id) { return deleteMsgForAll(id); }
 
 // Real-time deletion from server
@@ -2804,7 +2804,7 @@ socket.on('group-history-cleared', ({ groupId }) => {
     const msgs = document.getElementById('messages');
     if (msgs) { msgs.innerHTML = ''; _lastMsgDate = null; }
     if (msgsEmpty) msgsEmpty.style.display = 'flex';
-    toast('История группы очищена', 'info', 2500);
+    toast('РСЃС‚РѕСЂРёСЏ РіСЂСѓРїРїС‹ РѕС‡РёС‰РµРЅР°', 'info', 2500);
   }
 });
 
@@ -2831,7 +2831,7 @@ function applyMessageEdit(messageId, text) {
     if (!ed) {
       ed = document.createElement('span');
       ed.className = 'msg-edited';
-      ed.textContent = 'ред.';
+      ed.textContent = 'СЂРµРґ.';
       const status = meta.querySelector('.msg-status');
       if (status) meta.insertBefore(ed, status);
       else meta.appendChild(ed);
@@ -2854,14 +2854,14 @@ socket.on('message-edited', ({ messageId, text }) => {
 function showCtxFriend(e, friend) {
   e.preventDefault();
   ctxMenu.innerHTML = `
-    <div class="ctx-item" onclick="gotoPrivate('${friend}');closeCtx()"><i class="ti ti-message-circle"></i> Написать</div>
+    <div class="ctx-item" onclick="gotoPrivate('${friend}');closeCtx()"><i class="ti ti-message-circle"></i> РќР°РїРёСЃР°С‚СЊ</div>
     <div class="ctx-sep"></div>
-    <div class="ctx-item danger" onclick="removeFriend('${friend}')"><i class="ti ti-user-minus"></i> Удалить из друзей</div>`;
+    <div class="ctx-item danger" onclick="removeFriend('${friend}')"><i class="ti ti-user-minus"></i> РЈРґР°Р»РёС‚СЊ РёР· РґСЂСѓР·РµР№</div>`;
   showCtx(e);
 }
 
 function showCtx(e) {
-  // Сначала размещаем в точке клика (за экраном не видно)
+  // РЎРЅР°С‡Р°Р»Р° СЂР°Р·РјРµС‰Р°РµРј РІ С‚РѕС‡РєРµ РєР»РёРєР° (Р·Р° СЌРєСЂР°РЅРѕРј РЅРµ РІРёРґРЅРѕ)
   ctxMenu.style.left = '-9999px';
   ctxMenu.style.top  = '-9999px';
   ctxMenu.classList.add('open');
@@ -2872,7 +2872,7 @@ function showCtx(e) {
     const mw = ctxMenu.offsetWidth  || 200;
     const mh = ctxMenu.offsetHeight || 100;
 
-    // Мобильный: всегда у нижнего края — удобнее для пальцев
+    // РњРѕР±РёР»СЊРЅС‹Р№: РІСЃРµРіРґР° Сѓ РЅРёР¶РЅРµРіРѕ РєСЂР°СЏ вЂ” СѓРґРѕР±РЅРµРµ РґР»СЏ РїР°Р»СЊС†РµРІ
     if (isMobile || W < 600) {
       ctxMenu.style.left   = '50%';
       ctxMenu.style.top    = 'auto';
@@ -2908,23 +2908,23 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx()
 function copyMsgText(id) {
   const row = document.querySelector(`[data-id="${id}"]`);
   const text = row?.querySelector('.msg-text')?.textContent || '';
-  navigator.clipboard.writeText(text).then(() => toast('Скопировано', 'success', 1500));
+  navigator.clipboard.writeText(text).then(() => toast('РЎРєРѕРїРёСЂРѕРІР°РЅРѕ', 'success', 1500));
   closeCtx();
 }
 
 async function removeFriend(friend) {
   closeCtx();
-  const ok = await dialog({ icon:'ti-user-minus', iconType:'warning', title:'Удалить друга?', msg:`Удалить ${friend} из друзей?`, ok:'Удалить', cancel:'Отмена', danger:true });
+  const ok = await dialog({ icon:'ti-user-minus', iconType:'warning', title:'РЈРґР°Р»РёС‚СЊ РґСЂСѓРіР°?', msg:`РЈРґР°Р»РёС‚СЊ ${friend} РёР· РґСЂСѓР·РµР№?`, ok:'РЈРґР°Р»РёС‚СЊ', cancel:'РћС‚РјРµРЅР°', danger:true });
   if (!ok) return;
-  // No API endpoint for this in original — just remove locally
+  // No API endpoint for this in original вЂ” just remove locally
   friends = friends.filter(f => f !== friend);
   renderFriends();
-  toast(`${friend} удалён из друзей`, 'info');
+  toast(`${friend} СѓРґР°Р»С‘РЅ РёР· РґСЂСѓР·РµР№`, 'info');
 }
 
-// ══════════════════════════════════════════════
-// MEDIA VIEWER  ← УДОБСТВО + КРАСОТА
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// MEDIA VIEWER  в†ђ РЈР”РћР‘РЎРўР’Рћ + РљР РђРЎРћРўРђ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function viewMedia(url, type) {
   const viewer = document.createElement('div');
   viewer.className = 'media-viewer open';
@@ -2937,9 +2937,9 @@ function viewMedia(url, type) {
   document.body.appendChild(viewer);
 }
 
-// ══════════════════════════════════════════════
-// FRIENDS / REQUESTS  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// FRIENDS / REQUESTS  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 async function openAddFriend() {
   const ov = $('dialogOverlay');
   const box = $('dialogBox');
@@ -2950,14 +2950,14 @@ async function openAddFriend() {
 
   box.innerHTML = `
     <div class="dlg-ico info"><i class="ti ti-user-plus"></i></div>
-    <h3>Добавить друга</h3>
+    <h3>Р”РѕР±Р°РІРёС‚СЊ РґСЂСѓРіР°</h3>
     <div class="field-wrap" style="margin-bottom:12px">
       <i class="ti ti-search field-ico"></i>
-      <input id="addFriendSearch" class="field" type="text" placeholder="Поиск по имени или nik…" autocomplete="off" style="padding-left:38px"/>
+      <input id="addFriendSearch" class="field" type="text" placeholder="РџРѕРёСЃРє РїРѕ РёРјРµРЅРё РёР»Рё nikвЂ¦" autocomplete="off" style="padding-left:38px"/>
     </div>
     <div id="addFriendResults" style="max-height:220px;overflow-y:auto;margin-bottom:12px"></div>
     <div class="dlg-btns">
-      <button class="btn-secondary" id="addFriendCancel">Отмена</button>
+      <button class="btn-secondary" id="addFriendCancel">РћС‚РјРµРЅР°</button>
     </div>`;
 
   ov.classList.add('open');
@@ -2967,7 +2967,7 @@ async function openAddFriend() {
 
   const doSearch = async (q) => {
     if (!q || q.length < 1) {
-      resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Введите имя для поиска</div>';
+      resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Р’РІРµРґРёС‚Рµ РёРјСЏ РґР»СЏ РїРѕРёСЃРєР°</div>';
       return;
     }
     resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px"><i class="ti ti-loader" style="animation:spin 1s linear infinite"></i></div>';
@@ -2979,14 +2979,14 @@ async function openAddFriend() {
       const d = await r.json();
       searchResults = d.users || [];
       if (!searchResults.length) {
-        resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Ничего не найдено</div>';
+        resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">РќРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ</div>';
         return;
       }
       resultsEl.innerHTML = searchResults.map(u => {
         const initials = (u.nickname || u.username).charAt(0).toUpperCase();
         const friendBadge = u.isFriend
-          ? `<span style="font-size:10px;color:var(--success);background:rgba(34,197,94,.12);border-radius:6px;padding:2px 7px;border:1px solid rgba(34,197,94,.25)"><i class="ti ti-check"></i> Друг</span>`
-          : `<button class="btn-secondary" style="padding:5px 10px;font-size:11px;flex-shrink:0" onclick="sendFriendReqTo('${u.username}')"><i class="ti ti-user-plus"></i> Добавить</button>`;
+          ? `<span style="font-size:10px;color:var(--success);background:rgba(34,197,94,.12);border-radius:6px;padding:2px 7px;border:1px solid rgba(34,197,94,.25)"><i class="ti ti-check"></i> Р”СЂСѓРі</span>`
+          : `<button class="btn-secondary" style="padding:5px 10px;font-size:11px;flex-shrink:0" onclick="sendFriendReqTo('${u.username}')"><i class="ti ti-user-plus"></i> Р”РѕР±Р°РІРёС‚СЊ</button>`;
         return `
           <div class="af-result-item" style="cursor:${u.isFriend?'default':'pointer'}" ${!u.isFriend ? `onclick="sendFriendReqTo('${u.username}')"` : ''}>
             <div class="avatar sm" style="flex-shrink:0">${initials}</div>
@@ -2998,7 +2998,7 @@ async function openAddFriend() {
           </div>`;
       }).join('');
     } catch {
-      resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">Ошибка поиска</div>';
+      resultsEl.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:12px">РћС€РёР±РєР° РїРѕРёСЃРєР°</div>';
     }
   };
 
@@ -3022,9 +3022,9 @@ window.sendFriendReqTo = async function(username) {
       body: JSON.stringify({ from: currentUser, to: username })
     });
     const d = await r.json();
-    if (d.success) toast(`Заявка отправлена ${username}!`, 'success');
-    else toast(d.message || d.error || 'Ошибка', 'error');
-  } catch { toast('Ошибка', 'error'); }
+    if (d.success) toast(`Р—Р°СЏРІРєР° РѕС‚РїСЂР°РІР»РµРЅР° ${username}!`, 'success');
+    else toast(d.message || d.error || 'РћС€РёР±РєР°', 'error');
+  } catch { toast('РћС€РёР±РєР°', 'error'); }
 };
 
 async function acceptReq(req) {
@@ -3037,8 +3037,8 @@ async function acceptReq(req) {
     friendRequests = friendRequests.filter(x => x !== req);
     friends = d.friends;
     renderFriends(); renderRequests(); updateReqBadge();
-    toast(`${req} теперь ваш друг!`, 'success');
-  } else toast('Ошибка', 'error');
+    toast(`${req} С‚РµРїРµСЂСЊ РІР°С€ РґСЂСѓРі!`, 'success');
+  } else toast('РћС€РёР±РєР°', 'error');
 }
 
 async function rejectReq(req) {
@@ -3082,12 +3082,12 @@ socket.on('friends-updated', ({ friends: nf }) => {
   renderFriends();
 });
 
-// New group created — update groups list
+// New group created вЂ” update groups list
 socket.on('group-created', () => {
   loadUserData();
 });
 
-// Обновление группы (название/аватарка)
+// РћР±РЅРѕРІР»РµРЅРёРµ РіСЂСѓРїРїС‹ (РЅР°Р·РІР°РЅРёРµ/Р°РІР°С‚Р°СЂРєР°)
 socket.on('group-updated', ({ groupId, name, avatar }) => {
   const g = groups.find(g => g.id === groupId);
   if (g) {
@@ -3104,16 +3104,16 @@ socket.on('group-updated', ({ groupId, name, avatar }) => {
 });
 
 socket.on('group-deleted', ({ groupId }) => {
-  // Удаляем из локального массива
+  // РЈРґР°Р»СЏРµРј РёР· Р»РѕРєР°Р»СЊРЅРѕРіРѕ РјР°СЃСЃРёРІР°
   groups = groups.filter(g => g.id !== groupId);
-  // Если была открыта — переходим к первому другу или пустому экрану
+  // Р•СЃР»Рё Р±С‹Р»Р° РѕС‚РєСЂС‹С‚Р° вЂ” РїРµСЂРµС…РѕРґРёРј Рє РїРµСЂРІРѕРјСѓ РґСЂСѓРіСѓ РёР»Рё РїСѓСЃС‚РѕРјСѓ СЌРєСЂР°РЅСѓ
   if (currentRoom === `group:${groupId}`) {
     currentRoom = null;
     try { localStorage.removeItem('aura_last_room'); } catch(e) {}
     if (friends.length > 0) {
       gotoRoom(getRoomId(friends[0]));
     } else {
-      if (roomName)    roomName.textContent = 'Выберите чат';
+      if (roomName)    roomName.textContent = 'Р’С‹Р±РµСЂРёС‚Рµ С‡Р°С‚';
       if (roomSub)     roomSub.textContent  = '';
       if (hdrRight)    hdrRight.innerHTML   = '';
       if (messagesDiv) messagesDiv.innerHTML = '';
@@ -3123,15 +3123,15 @@ socket.on('group-deleted', ({ groupId }) => {
   }
   if (groupsList) groupsList._lastKey = '';
   renderGroups();
-  toast('Группа удалена', 'info');
+  toast('Р“СЂСѓРїРїР° СѓРґР°Р»РµРЅР°', 'info');
 });
 
 socket.on('avatar-updated', ({ username, avatar }) => {
-  _setAvatar(username, avatar, undefined); // сохраняем в кэш
+  _setAvatar(username, avatar, undefined); // СЃРѕС…СЂР°РЅСЏРµРј РІ РєСЌС€
   const applyAll = (sel) => document.querySelectorAll(sel).forEach(el => setAvatar(el, username, avatar));
   applyAll(`.msg-ava[data-user="${username}"]`);
   applyAll(`.ci-ava[data-user="${username}"]`);
-  // Обновляем аватарку в шапке чата ТОЛЬКО если это собеседник (не мы сами)
+  // РћР±РЅРѕРІР»СЏРµРј Р°РІР°С‚Р°СЂРєСѓ РІ С€Р°РїРєРµ С‡Р°С‚Р° РўРћР›Р¬РљРћ РµСЃР»Рё СЌС‚Рѕ СЃРѕР±РµСЃРµРґРЅРёРє (РЅРµ РјС‹ СЃР°РјРё)
   if (currentRoom && currentRoom.startsWith('private:')) {
     const other = currentRoom.split(':').slice(1).find(p => p !== currentUser);
     if (other && other === username) setAvatar(roomAvatar, username, avatar);
@@ -3140,10 +3140,10 @@ socket.on('avatar-updated', ({ username, avatar }) => {
   if (settingsAva && username === currentUser) setAvatar(settingsAva, username, avatar);
 });
 
-// Fetch avatar + nickname — если уже есть в кэше (localStorage), не делаем запрос
-const _fetchingUsers = new Set(); // дедупликация одновременных запросов
+// Fetch avatar + nickname вЂ” РµСЃР»Рё СѓР¶Рµ РµСЃС‚СЊ РІ РєСЌС€Рµ (localStorage), РЅРµ РґРµР»Р°РµРј Р·Р°РїСЂРѕСЃ
+const _fetchingUsers = new Set(); // РґРµРґСѓРїР»РёРєР°С†РёСЏ РѕРґРЅРѕРІСЂРµРјРµРЅРЅС‹С… Р·Р°РїСЂРѕСЃРѕРІ
 async function fetchUserAvatar(username) {
-  // Уже в процессе загрузки или оба есть в кэше → ничего не делаем
+  // РЈР¶Рµ РІ РїСЂРѕС†РµСЃСЃРµ Р·Р°РіСЂСѓР·РєРё РёР»Рё РѕР±Р° РµСЃС‚СЊ РІ РєСЌС€Рµ в†’ РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј
   if (_fetchingUsers.has(username)) return;
   if (userAvatars[username] !== undefined && userNicknames[username] !== undefined) return;
   _fetchingUsers.add(username);
@@ -3158,7 +3158,7 @@ async function fetchUserAvatar(username) {
     const newAvatar   = d.avatar   ?? null;
     const newNickname = d.nickname ?? username;
 
-    // Сравниваем с кэшем — обновляем только если изменилось
+    // РЎСЂР°РІРЅРёРІР°РµРј СЃ РєСЌС€РµРј вЂ” РѕР±РЅРѕРІР»СЏРµРј С‚РѕР»СЊРєРѕ РµСЃР»Рё РёР·РјРµРЅРёР»РѕСЃСЊ
     const avatarChanged   = userAvatars[username]   !== newAvatar;
     const nicknameChanged = userNicknames[username] !== newNickname;
 
@@ -3187,7 +3187,7 @@ function showFriendRequestPopup(from) {
   pop.className = 'frq-popup';
   pop.innerHTML = `
     <div class="frq-ava">${from.charAt(0).toUpperCase()}</div>
-    <div class="frq-txt"><div class="frq-name">${from}</div><div class="frq-sub">хочет добавить вас</div></div>
+    <div class="frq-txt"><div class="frq-name">${from}</div><div class="frq-sub">С…РѕС‡РµС‚ РґРѕР±Р°РІРёС‚СЊ РІР°СЃ</div></div>
     <div class="frq-btns">
       <button class="frq-y" onclick="acceptReqPop('${from}',this)"><i class="ti ti-check"></i></button>
       <button class="frq-n" onclick="this.closest('.frq-popup').remove()"><i class="ti ti-x"></i></button>
@@ -3201,9 +3201,9 @@ async function acceptReqPop(req, btn) {
   await acceptReq(req);
 }
 
-// ══════════════════════════════════════════════
-// GROUPS  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// GROUPS  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function openGroupModal() {
   const modal = $('groupModal');
   modal.classList.add('open');
@@ -3218,7 +3218,7 @@ function closeGroupModal() { $('groupModal').classList.remove('open'); }
 
 async function createGroup() {
   const name = $('grpName').value.trim();
-  if (!name) { toast('Введите название', 'warning'); return; }
+  if (!name) { toast('Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ', 'warning'); return; }
   const members = [...document.querySelectorAll('#grpMembers input:checked')].map(i => i.value);
   const r = await fetch('/api/create-group', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3226,16 +3226,16 @@ async function createGroup() {
   });
   const d = await r.json();
   if (d.success) {
-    toast(`Группа «${name}» создана!`, 'success');
+    toast(`Р“СЂСѓРїРїР° В«${name}В» СЃРѕР·РґР°РЅР°!`, 'success');
     closeGroupModal();
     loadUserData();
-  } else toast('Ошибка создания группы', 'error');
+  } else toast('РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ РіСЂСѓРїРїС‹', 'error');
 }
 
-// ── Редактирование группы (название + аватарка) ─────────────────────────
+// в”Ђв”Ђ Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РіСЂСѓРїРїС‹ (РЅР°Р·РІР°РЅРёРµ + Р°РІР°С‚Р°СЂРєР°) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function openGroupEdit(groupId) {
   const g = groups.find(g => g.id === groupId);
-  if (!g || g.creator !== currentUser) { toast('Только создатель может редактировать группу', 'warning'); return; }
+  if (!g || g.creator !== currentUser) { toast('РўРѕР»СЊРєРѕ СЃРѕР·РґР°С‚РµР»СЊ РјРѕР¶РµС‚ СЂРµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РіСЂСѓРїРїСѓ', 'warning'); return; }
 
   const ov  = $('dialogOverlay');
   const box = $('dialogBox');
@@ -3243,35 +3243,35 @@ function openGroupEdit(groupId) {
 
   box.innerHTML = `
     <div class="dlg-ico info"><i class="ti ti-users"></i></div>
-    <h3>Редактировать группу</h3>
+    <h3>Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РіСЂСѓРїРїСѓ</h3>
     <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:16px">
       <div class="ava-rel" style="cursor:pointer" onclick="document.getElementById('grpAvaInput').click()">
         <div class="avatar lg" id="grpEditAva" style="border-radius:16px"></div>
         <div class="ava-cam"><i class="ti ti-camera"></i></div>
       </div>
       <input type="file" id="grpAvaInput" accept="image/*" style="display:none"/>
-      <span class="sub-text">Нажмите для смены фото</span>
+      <span class="sub-text">РќР°Р¶РјРёС‚Рµ РґР»СЏ СЃРјРµРЅС‹ С„РѕС‚Рѕ</span>
     </div>
     <div class="field-wrap" style="margin-bottom:14px">
       <i class="ti ti-users field-ico"></i>
-      <input id="grpEditName" class="field" type="text" value="${esc(g.name)}" placeholder="Название группы…" maxlength="40"/>
+      <input id="grpEditName" class="field" type="text" value="${esc(g.name)}" placeholder="РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹вЂ¦" maxlength="40"/>
     </div>
     <div id="grpEditErr" class="login-err"></div>
     <div class="dlg-btns" style="flex-direction:column;gap:8px">
       <div style="display:flex;gap:8px;width:100%">
-        <button class="btn-secondary" id="grpEditCancel" style="flex:1">Отмена</button>
-        <button class="btn-primary" id="grpEditSave" style="flex:2"><i class="ti ti-check"></i> Сохранить</button>
+        <button class="btn-secondary" id="grpEditCancel" style="flex:1">РћС‚РјРµРЅР°</button>
+        <button class="btn-primary" id="grpEditSave" style="flex:2"><i class="ti ti-check"></i> РЎРѕС…СЂР°РЅРёС‚СЊ</button>
       </div>
-      <button class="btn-danger w-full" id="grpEditDelete"><i class="ti ti-trash"></i> Удалить группу</button>
+      <button class="btn-danger w-full" id="grpEditDelete"><i class="ti ti-trash"></i> РЈРґР°Р»РёС‚СЊ РіСЂСѓРїРїСѓ</button>
     </div>`;
 
-  // Показываем текущую аватарку
+  // РџРѕРєР°Р·С‹РІР°РµРј С‚РµРєСѓС‰СѓСЋ Р°РІР°С‚Р°СЂРєСѓ
   const avaEl = box.querySelector('#grpEditAva');
   setAvatar(avaEl, `group:${groupId}`, g.avatar);
 
   ov.classList.add('open');
 
-  // Выбор новой аватарки
+  // Р’С‹Р±РѕСЂ РЅРѕРІРѕР№ Р°РІР°С‚Р°СЂРєРё
   let newAvatarUrl = undefined;
   const avaInput = box.querySelector('#grpAvaInput');
   avaInput.addEventListener('change', async () => {
@@ -3288,11 +3288,11 @@ function openGroupEdit(groupId) {
       if (d.url) {
         newAvatarUrl = d.url;
         setAvatar(avaEl, `group:${groupId}`, newAvatarUrl);
-        toast('Фото загружено', 'success');
+        toast('Р¤РѕС‚Рѕ Р·Р°РіСЂСѓР¶РµРЅРѕ', 'success');
       }
-    } catch { toast('Ошибка загрузки фото', 'error'); }
+    } catch { toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё С„РѕС‚Рѕ', 'error'); }
     saveBtn.disabled = false;
-    saveBtn.innerHTML = '<i class="ti ti-check"></i> Сохранить';
+    saveBtn.innerHTML = '<i class="ti ti-check"></i> РЎРѕС…СЂР°РЅРёС‚СЊ';
   });
 
   box.querySelector('#grpEditCancel').onclick = () => ov.classList.remove('open');
@@ -3301,9 +3301,9 @@ function openGroupEdit(groupId) {
   box.querySelector('#grpEditDelete').onclick = async () => {
     const ok = await dialog({
       icon: 'ti-trash', iconType: 'error',
-      title: 'Удалить группу?',
-      msg: `Группа «${g.name}» и вся история чата будет удалена для всех участников.`,
-      ok: 'Удалить', cancel: 'Отмена', danger: true
+      title: 'РЈРґР°Р»РёС‚СЊ РіСЂСѓРїРїСѓ?',
+      msg: `Р“СЂСѓРїРїР° В«${g.name}В» Рё РІСЃСЏ РёСЃС‚РѕСЂРёСЏ С‡Р°С‚Р° Р±СѓРґРµС‚ СѓРґР°Р»РµРЅР° РґР»СЏ РІСЃРµС… СѓС‡Р°СЃС‚РЅРёРєРѕРІ.`,
+      ok: 'РЈРґР°Р»РёС‚СЊ', cancel: 'РћС‚РјРµРЅР°', danger: true
     });
     if (!ok) return;
     try {
@@ -3314,15 +3314,15 @@ function openGroupEdit(groupId) {
       const d = await r.json();
       if (d.success) {
         ov.classList.remove('open');
-        toast(`Группа «${g.name}» удалена`, 'success');
-      } else toast(d.error || 'Ошибка удаления', 'error');
-    } catch { toast('Нет соединения', 'error'); }
+        toast(`Р“СЂСѓРїРїР° В«${g.name}В» СѓРґР°Р»РµРЅР°`, 'success');
+      } else toast(d.error || 'РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ', 'error');
+    } catch { toast('РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ', 'error'); }
   };
 
   box.querySelector('#grpEditSave').onclick = async () => {
     const newName = box.querySelector('#grpEditName').value.trim();
     const errEl = box.querySelector('#grpEditErr');
-    if (!newName) { errEl.textContent = 'Введите название'; return; }
+    if (!newName) { errEl.textContent = 'Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ'; return; }
 
     const saveBtn = box.querySelector('#grpEditSave');
     saveBtn.disabled = true;
@@ -3340,23 +3340,23 @@ function openGroupEdit(groupId) {
       const d = await r.json();
       if (d.success) {
         ov.classList.remove('open');
-        toast('Группа обновлена', 'success');
+        toast('Р“СЂСѓРїРїР° РѕР±РЅРѕРІР»РµРЅР°', 'success');
       } else {
-        errEl.textContent = d.error || 'Ошибка';
+        errEl.textContent = d.error || 'РћС€РёР±РєР°';
         saveBtn.disabled = false;
-        saveBtn.innerHTML = '<i class="ti ti-check"></i> Сохранить';
+        saveBtn.innerHTML = '<i class="ti ti-check"></i> РЎРѕС…СЂР°РЅРёС‚СЊ';
       }
     } catch {
-      errEl.textContent = 'Нет соединения';
+      errEl.textContent = 'РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ';
       saveBtn.disabled = false;
-      saveBtn.innerHTML = '<i class="ti ti-check"></i> Сохранить';
+      saveBtn.innerHTML = '<i class="ti ti-check"></i> РЎРѕС…СЂР°РЅРёС‚СЊ';
     }
   };
 }
 
-// ══════════════════════════════════════════════
-// SETTINGS  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// SETTINGS  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let _pendingTheme  = localStorage.getItem('aura_theme')  || 'dark';
 let _pendingAccent = localStorage.getItem('aura_accent') || '#6366f1';
 
@@ -3371,7 +3371,7 @@ function openSettings() {
   // Restore theme state
   $('thDark')?.classList.toggle('active', _pendingTheme === 'dark');
   $('thLight')?.classList.toggle('active', _pendingTheme === 'light');
-  // Accent — restore active state and checkmark
+  // Accent вЂ” restore active state and checkmark
   const acc = _pendingAccent || localStorage.getItem('aura_accent') || '#6366f1';
   document.querySelectorAll('.clr').forEach(b => {
     const active = b.dataset.accent === acc;
@@ -3387,7 +3387,7 @@ function openSettings() {
   const notifData = localStorage.getItem('aura_notif_sound');
   const notifNameEl = $('notifSoundName');
   const notifResetBtn = $('notifSoundResetBtn');
-  if (notifNameEl) notifNameEl.textContent = notifData ? '🎵 Кастомный звук' : 'Стандартный звук';
+  if (notifNameEl) notifNameEl.textContent = notifData ? 'рџЋµ РљР°СЃС‚РѕРјРЅС‹Р№ Р·РІСѓРє' : 'РЎС‚Р°РЅРґР°СЂС‚РЅС‹Р№ Р·РІСѓРє';
   if (notifResetBtn) notifResetBtn.style.display = notifData ? '' : 'none';
   // Recovery email + verified badge
   $('stRecoveryEmail').value = userData.recoveryEmail || '';
@@ -3398,7 +3398,7 @@ function openSettings() {
 async function saveRecoveryEmail() {
   const email = $('stRecoveryEmail').value.trim();
   if (!email) {
-    // Удаление email
+    // РЈРґР°Р»РµРЅРёРµ email
     try {
       await fetch('/api/update-recovery-email', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3406,12 +3406,12 @@ async function saveRecoveryEmail() {
       });
       userData.recoveryEmail = null;
       userData.emailVerified = false;
-      toast('Email удалён', 'info');
-    } catch { toast('Ошибка', 'error'); }
+      toast('Email СѓРґР°Р»С‘РЅ', 'info');
+    } catch { toast('РћС€РёР±РєР°', 'error'); }
     return;
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    toast('Введите корректный email', 'warning');
+    toast('Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ email', 'warning');
     return;
   }
 
@@ -3425,21 +3425,21 @@ async function saveRecoveryEmail() {
     });
     const d = await r.json();
     if (d.success && d.needsVerify) {
-      toast(d.message || 'Код отправлен', 'info');
+      toast(d.message || 'РљРѕРґ РѕС‚РїСЂР°РІР»РµРЅ', 'info');
       openEmailVerifyModal(email, 'email');
     } else if (d.success) {
       userData.recoveryEmail = email;
-      toast('Email сохранён', 'success');
+      toast('Email СЃРѕС…СЂР°РЅС‘РЅ', 'success');
     } else {
-      toast(d.error || 'Ошибка', 'error');
+      toast(d.error || 'РћС€РёР±РєР°', 'error');
     }
-  } catch { toast('Нет соединения', 'error'); }
+  } catch { toast('РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ', 'error'); }
   finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i>'; }
   }
 }
 
-// ── Email verify modal (общий для настроек и регистрации) ──────────────────
+// в”Ђв”Ђ Email verify modal (РѕР±С‰РёР№ РґР»СЏ РЅР°СЃС‚СЂРѕРµРє Рё СЂРµРіРёСЃС‚СЂР°С†РёРё) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _verifyContext = 'email'; // 'email' | 'register'
 
 function openEmailVerifyModal(email, context = 'email') {
@@ -3447,7 +3447,7 @@ function openEmailVerifyModal(email, context = 'email') {
   const m = $('emailVerifyModal');
   if (!m) return;
   const hint = $('evHint');
-  if (hint) hint.textContent = `Код отправлен на ${email}`;
+  if (hint) hint.textContent = `РљРѕРґ РѕС‚РїСЂР°РІР»РµРЅ РЅР° ${email}`;
   document.querySelectorAll('.ev-digit').forEach(d => { d.value = ''; });
   $('evErr').textContent = '';
   m.classList.add('open');
@@ -3478,7 +3478,7 @@ async function confirmEmailCode() {
   const digits = document.querySelectorAll('.ev-digit');
   const code = [...digits].map(d => d.value).join('');
   const err = $('evErr');
-  if (code.length < 6) { if (err) err.textContent = 'Введите все 6 цифр'; return; }
+  if (code.length < 6) { if (err) err.textContent = 'Р’РІРµРґРёС‚Рµ РІСЃРµ 6 С†РёС„СЂ'; return; }
   if (err) err.textContent = '';
 
   const btn = $('evConfirmBtn');
@@ -3499,30 +3499,30 @@ async function confirmEmailCode() {
       if (f) f.value = d.email;
       const badge = $('emailVerifiedBadge');
       if (badge) badge.style.display = 'flex';
-      toast('Email подтверждён ✓', 'success');
+      toast('Email РїРѕРґС‚РІРµСЂР¶РґС‘РЅ вњ“', 'success');
     } else {
-      if (err) err.textContent = d.error || 'Неверный код';
+      if (err) err.textContent = d.error || 'РќРµРІРµСЂРЅС‹Р№ РєРѕРґ';
       digits.forEach(d => d.value = '');
       document.querySelector('.ev-digit')?.focus();
     }
-  } catch { if (err) err.textContent = 'Нет соединения'; }
+  } catch { if (err) err.textContent = 'РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ'; }
   finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> Подтвердить'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check"></i> РџРѕРґС‚РІРµСЂРґРёС‚СЊ'; }
   }
 }
 
 function closeSettings() { $('settingsModal').classList.remove('open'); }
 
-// ══════════════════════════════════════════════════════════════════════════
-//  AI CHAT  ← Mistral AI с памятью разговора
-// ══════════════════════════════════════════════════════════════════════════
-// ── AI ЧАТ — клиент ────────────────────────────────────────────────────────
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+//  AI CHAT  в†ђ Mistral AI СЃ РїР°РјСЏС‚СЊСЋ СЂР°Р·РіРѕРІРѕСЂР°
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// в”Ђв”Ђ AI Р§РђРў вЂ” РєР»РёРµРЅС‚ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _aiAttachment = null; // { type:'image'|'file', data, mimeType, name, preview }
 
 let _aiDebugMode = false;
 
 async function openAiChat() {
-  // Загружаем историю из сервера если messages пусты
+  // Р—Р°РіСЂСѓР¶Р°РµРј РёСЃС‚РѕСЂРёСЋ РёР· СЃРµСЂРІРµСЂР° РµСЃР»Рё messages РїСѓСЃС‚С‹
   const msgs = document.getElementById('aiMessages');
   if (msgs && msgs.children.length <= 1 && currentUser) {
     try {
@@ -3549,25 +3549,24 @@ async function openAiChat() {
     } catch {}
   }
 
-  // Добавляем выбор модели если ещё нет
+  // Р”РѕР±Р°РІР»СЏРµРј РІС‹Р±РѕСЂ РјРѕРґРµР»Рё РµСЃР»Рё РµС‰С‘ РЅРµС‚
   if (!document.getElementById('aiModelWrap')) {
     const sendBtn = document.getElementById('aiSendBtn');
     const parent  = sendBtn?.parentElement;
     if (parent) {
       const models = [
-        { value: 'mistral',       label: 'Mistral',          icon: '⚡', group: 'Основные' },
-        { value: 'minimax',       label: 'Aura AI',          icon: '✨', group: 'Основные' },
-        { value: 'deepseek-r1',   label: 'DeepSeek R1 🧠',  icon: '🔵', group: 'OpenRouter' },
-        { value: 'deepseek-v3',   label: 'DeepSeek V3',      icon: '🔵', group: 'OpenRouter' },
-        { value: 'gemini-flash',  label: 'Gemini 2.5 Flash', icon: '🟡', group: 'OpenRouter' },
-        { value: 'gemini-pro',    label: 'Gemini 2.5 Pro 🧠',icon: '🟡', group: 'OpenRouter' },
-        { value: 'qwen3-235b',    label: 'Qwen3 235B 🧠',   icon: '🟠', group: 'OpenRouter' },
-        { value: 'grok-3-mini',   label: 'Grok 3 Mini 🧠',  icon: '⬛', group: 'OpenRouter' },
-        { value: 'claude-haiku',  label: 'Claude Haiku',     icon: '🟣', group: 'OpenRouter' },
-        { value: 'llama-maverick',label: 'Llama 4 Maverick', icon: '🦙', group: 'OpenRouter' },
+        { value: 'mistral',               label: 'Mistral',           icon: '*', group: 'Core' },
+        { value: 'minimax',               label: 'Aura AI',           icon: '+', group: 'Core' },
+        { value: 'qw/qwen3-coder-plus',   label: 'Qwen3 Coder Plus',  icon: 'Q', group: 'OmniRouter' },
+        { value: 'qw/qwen3-coder-flash',  label: 'Qwen3 Coder Flash', icon: 'Q', group: 'OmniRouter' },
+        { value: 'qw/vision-model',       label: 'Qwen Vision',       icon: 'V', group: 'OmniRouter' },
+        { value: 'qw/coder-model',        label: 'Qwen Coder',        icon: 'C', group: 'OmniRouter' },
       ];
-      // 🧠 = модель с thinking (рассуждением)
       let currentModel = 'mistral';
+      const modeState = {
+        thinking: localStorage.getItem('ai_thinking') === '1',
+        multiagent: localStorage.getItem('ai_multiagent') === '1',
+      };
 
       const wrap = document.createElement('div');
       wrap.id = 'aiModelWrap';
@@ -3577,9 +3576,9 @@ async function openAiChat() {
       btn.id   = 'aiModelBtn';
       btn.type = 'button';
       btn.style.cssText = 'display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--surface3);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;transition:all .2s;box-shadow:0 1px 4px rgba(0,0,0,.08);';
-      btn.innerHTML = '<span id="aiModelIcon">⚡</span><span id="aiModelLabel" style="margin:0 2px">Mistral</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>';
+      btn.innerHTML = '<span id="aiModelIcon">*</span><span id="aiModelLabel" style="margin:0 2px">Mistral</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>';
 
-      // Dropdown — position:fixed чтобы не обрезался overflow модала
+      // Dropdown вЂ” position:fixed С‡С‚РѕР±С‹ РЅРµ РѕР±СЂРµР·Р°Р»СЃСЏ overflow РјРѕРґР°Р»Р°
       const drop = document.createElement('div');
       drop.id = 'aiModelDrop';
       drop.style.cssText = 'display:none;position:fixed;background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:5px;min-width:140px;box-shadow:0 8px 32px rgba(0,0,0,.22);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:99999;';
@@ -3588,7 +3587,7 @@ async function openAiChat() {
         const r = btn.getBoundingClientRect();
         drop.style.left   = r.left + 'px';
         drop.style.top    = (r.top - drop.offsetHeight - 6) + 'px';
-        // если не помещается сверху — показываем снизу
+        // РµСЃР»Рё РЅРµ РїРѕРјРµС‰Р°РµС‚СЃСЏ СЃРІРµСЂС…Сѓ вЂ” РїРѕРєР°Р·С‹РІР°РµРј СЃРЅРёР·Сѓ
         if (r.top - drop.offsetHeight - 6 < 8) {
           drop.style.top  = (r.bottom + 6) + 'px';
         }
@@ -3632,6 +3631,46 @@ async function openAiChat() {
         drop.appendChild(item);
       });
 
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:var(--border);margin:6px 4px;';
+      drop.appendChild(sep);
+
+      function buildModeItem(id, label, key) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.id = id;
+        item.style.cssText = 'width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border:none;background:transparent;color:var(--text);border-radius:10px;cursor:pointer;font-size:12.5px;font-family:inherit;';
+        const render = () => {
+          const on = !!modeState[key];
+          item.innerHTML = `<span>${label}</span><span style="font-size:11px;padding:2px 8px;border-radius:999px;background:${on ? 'var(--accent)' : 'var(--surface3)'};color:${on ? '#fff' : 'var(--text2)'}">${on ? 'ON' : 'OFF'}</span>`;
+        };
+        render();
+        item.onmouseenter = () => { item.style.background = 'var(--surface2)'; };
+        item.onmouseleave = () => { item.style.background = 'transparent'; };
+        item.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          modeState[key] = !modeState[key];
+          localStorage.setItem(`ai_${key}`, modeState[key] ? '1' : '0');
+          render();
+          try {
+            await fetch('/api/ai-settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: currentUser,
+                thinking: key === 'thinking' ? modeState[key] : undefined,
+                multiagent: key === 'multiagent' ? modeState[key] : undefined
+              })
+            });
+          } catch {}
+        };
+        return item;
+      }
+
+      drop.appendChild(buildModeItem('aiThinkBtn', 'Thinking', 'thinking'));
+      drop.appendChild(buildModeItem('aiMultiAgentBtn', 'Multi-Agent', 'multiagent'));
+
       btn.addEventListener('mousedown', (e) => {
         e.preventDefault(); e.stopPropagation();
         drop.style.display === 'block' ? closeDrop() : openDrop();
@@ -3645,7 +3684,7 @@ async function openAiChat() {
       window.addEventListener('scroll', closeDrop, true);
       window.addEventListener('resize', () => { if (drop.style.display==='block') updateDropPos(); });
 
-      // Скрытый select для получения значения
+      // РЎРєСЂС‹С‚С‹Р№ select РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ Р·РЅР°С‡РµРЅРёСЏ
       const hidSel = document.createElement('select');
       hidSel.id = 'aiModelSelect';
       hidSel.style.display = 'none';
@@ -3654,49 +3693,16 @@ async function openAiChat() {
         o.value = m.value; o.textContent = m.label;
         hidSel.appendChild(o);
       });
-
-      // Кнопки Thinking и MultiAgent
-      const thinkBtn = document.createElement('button');
-      thinkBtn.id = 'aiThinkBtn';
-      thinkBtn.title = 'Режим рассуждений (thinking)';
-      thinkBtn.style.cssText = 'padding:5px 9px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface3);color:var(--text2);font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;';
-      thinkBtn.textContent = '💭 Thinking';
-      thinkBtn.onclick = () => {
-        const on = thinkBtn.dataset.on === '1';
-        thinkBtn.dataset.on = on ? '0' : '1';
-        thinkBtn.style.background    = !on ? 'var(--accent)'     : 'var(--surface3)';
-        thinkBtn.style.color         = !on ? '#fff'               : 'var(--text2)';
-        thinkBtn.style.borderColor   = !on ? 'var(--accent)'     : 'var(--border)';
-        fetch('/api/ai-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username: currentUser, thinking: !on }) });
-      };
-
-      const maBtn = document.createElement('button');
-      maBtn.id = 'aiMultiAgentBtn';
-      maBtn.title = 'Мульти-агентный режим';
-      maBtn.style.cssText = 'padding:5px 9px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface3);color:var(--text2);font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;';
-      maBtn.textContent = '🤝 Multi-Agent';
-      maBtn.onclick = () => {
-        const on = maBtn.dataset.on === '1';
-        maBtn.dataset.on = on ? '0' : '1';
-        maBtn.style.background  = !on ? '#7c3aed'        : 'var(--surface3)';
-        maBtn.style.color       = !on ? '#fff'            : 'var(--text2)';
-        maBtn.style.borderColor = !on ? '#7c3aed'        : 'var(--border)';
-        fetch('/api/ai-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username: currentUser, multiagent: !on }) });
-      };
-
       document.body.appendChild(drop);
       wrap.appendChild(btn);
       wrap.appendChild(hidSel);
       parent.insertBefore(wrap, sendBtn);
-      // Кнопки режимов — перед modelWrap
-      parent.insertBefore(maBtn, wrap);
-      parent.insertBefore(thinkBtn, maBtn);
     }
   }
   $('aiChatModal').classList.add('open');
   aiRefreshFileBadge();
   _aiConnectSse();
-  // На мобильном не фокусируем автоматически — это вызывает прыжок клавиатуры
+  // РќР° РјРѕР±РёР»СЊРЅРѕРј РЅРµ С„РѕРєСѓСЃРёСЂСѓРµРј Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё вЂ” СЌС‚Рѕ РІС‹Р·С‹РІР°РµС‚ РїСЂС‹Р¶РѕРє РєР»Р°РІРёР°С‚СѓСЂС‹
   if (!isMobile) setTimeout(() => $('aiInput')?.focus(), 80);
 }
 
@@ -3719,7 +3725,7 @@ async function aiRefreshFileBadge() {
   } catch {}
 }
 
-// Кнопка прикрепить файл/фото в AI чате
+// РљРЅРѕРїРєР° РїСЂРёРєСЂРµРїРёС‚СЊ С„Р°Р№Р»/С„РѕС‚Рѕ РІ AI С‡Р°С‚Рµ
 function aiAttach() {
   const inp = document.createElement('input');
   inp.type = 'file';
@@ -3762,7 +3768,7 @@ function _aiUpdateAttachBar() {
     : `<i class="ti ti-file" style="font-size:18px;color:var(--accent)"></i>`;
   bar.innerHTML = `
     ${preview}
-    <span style="flex:1;color:var(--text2)">📎 ${esc(_aiAttachment.name)}</span>
+    <span style="flex:1;color:var(--text2)">рџ“Ћ ${esc(_aiAttachment.name)}</span>
     <button onclick="_aiAttachment=null;_aiUpdateAttachBar()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px">
       <i class="ti ti-x"></i>
     </button>`;
@@ -3780,7 +3786,7 @@ function _aiAddMessage(role, content, attachment) {
   const ava = document.createElement('div');
   ava.style.cssText = 'width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;';
   if (role === 'user') {
-    // Показываем настоящую аватарку пользователя
+    // РџРѕРєР°Р·С‹РІР°РµРј РЅР°СЃС‚РѕСЏС‰СѓСЋ Р°РІР°С‚Р°СЂРєСѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ
     const userAv = userAvatars[currentUser];
     if (userAv) {
       ava.style.backgroundImage = `url('${userAv}')`;
@@ -3801,7 +3807,7 @@ function _aiAddMessage(role, content, attachment) {
   const isUser = role === 'user';
   bubble.style.cssText = `max-width:82%;padding:9px 13px;border-radius:${isUser?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:13.5px;line-height:1.55;word-break:break-word;${isUser?'background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;':'background:var(--surface3);color:var(--text);'}`;
 
-  // Показываем прикреплённое изображение
+  // РџРѕРєР°Р·С‹РІР°РµРј РїСЂРёРєСЂРµРїР»С‘РЅРЅРѕРµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ
   let bubbleHtml = '';
   if (attachment?.type === 'image' && attachment.preview) {
     bubbleHtml += `<img src="${attachment.preview}" style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer" onclick="viewMedia('${attachment.preview}','image')">`;
@@ -3809,7 +3815,7 @@ function _aiAddMessage(role, content, attachment) {
     bubbleHtml += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(0,0,0,.12);border-radius:8px;margin-bottom:6px;font-size:12px;"><i class="ti ti-file"></i>${esc(attachment.name)}</div>`;
   }
 
-  // Markdown рендер
+  // Markdown СЂРµРЅРґРµСЂ
   if (content) {
     bubbleHtml += _aiRenderMarkdown(content);
   }
@@ -3842,32 +3848,19 @@ function _aiAddTyping() {
   return wrap;
 }
 
-// Трекер созданных файлов в текущем ответе (для ZIP скачивания)
+// РўСЂРµРєРµСЂ СЃРѕР·РґР°РЅРЅС‹С… С„Р°Р№Р»РѕРІ РІ С‚РµРєСѓС‰РµРј РѕС‚РІРµС‚Рµ (РґР»СЏ ZIP СЃРєР°С‡РёРІР°РЅРёСЏ)
 let _aiLastCreatedFiles = [];
-const _aiShownFileIds = new Set(); // дедупликация карточек
+const _aiShownFileIds = new Set(); // РґРµРґСѓРїР»РёРєР°С†РёСЏ РєР°СЂС‚РѕС‡РµРє
 
 function _aiAddFileCard(file) {
-  if (_aiShownFileIds.has(file.id)) return; // уже показан
+  if (_aiShownFileIds.has(file.id)) return;
   _aiShownFileIds.add(file.id);
   _aiLastCreatedFiles.push(file);
   const msgs = $('aiMessages');
   if (!msgs) return;
 
-  // Если несколько файлов — добавляем кнопку ZIP над карточками
-  if (_aiLastCreatedFiles.length > 1) {
-    // Обновляем или создаём ZIP-строку
-    let zipBar = $('aiZipBar');
-    if (!zipBar) {
-      zipBar = document.createElement('div');
-      zipBar.id = 'aiZipBar';
-      zipBar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 14px;margin:4px 0 4px 36px;max-width:300px;background:var(--accent-dim);border:1px solid var(--border2);border-radius:10px;font-size:12px;cursor:pointer';
-      zipBar.onclick = _aiDownloadZip;
-      msgs.insertBefore(zipBar, msgs.querySelector('[id^=aiZipBar]')?.nextSibling || null);
-    }
-    zipBar.innerHTML = `<i class="ti ti-archive" style="color:var(--accent)"></i><span style="color:var(--accent);font-weight:600">Скачать все ${_aiLastCreatedFiles.length} файла как ZIP</span><i class="ti ti-download" style="color:var(--accent);margin-left:auto"></i>`;
-  }
-
   const card = document.createElement('div');
+  card.className = 'ai-file-card';
   card.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:14px;margin:4px 0 4px 36px;max-width:300px;';
   const ext = file.name.split('.').pop().toUpperCase();
   const icons = { py:'ti-brand-python', js:'ti-brand-javascript', html:'ti-brand-html5', css:'ti-brand-css3', json:'ti-json', csv:'ti-table', md:'ti-markdown', sh:'ti-terminal', sql:'ti-database' };
@@ -3876,42 +3869,65 @@ function _aiAddFileCard(file) {
     <i class="ti ${icon}" style="font-size:22px;color:var(--accent);flex-shrink:0"></i>
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(file.name)}</div>
-      <div style="font-size:11px;color:var(--text2)">${ext} · ${(file.content?.length||0).toLocaleString()} байт · хранится 5 ответов</div>
+      <div style="font-size:11px;color:var(--text2)">${ext} • ${(file.content?.length||0).toLocaleString()} bytes • keeps 5 turns</div>
       ${file.description ? `<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.description)}</div>` : ''}
     </div>
-    <a href="/api/ai-file/${encodeURIComponent(currentUser)}/${file.id}" download="${encodeURIComponent(file.name)}"
-       style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;flex-shrink:0" title="Скачать">
+    <a class="ai-file-download" href="/api/ai-file/${encodeURIComponent(currentUser)}/${file.id}" download="${encodeURIComponent(file.name)}"
+       style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;flex-shrink:0" title="Download">
       <i class="ti ti-download"></i>
     </a>`;
 
-  // Кнопка превью для HTML/SVG/CSS+JS наборов
   const extLower = file.name.split('.').pop().toLowerCase();
   const previewable = ['html','svg'].includes(extLower) || extLower === 'js' || extLower === 'css';
   if (previewable) {
     const previewBtn = document.createElement('button');
-    previewBtn.title = 'Превью';
+    previewBtn.title = 'Preview';
     previewBtn.style.cssText = 'padding:6px 10px;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;flex-shrink:0;margin-right:4px';
     previewBtn.innerHTML = '<i class="ti ti-eye"></i>';
     previewBtn.onclick = () => _aiPreviewFile(file.id, file.name);
-    // Вставляем перед кнопкой скачать
     const dlBtn = card.querySelector('a[download]');
     if (dlBtn) card.insertBefore(previewBtn, dlBtn);
     else card.appendChild(previewBtn);
   }
 
   msgs.appendChild(card);
+  _aiUpdateFileCardsUi();
   _aiSmartScroll();
 }
 
-// ── HTML/JS/CSS Preview ──────────────────────────────────────────────────────
+function _aiUpdateFileCardsUi() {
+  const msgs = $('aiMessages');
+  if (!msgs) return;
+  const count = _aiLastCreatedFiles.length;
+  let zipBar = $('aiZipBar');
+
+  if (count > 1) {
+    if (!zipBar) {
+      zipBar = document.createElement('div');
+      zipBar.id = 'aiZipBar';
+      zipBar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 14px;margin:4px 0 4px 36px;max-width:300px;background:var(--accent-dim);border:1px solid var(--border2);border-radius:10px;font-size:12px;cursor:pointer';
+      zipBar.onclick = _aiDownloadZip;
+      msgs.appendChild(zipBar);
+    }
+    zipBar.innerHTML = `<i class="ti ti-archive" style="color:var(--accent)"></i><span style="color:var(--accent);font-weight:600">Download ZIP (${count})</span><i class="ti ti-download" style="color:var(--accent);margin-left:auto"></i>`;
+    if (zipBar.parentElement !== msgs) msgs.appendChild(zipBar);
+  } else if (zipBar) {
+    zipBar.remove();
+  }
+
+  const hideSingleDownloads = count > 2;
+  msgs.querySelectorAll('.ai-file-download').forEach((el) => {
+    el.style.display = hideSingleDownloads ? 'none' : '';
+  });
+}
 async function _aiPreviewFile(fileId, mainName) {
-  // Загружаем файл с сервера (актуальное содержимое)
+  // Р—Р°РіСЂСѓР¶Р°РµРј С„Р°Р№Р» СЃ СЃРµСЂРІРµСЂР° (Р°РєС‚СѓР°Р»СЊРЅРѕРµ СЃРѕРґРµСЂР¶РёРјРѕРµ)
   let mainContent = '';
   try {
     const r = await fetch('/api/ai-file/' + encodeURIComponent(currentUser) + '/' + fileId);
     mainContent = await r.text();
   } catch(e) {
-    toast('Ошибка загрузки файла', 'error'); return;
+    toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё С„Р°Р№Р»Р°', 'error'); return;
   }
   const allFiles = _aiLastCreatedFiles;
   const mainFile = allFiles.find(f => f.id === fileId) || { id: fileId, name: mainName || 'file', content: mainContent };
@@ -3921,13 +3937,13 @@ async function _aiPreviewFile(fileId, mainName) {
   let html = '';
 
   if (ext === 'html') {
-    // Инлайним CSS и JS из других файлов сессии
+    // РРЅР»Р°Р№РЅРёРј CSS Рё JS РёР· РґСЂСѓРіРёС… С„Р°Р№Р»РѕРІ СЃРµСЃСЃРёРё
     html = mainFile.content;
     allFiles.forEach(f => {
       const fext = f.name.split('.').pop().toLowerCase();
       if (fext === 'css') {
         html = html.replace(/<link[^>]+href=["'][^"']*\.css["'][^>]*>/gi, `<style>${f.content}</style>`);
-        // Если link не найден - добавляем в head
+        // Р•СЃР»Рё link РЅРµ РЅР°Р№РґРµРЅ - РґРѕР±Р°РІР»СЏРµРј РІ head
         if (!html.includes(f.content)) {
           html = html.replace('</head>', `<style>${f.content}</style></head>`);
         }
@@ -3942,30 +3958,30 @@ async function _aiPreviewFile(fileId, mainName) {
   } else if (ext === 'svg') {
     html = `<!DOCTYPE html><html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111">${mainFile.content}</body></html>`;
   } else {
-    // JS/CSS - оборачиваем в HTML
+    // JS/CSS - РѕР±РѕСЂР°С‡РёРІР°РµРј РІ HTML
     html = ext === 'js'
       ? `<!DOCTYPE html><html><head><title>Preview</title></head><body><script>${mainFile.content}</script></body></html>`
-      : `<!DOCTYPE html><html><head><style>${mainFile.content}</style></head><body><div class="demo">Превью CSS</div></body></html>`;
+      : `<!DOCTYPE html><html><head><style>${mainFile.content}</style></head><body><div class="demo">РџСЂРµРІСЊСЋ CSS</div></body></html>`;
   }
 
-  // Открываем в модальном окне
+  // РћС‚РєСЂС‹РІР°РµРј РІ РјРѕРґР°Р»СЊРЅРѕРј РѕРєРЅРµ
   const modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);display:flex;flex-direction:column;animation:fadeIn .2s ease';
   modal.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
-      <span style="font-weight:700;font-size:14px;color:var(--text)"><i class="ti ti-eye" style="color:var(--accent)"></i> Превью: ${esc(mainFile.name)}</span>
-      <span style="font-size:12px;color:var(--text3)">Все связанные файлы подключены автоматически</span>
-      <button onclick="this.closest('[style*=fixed]').remove()" style="margin-left:auto;background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 12px;border-radius:8px;cursor:pointer;font-family:inherit">✕ Закрыть</button>
+      <span style="font-weight:700;font-size:14px;color:var(--text)"><i class="ti ti-eye" style="color:var(--accent)"></i> РџСЂРµРІСЊСЋ: ${esc(mainFile.name)}</span>
+      <span style="font-size:12px;color:var(--text3)">Р’СЃРµ СЃРІСЏР·Р°РЅРЅС‹Рµ С„Р°Р№Р»С‹ РїРѕРґРєР»СЋС‡РµРЅС‹ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё</span>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="margin-left:auto;background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 12px;border-radius:8px;cursor:pointer;font-family:inherit">вњ• Р—Р°РєСЂС‹С‚СЊ</button>
     </div>
     <iframe id="aiPreviewFrame" sandbox="allow-scripts allow-same-origin" style="flex:1;border:none;background:#fff"></iframe>`;
   document.body.appendChild(modal);
 
   const iframe = modal.querySelector('#aiPreviewFrame');
-  // iOS Safari не поддерживает blob URL в iframe — используем srcdoc везде
+  // iOS Safari РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ blob URL РІ iframe вЂ” РёСЃРїРѕР»СЊР·СѓРµРј srcdoc РІРµР·РґРµ
   try {
-    // srcdoc работает везде включая iOS
+    // srcdoc СЂР°Р±РѕС‚Р°РµС‚ РІРµР·РґРµ РІРєР»СЋС‡Р°СЏ iOS
     iframe.srcdoc = html;
-    // Fallback: blob URL если srcdoc не сработал
+    // Fallback: blob URL РµСЃР»Рё srcdoc РЅРµ СЃСЂР°Р±РѕС‚Р°Р»
     setTimeout(() => {
       try {
         if (!iframe.contentDocument?.body?.innerHTML?.length) {
@@ -3987,7 +4003,7 @@ async function _aiDownloadZip() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: currentUser, fileIds: ids })
     });
-    if (!r.ok) { toast('Ошибка создания ZIP', 'error'); return; }
+    if (!r.ok) { toast('РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ ZIP', 'error'); return; }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3995,37 +4011,39 @@ async function _aiDownloadZip() {
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  } catch { toast('Ошибка скачивания', 'error'); }
+  } catch { toast('РћС€РёР±РєР° СЃРєР°С‡РёРІР°РЅРёСЏ', 'error'); }
 }
 
 const _aiToolLabels = {
-  web_search: '🔍 Поиск', get_weather: '🌤 Погода', calculate: '🔢 Калькулятор',
-  get_time: '🕐 Время', convert_currency: '💱 Курс валют', translate: '🌐 Перевод',
-  create_file: '📄 Создание файла', generate_data: '📊 Генерация данных',
-  get_crypto: '₿ Криптовалюты', url_info: '🔗 URL', wiki_search: '📖 Wikipedia',
-  get_stock: '📈 Котировки', timezone_convert: '🕐 Часовые пояса', qr_generate: '🔲 QR',
-  color_palette: '🎨 Палитра', unit_convert: '📐 Единицы', dictionary: '📚 Словарь',
-  analyze_archive: '📦 Архив', check_code: '🔬 Проверка кода', run_code: '▶ Запуск',
-  news_search: '📰 Новости', image_generate: '🎨 Генерация картинки',
-  create_presentation: '📊 Презентация', regex_test: '🔍 Regex',
-  encode_decode: '🔐 Кодирование', json_format: '{} JSON',
-  random: '🎲 Случайное', date_calc: '📅 Даты', text_analyze: '📊 Анализ текста',
-  math_advanced: '🔢 Математика', ip_info: '🌍 IP',
-  web_scrape: '🕷 Скрейпинг', api_test: '🔌 API тест',
-  markdown_render: '📝 Markdown', schedule_generate: '📅 Расписание',
-  country_info: '🌍 Страна', music_info: '🎵 Музыка',
-  code_convert: '🔄 Конвертер кода', git_explain: '🔀 Git', pdf_to_text: '📄 PDF'
+  web_search: 'рџ”Ќ РџРѕРёСЃРє', get_weather: 'рџЊ¤ РџРѕРіРѕРґР°', calculate: 'рџ”ў РљР°Р»СЊРєСѓР»СЏС‚РѕСЂ',
+  get_time: 'рџ•ђ Р’СЂРµРјСЏ', convert_currency: 'рџ’± РљСѓСЂСЃ РІР°Р»СЋС‚', translate: 'рџЊђ РџРµСЂРµРІРѕРґ',
+  create_file: 'рџ“„ РЎРѕР·РґР°РЅРёРµ С„Р°Р№Р»Р°', generate_data: 'рџ“Љ Р“РµРЅРµСЂР°С†РёСЏ РґР°РЅРЅС‹С…',
+  get_crypto: 'в‚ї РљСЂРёРїС‚РѕРІР°Р»СЋС‚С‹', url_info: 'рџ”— URL', wiki_search: 'рџ“– Wikipedia',
+  get_stock: 'рџ“€ РљРѕС‚РёСЂРѕРІРєРё', timezone_convert: 'рџ•ђ Р§Р°СЃРѕРІС‹Рµ РїРѕСЏСЃР°', qr_generate: 'рџ”І QR',
+  color_palette: 'рџЋЁ РџР°Р»РёС‚СЂР°', unit_convert: 'рџ“ђ Р•РґРёРЅРёС†С‹', dictionary: 'рџ“љ РЎР»РѕРІР°СЂСЊ',
+  analyze_archive: 'рџ“¦ РђСЂС…РёРІ', check_code: 'рџ”¬ РџСЂРѕРІРµСЂРєР° РєРѕРґР°', run_code: 'в–¶ Р—Р°РїСѓСЃРє',
+  news_search: 'рџ“° РќРѕРІРѕСЃС‚Рё', image_generate: 'рџЋЁ Р“РµРЅРµСЂР°С†РёСЏ РєР°СЂС‚РёРЅРєРё',
+  create_presentation: 'рџ“Љ РџСЂРµР·РµРЅС‚Р°С†РёСЏ', regex_test: 'рџ”Ќ Regex',
+  encode_decode: 'рџ”ђ РљРѕРґРёСЂРѕРІР°РЅРёРµ', json_format: '{} JSON',
+  random: 'рџЋІ РЎР»СѓС‡Р°Р№РЅРѕРµ', date_calc: 'рџ“… Р”Р°С‚С‹', text_analyze: 'рџ“Љ РђРЅР°Р»РёР· С‚РµРєСЃС‚Р°',
+  math_advanced: 'рџ”ў РњР°С‚РµРјР°С‚РёРєР°', ip_info: 'рџЊЌ IP',
+  web_scrape: 'рџ•· РЎРєСЂРµР№РїРёРЅРі', api_test: 'рџ”Њ API С‚РµСЃС‚',
+  markdown_render: 'рџ“ќ Markdown', schedule_generate: 'рџ“… Р Р°СЃРїРёСЃР°РЅРёРµ',
+  country_info: 'рџЊЌ РЎС‚СЂР°РЅР°', music_info: 'рџЋµ РњСѓР·С‹РєР°',
+  code_convert: 'рџ”„ РљРѕРЅРІРµСЂС‚РµСЂ РєРѕРґР°', git_explain: 'рџ”Ђ Git', pdf_to_text: 'рџ“„ PDF',
+  uuid_generate: 'рџ†” UUID', slugify_text: 'рџ”— Slug',
+  csv_to_json: 'рџ“„ CSVв†’JSON', json_to_csv: 'рџ“„ JSONв†’CSV'
 };
 
-// Добавляет коллапсируемый лог инструментов (как на скрине)
-// ── AI задаёт вопрос пользователю ───────────────────────────────────────────
-// ── AI вопросы над баром ввода (с мультиселектом и цепочкой) ──────────────
-let _aiQuestionQueue   = [];  // очередь вопросов
-let _aiQuestionAnswers = {};  // ответы на вопросы { index: value }
-let _aiQuestionIdx     = 0;   // текущий вопрос
+// Р”РѕР±Р°РІР»СЏРµС‚ РєРѕР»Р»Р°РїСЃРёСЂСѓРµРјС‹Р№ Р»РѕРі РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ (РєР°Рє РЅР° СЃРєСЂРёРЅРµ)
+// в”Ђв”Ђ AI Р·Р°РґР°С‘С‚ РІРѕРїСЂРѕСЃ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// в”Ђв”Ђ AI РІРѕРїСЂРѕСЃС‹ РЅР°Рґ Р±Р°СЂРѕРј РІРІРѕРґР° (СЃ РјСѓР»СЊС‚РёСЃРµР»РµРєС‚РѕРј Рё С†РµРїРѕС‡РєРѕР№) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+let _aiQuestionQueue   = [];  // РѕС‡РµСЂРµРґСЊ РІРѕРїСЂРѕСЃРѕРІ
+let _aiQuestionAnswers = {};  // РѕС‚РІРµС‚С‹ РЅР° РІРѕРїСЂРѕСЃС‹ { index: value }
+let _aiQuestionIdx     = 0;   // С‚РµРєСѓС‰РёР№ РІРѕРїСЂРѕСЃ
 
 function _aiShowQuestion(askData) {
-  // Поддержка обоих форматов
+  // РџРѕРґРґРµСЂР¶РєР° РѕР±РѕРёС… С„РѕСЂРјР°С‚РѕРІ
   let questions = askData.questions;
   if (!questions && askData.question) {
     questions = [{ question: askData.question, options: askData.options || [], allow_custom: askData.allow_custom, required: true }];
@@ -4037,11 +4055,11 @@ function _aiShowQuestion(askData) {
 }
 
 function _aiRenderQuestionBar() {
-  // Убираем старый бар если есть
+  // РЈР±РёСЂР°РµРј СЃС‚Р°СЂС‹Р№ Р±Р°СЂ РµСЃР»Рё РµСЃС‚СЊ
   document.getElementById('aiQuestionBar')?.remove();
 
   if (_aiQuestionIdx >= _aiQuestionQueue.length) {
-    // Все вопросы отвечены — отправляем итог
+    // Р’СЃРµ РІРѕРїСЂРѕСЃС‹ РѕС‚РІРµС‡РµРЅС‹ вЂ” РѕС‚РїСЂР°РІР»СЏРµРј РёС‚РѕРі
     _aiSubmitAnswers();
     return;
   }
@@ -4052,7 +4070,7 @@ function _aiRenderQuestionBar() {
   const multi  = q.multi_select === true;
   const canSkip = q.required === false;
 
-  // Бар над полем ввода
+  // Р‘Р°СЂ РЅР°Рґ РїРѕР»РµРј РІРІРѕРґР°
   const modal = $('aiChatModal')?.querySelector('.modal-card');
   if (!modal) return;
 
@@ -4062,20 +4080,20 @@ function _aiRenderQuestionBar() {
     padding:12px 16px;background:var(--surface);border-top:1px solid var(--border);
     flex-shrink:0;animation:fadeUp .2s cubic-bezier(.16,1,.3,1);`;
 
-  // Заголовок: прогресс + текст вопроса
+  // Р—Р°РіРѕР»РѕРІРѕРє: РїСЂРѕРіСЂРµСЃСЃ + С‚РµРєСЃС‚ РІРѕРїСЂРѕСЃР°
   const progress = total > 1
     ? `<span style="font-size:10px;color:var(--text3);background:var(--surface3);padding:2px 8px;border-radius:99px;margin-right:6px">${_aiQuestionIdx+1}/${total}</span>`
     : '';
   const qText = document.createElement('div');
   qText.style.cssText = 'font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:4px';
   qText.innerHTML = `${progress}${esc(q.question)}`;
-  if (multi) qText.innerHTML += `<span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:4px">(можно выбрать несколько)</span>`;
+  if (multi) qText.innerHTML += `<span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:4px">(РјРѕР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ РЅРµСЃРєРѕР»СЊРєРѕ)</span>`;
   bar.appendChild(qText);
 
-  // Выбранные варианты (для мультиселекта)
+  // Р’С‹Р±СЂР°РЅРЅС‹Рµ РІР°СЂРёР°РЅС‚С‹ (РґР»СЏ РјСѓР»СЊС‚РёСЃРµР»РµРєС‚Р°)
   const selected = new Set();
 
-  // Кнопки вариантов
+  // РљРЅРѕРїРєРё РІР°СЂРёР°РЅС‚РѕРІ
   if (q.options?.length) {
     const btnGrid = document.createElement('div');
     btnGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px';
@@ -4098,7 +4116,7 @@ function _aiRenderQuestionBar() {
           if (selected.has(opt)) { selected.delete(opt); setActive(false); }
           else                   { selected.add(opt);    setActive(true);  }
         } else {
-          // Одиночный — сразу переходим
+          // РћРґРёРЅРѕС‡РЅС‹Р№ вЂ” СЃСЂР°Р·Сѓ РїРµСЂРµС…РѕРґРёРј
           _aiQuestionAnswers[_aiQuestionIdx] = opt;
           _aiQuestionIdx++;
           _aiRenderQuestionBar();
@@ -4109,7 +4127,7 @@ function _aiRenderQuestionBar() {
     bar.appendChild(btnGrid);
   }
 
-  // ── Для мультиселекта: кнопка "Далее/Пропустить" ──────────────────────
+  // в”Ђв”Ђ Р”Р»СЏ РјСѓР»СЊС‚РёСЃРµР»РµРєС‚Р°: РєРЅРѕРїРєР° "Р”Р°Р»РµРµ/РџСЂРѕРїСѓСЃС‚РёС‚СЊ" в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   if (multi) {
     const actWrap = document.createElement('div');
     actWrap.style.cssText = 'display:flex;gap:6px;justify-content:flex-end;margin-top:6px';
@@ -4117,14 +4135,14 @@ function _aiRenderQuestionBar() {
       const skipBtn = document.createElement('button');
       skipBtn.style.cssText = `padding:6px 14px;border-radius:10px;background:var(--surface3);
         border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;`;
-      skipBtn.textContent = 'Пропустить';
+      skipBtn.textContent = 'РџСЂРѕРїСѓСЃС‚РёС‚СЊ';
       skipBtn.onclick = () => { _aiQuestionAnswers[_aiQuestionIdx] = null; _aiQuestionIdx++; _aiRenderQuestionBar(); };
       actWrap.appendChild(skipBtn);
     }
     const nextBtn = document.createElement('button');
     nextBtn.style.cssText = `padding:6px 16px;border-radius:10px;background:var(--accent);
       border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;`;
-    nextBtn.textContent = isLast ? 'Готово' : 'Далее →';
+    nextBtn.textContent = isLast ? 'Р“РѕС‚РѕРІРѕ' : 'Р”Р°Р»РµРµ в†’';
     nextBtn.onclick = () => {
       const answer = [...selected];
       _aiQuestionAnswers[_aiQuestionIdx] = answer.length > 1 ? answer : answer[0] || null;
@@ -4135,22 +4153,22 @@ function _aiRenderQuestionBar() {
     bar.appendChild(actWrap);
   }
 
-  // ── Свободный ввод: заменяет главный input bar ──────────────────────────
+  // в”Ђв”Ђ РЎРІРѕР±РѕРґРЅС‹Р№ РІРІРѕРґ: Р·Р°РјРµРЅСЏРµС‚ РіР»Р°РІРЅС‹Р№ input bar в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   let customInput = null;
   if (!multi && (q.allow_custom || !q.options?.length)) {
-    // Перехватываем главный инпут чата
+    // РџРµСЂРµС…РІР°С‚С‹РІР°РµРј РіР»Р°РІРЅС‹Р№ РёРЅРїСѓС‚ С‡Р°С‚Р°
     const mainInput = $('aiInput');
     const mainSend  = $('aiSendBtn');
     if (mainInput) {
       const prevPlaceholder = mainInput.placeholder;
       const prevOnkeydown   = mainInput.onkeydown;
-      mainInput.placeholder = q.options?.length ? 'Или введите свой вариант…' : 'Ваш ответ…';
+      mainInput.placeholder = q.options?.length ? 'РР»Рё РІРІРµРґРёС‚Рµ СЃРІРѕР№ РІР°СЂРёР°РЅС‚вЂ¦' : 'Р’Р°С€ РѕС‚РІРµС‚вЂ¦';
       mainInput.value = '';
       mainInput.focus();
 
       const submitCustom = () => {
         const val = mainInput.value.trim();
-        // Восстанавливаем инпут
+        // Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РёРЅРїСѓС‚
         mainInput.placeholder = prevPlaceholder;
         mainInput.onkeydown   = prevOnkeydown;
         if (mainSend) mainSend.onclick = () => aiSend();
@@ -4163,23 +4181,23 @@ function _aiRenderQuestionBar() {
       mainInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitCustom(); } };
       if (mainSend) mainSend.onclick = submitCustom;
 
-      // Пропустить — ссылка под баром
+      // РџСЂРѕРїСѓСЃС‚РёС‚СЊ вЂ” СЃСЃС‹Р»РєР° РїРѕРґ Р±Р°СЂРѕРј
       if (canSkip) {
         const skipLink = document.createElement('div');
         skipLink.style.cssText = 'text-align:right;margin-top:4px';
         skipLink.innerHTML = `<button onclick="
-          $('aiInput').placeholder = 'Спросите что-нибудь…';
+          $('aiInput').placeholder = 'РЎРїСЂРѕСЃРёС‚Рµ С‡С‚Рѕ-РЅРёР±СѓРґСЊвЂ¦';
           $('aiInput').onkeydown = (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();aiSend();} };
           $('aiSendBtn').onclick = () => aiSend();
           _aiQuestionAnswers[_aiQuestionIdx] = null; _aiQuestionIdx++; _aiRenderQuestionBar();"
           style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;font-family:inherit;padding:0">
-          Пропустить →</button>`;
+          РџСЂРѕРїСѓСЃС‚РёС‚СЊ в†’</button>`;
         bar.appendChild(skipLink);
       }
     }
   }
 
-  // Вставляем перед полем ввода
+  // Р’СЃС‚Р°РІР»СЏРµРј РїРµСЂРµРґ РїРѕР»РµРј РІРІРѕРґР°
   const inputZone = modal.querySelector('.input-box')?.parentElement;
   if (inputZone) modal.insertBefore(bar, inputZone);
   else modal.appendChild(bar);
@@ -4188,7 +4206,7 @@ function _aiRenderQuestionBar() {
 async function _aiSubmitAnswers() {
   document.getElementById('aiQuestionBar')?.remove();
 
-  // Собираем ответы — только значения, без повторения вопросов
+  // РЎРѕР±РёСЂР°РµРј РѕС‚РІРµС‚С‹ вЂ” С‚РѕР»СЊРєРѕ Р·РЅР°С‡РµРЅРёСЏ, Р±РµР· РїРѕРІС‚РѕСЂРµРЅРёСЏ РІРѕРїСЂРѕСЃРѕРІ
   const answered = _aiQuestionQueue
     .map((q, i) => {
       const ans = _aiQuestionAnswers[i];
@@ -4198,11 +4216,11 @@ async function _aiSubmitAnswers() {
     .filter(Boolean);
 
   if (!answered.length) {
-    // Всё пропущено — ничего не отправляем
+    // Р’СЃС‘ РїСЂРѕРїСѓС‰РµРЅРѕ вЂ” РЅРёС‡РµРіРѕ РЅРµ РѕС‚РїСЂР°РІР»СЏРµРј
     return;
   }
 
-  // Если один вопрос — просто ответ. Если несколько — нумерованный список
+  // Р•СЃР»Рё РѕРґРёРЅ РІРѕРїСЂРѕСЃ вЂ” РїСЂРѕСЃС‚Рѕ РѕС‚РІРµС‚. Р•СЃР»Рё РЅРµСЃРєРѕР»СЊРєРѕ вЂ” РЅСѓРјРµСЂРѕРІР°РЅРЅС‹Р№ СЃРїРёСЃРѕРє
   const summaryMsg = answered.length === 1
     ? answered[0]
     : answered.map((a, i) => `${i+1}. ${a}`).join('\n');
@@ -4232,11 +4250,11 @@ async function _aiSubmitAnswers() {
         else aiRefreshFileBadge();
       }
     } else {
-      _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка'));
+      _aiAddMessage('assistant', 'вљ пёЏ ' + (d.error || 'РћС€РёР±РєР°'));
     }
   } catch {
     if (typing) typing.remove();
-    _aiAddMessage('assistant', '⚠️ Нет соединения.');
+    _aiAddMessage('assistant', 'вљ пёЏ РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ.');
   } finally {
     _aiLocked = false;
     if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = ''; }
@@ -4244,7 +4262,7 @@ async function _aiSubmitAnswers() {
   }
 }
 
-// Старая функция — теперь просто алиас
+// РЎС‚Р°СЂР°СЏ С„СѓРЅРєС†РёСЏ вЂ” С‚РµРїРµСЂСЊ РїСЂРѕСЃС‚Рѕ Р°Р»РёР°СЃ
 async function _aiSendOption(text) {
   document.getElementById('aiQuestionBar')?.remove();
   _aiAddMessage('user', text);
@@ -4265,11 +4283,11 @@ async function _aiSendOption(text) {
       if (d.reply) _aiAddMessage('assistant', d.reply);
       if (d.createdFiles?.length) { d.createdFiles.forEach(f => _aiAddFileCard(f)); aiRefreshFileBadge(); }
     } else {
-      _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка'));
+      _aiAddMessage('assistant', 'вљ пёЏ ' + (d.error || 'РћС€РёР±РєР°'));
     }
   } catch {
     if (typing) typing.remove();
-    _aiAddMessage('assistant', '⚠️ Нет соединения.');
+    _aiAddMessage('assistant', 'вљ пёЏ РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ.');
   } finally {
     if (sendBtn) sendBtn.disabled = false;
     $('aiInput')?.focus();
@@ -4287,7 +4305,7 @@ function _aiAddToolLog(tools) {
   const count = tools.length;
   const summary = tools.length === 1
     ? _aiToolLabels[tools[0]] || tools[0]
-    : `Запущено ${count} инструмент${count===1?'':count<5?'а':'ов'}`;
+    : `Р—Р°РїСѓС‰РµРЅРѕ ${count} РёРЅСЃС‚СЂСѓРјРµРЅС‚${count===1?'':count<5?'Р°':'РѕРІ'}`;
 
   wrap.innerHTML = `
     <div class="ai-tool-log">
@@ -4320,14 +4338,14 @@ function _aiAddToolLog(tools) {
   _aiSmartScroll();
 }
 
-// ── SSE стриминг ────────────────────────────────────────────────────────────
+// в”Ђв”Ђ SSE СЃС‚СЂРёРјРёРЅРі в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _aiSse = null;          // EventSource
-let _aiStreamBubble = null; // текущий стримящийся bubble div
-let _aiStreamContent = '';  // накопленный текст
-let _aiStreamingStarted = false; // флаг — SSE стриминг уже начался
+let _aiStreamBubble = null; // С‚РµРєСѓС‰РёР№ СЃС‚СЂРёРјСЏС‰РёР№СЃСЏ bubble div
+let _aiStreamContent = '';  // РЅР°РєРѕРїР»РµРЅРЅС‹Р№ С‚РµРєСЃС‚
+let _aiStreamingStarted = false; // С„Р»Р°Рі вЂ” SSE СЃС‚СЂРёРјРёРЅРі СѓР¶Рµ РЅР°С‡Р°Р»СЃСЏ
 
 function _aiConnectSse() {
-  // Переподключаем если соединение закрыто
+  // РџРµСЂРµРїРѕРґРєР»СЋС‡Р°РµРј РµСЃР»Рё СЃРѕРµРґРёРЅРµРЅРёРµ Р·Р°РєСЂС‹С‚Рѕ
   if (_aiSse && _aiSse.readyState !== EventSource.CLOSED) return;
   if (_aiSse) { _aiSse.close(); _aiSse = null; }
   if (!currentUser) return;
@@ -4343,16 +4361,16 @@ function _aiConnectSse() {
   _aiSse.addEventListener('chunk', (e) => {
     try {
       const { text } = JSON.parse(e.data);
-      // Мысли нейросети → в live log панель, не в bubble
+      // РњС‹СЃР»Рё РЅРµР№СЂРѕСЃРµС‚Рё в†’ РІ live log РїР°РЅРµР»СЊ, РЅРµ РІ bubble
       if (text && text.startsWith('__THINK__')) {
-        // Мысли → только в live log, НЕ в bubble
-        document.getElementById('aiTyping')?.remove(); // убираем анимацию пока думает
-        _aiAddLiveLog({ icon: '💭', text: text.slice(9), type: 'think' });
+        // РњС‹СЃР»Рё в†’ С‚РѕР»СЊРєРѕ РІ live log, РќР• РІ bubble
+        document.getElementById('aiTyping')?.remove(); // СѓР±РёСЂР°РµРј Р°РЅРёРјР°С†РёСЋ РїРѕРєР° РґСѓРјР°РµС‚
+        _aiAddLiveLog({ icon: 'рџ’­', text: text.slice(9), type: 'think' });
         return;
       }
-      // Первый текстовый чанк = конец размышлений, начало ответа
+      // РџРµСЂРІС‹Р№ С‚РµРєСЃС‚РѕРІС‹Р№ С‡Р°РЅРє = РєРѕРЅРµС† СЂР°Р·РјС‹С€Р»РµРЅРёР№, РЅР°С‡Р°Р»Рѕ РѕС‚РІРµС‚Р°
       if (!_aiStreamingStarted) {
-        // Убираем typing indicator
+        // РЈР±РёСЂР°РµРј typing indicator
         document.getElementById('aiTyping')?.remove();
       }
       _aiStreamingStarted = true;
@@ -4362,12 +4380,12 @@ function _aiConnectSse() {
         _aiStreamBubble = bubble;
       }
       _aiStreamContent += text;
-      _aiStreamBubble.innerHTML = _aiRenderMarkdown(_aiStreamContent) + '<span class="ai-cursor">▋</span>';
+      _aiStreamBubble.innerHTML = _aiRenderMarkdown(_aiStreamContent) + '<span class="ai-cursor">в–‹</span>';
       _aiSmartScroll();
     } catch {}
   });
 
-  // Медиа (изображение/видео) от AI
+  // РњРµРґРёР° (РёР·РѕР±СЂР°Р¶РµРЅРёРµ/РІРёРґРµРѕ) РѕС‚ AI
   _aiSse.addEventListener('media', (e) => {
     try {
       const d = JSON.parse(e.data);
@@ -4378,14 +4396,14 @@ function _aiConnectSse() {
       if (d.type === 'image') {
         _aiAddMediaMessage(d.base64, d.prompt || '', d.fileId);
         if (d.remaining !== undefined && d.remaining <= 1) {
-          setTimeout(() => _aiAddMessage('assistant', `_(Осталось изображений сегодня: ${d.remaining})_`), 300);
+          setTimeout(() => _aiAddMessage('assistant', `_(РћСЃС‚Р°Р»РѕСЃСЊ РёР·РѕР±СЂР°Р¶РµРЅРёР№ СЃРµРіРѕРґРЅСЏ: ${d.remaining})_`), 300);
         }
       } else if (d.type === 'video_preview') {
         _aiAddVideoPreviewMessage(d.base64, d.prompt || '', d.fileId, d.filename, d.frameCount || 1);
       } else if (d.type === 'video_real') {
         _aiAddRealVideoMessage(d.base64, d.prompt || '', d.fileId, d.filename);
       } else if (d.type === 'image_error') {
-        _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка генерации'));
+        _aiAddMessage('assistant', 'вљ пёЏ ' + (d.error || 'РћС€РёР±РєР° РіРµРЅРµСЂР°С†РёРё'));
       }
     } catch(err) { console.error('SSE media err', err); }
   });
@@ -4398,7 +4416,7 @@ function _aiConnectSse() {
     } catch {}
   });
 
-  // Файлы приходят через SSE сразу при создании
+  // Р¤Р°Р№Р»С‹ РїСЂРёС…РѕРґСЏС‚ С‡РµСЂРµР· SSE СЃСЂР°Р·Сѓ РїСЂРё СЃРѕР·РґР°РЅРёРё
   _aiSse.addEventListener('file_created', (e) => {
     try {
       const f = JSON.parse(e.data);
@@ -4411,7 +4429,7 @@ function _aiConnectSse() {
 
   _aiSse.addEventListener('done', () => {
     if (_aiStreamBubble) {
-      // Убираем курсор
+      // РЈР±РёСЂР°РµРј РєСѓСЂСЃРѕСЂ
       _aiStreamBubble.innerHTML = _aiRenderMarkdown(_aiStreamContent);
       _aiStreamBubble = null;
       _aiStreamContent = '';
@@ -4422,7 +4440,7 @@ function _aiConnectSse() {
   _aiSse.onerror = () => {};
 }
 
-// Показывает изображение от AI прямо в чате
+// РџРѕРєР°Р·С‹РІР°РµС‚ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РѕС‚ AI РїСЂСЏРјРѕ РІ С‡Р°С‚Рµ
 function _aiAddMediaMessage(base64url, prompt, fileId) {
   const msgs = $('aiMessages');
   if (!msgs) return;
@@ -4439,7 +4457,7 @@ function _aiAddMediaMessage(base64url, prompt, fileId) {
   const bubble = document.createElement('div');
   bubble.style.cssText = 'max-width:85%;';
 
-  // Изображение с кнопками
+  // РР·РѕР±СЂР°Р¶РµРЅРёРµ СЃ РєРЅРѕРїРєР°РјРё
   const imgWrap = document.createElement('div');
   imgWrap.style.cssText = 'position:relative;display:inline-block;border-radius:14px;overflow:hidden;background:var(--surface2)';
 
@@ -4451,7 +4469,7 @@ function _aiAddMediaMessage(base64url, prompt, fileId) {
   img.onmouseover = () => img.style.filter = 'brightness(.85)';
   img.onmouseout  = () => img.style.filter = '';
 
-  // Кнопка скачать
+  // РљРЅРѕРїРєР° СЃРєР°С‡Р°С‚СЊ
   const dl = document.createElement('a');
   dl.href = fileId ? `/api/ai-file/${encodeURIComponent(currentUser)}/${fileId}` : base64url;
   dl.download = 'ai_image.html';
@@ -4477,8 +4495,8 @@ function _aiAddMediaMessage(base64url, prompt, fileId) {
   _aiSmartScroll();
 }
 
-// Показывает видео-превью от AI в чате
-// Показывает реальное MP4 видео в чате (Stability AI / Replicate)
+// РџРѕРєР°Р·С‹РІР°РµС‚ РІРёРґРµРѕ-РїСЂРµРІСЊСЋ РѕС‚ AI РІ С‡Р°С‚Рµ
+// РџРѕРєР°Р·С‹РІР°РµС‚ СЂРµР°Р»СЊРЅРѕРµ MP4 РІРёРґРµРѕ РІ С‡Р°С‚Рµ (Stability AI / Replicate)
 function _aiAddRealVideoMessage(base64url, prompt, fileId, filename) {
   const msgs = $('aiMessages');
   if (!msgs) return;
@@ -4506,7 +4524,7 @@ function _aiAddRealVideoMessage(base64url, prompt, fileId, filename) {
   videoEl.setAttribute('webkit-playsinline', '');
   videoEl.setAttribute('x-webkit-airplay', 'allow');
   videoEl.style.cssText = 'width:100%;border-radius:14px;display:block;box-shadow:0 4px 20px rgba(0,0,0,.4);background:#000';
-  // iOS requires user gesture for play — show native controls
+  // iOS requires user gesture for play вЂ” show native controls
   videoEl.addEventListener('loadedmetadata', () => { videoEl.play().catch(() => {}); });
 
   const actions = document.createElement('div');
@@ -4515,7 +4533,7 @@ function _aiAddRealVideoMessage(base64url, prompt, fileId, filename) {
   dlLink.href = base64url;
   dlLink.download = filename || 'ai_video.mp4';
   dlLink.style.cssText = 'padding:5px 12px;background:var(--accent);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;flex-shrink:0';
-  dlLink.innerHTML = '<i class="ti ti-download"></i> Скачать MP4';
+  dlLink.innerHTML = '<i class="ti ti-download"></i> РЎРєР°С‡Р°С‚СЊ MP4';
   const caption = document.createElement('span');
   caption.style.cssText = 'font-size:11px;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
   caption.textContent = prompt;
@@ -4549,28 +4567,28 @@ function _aiAddVideoPreviewMessage(base64url, prompt, fileId, filename, frameCou
   const card = document.createElement('div');
   card.style.cssText = 'position:relative;display:inline-block;border-radius:14px;overflow:hidden;background:var(--surface2)';
 
-  // Превью-кадр
+  // РџСЂРµРІСЊСЋ-РєР°РґСЂ
   const img = document.createElement('img');
   img.src = base64url;
   img.style.cssText = 'max-width:min(360px,85vw);max-height:280px;display:block;border-radius:14px;opacity:.85';
 
-  // Плашка "Видео"
+  // РџР»Р°С€РєР° "Р’РёРґРµРѕ"
   const badge = document.createElement('div');
   badge.style.cssText = 'position:absolute;top:8px;left:8px;background:rgba(0,0,0,.7);color:#fff;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:5px;backdrop-filter:blur(4px)';
-  badge.innerHTML = '<i class="ti ti-video" style="font-size:12px"></i> Видео · ' + frameCount + ' кадров';
+  badge.innerHTML = '<i class="ti ti-video" style="font-size:12px"></i> Р’РёРґРµРѕ В· ' + frameCount + ' РєР°РґСЂРѕРІ';
 
-  // Кнопка открыть
+  // РљРЅРѕРїРєР° РѕС‚РєСЂС‹С‚СЊ
   const openBtn = document.createElement('div');
   openBtn.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:pointer';
   openBtn.innerHTML = '<div style="width:52px;height:52px;border-radius:50%;background:rgba(99,102,241,.85);display:flex;align-items:center;justify-content:center"><i class="ti ti-player-play" style="font-size:22px;color:#fff;margin-left:2px"></i></div>';
   openBtn.onclick = () => {
     if (fileId) {
-      // Открываем HTML видео в превью
+      // РћС‚РєСЂС‹РІР°РµРј HTML РІРёРґРµРѕ РІ РїСЂРµРІСЊСЋ
       _aiPreviewFile(fileId, filename || 'ai_video.html');
     }
   };
 
-  // Скачать
+  // РЎРєР°С‡Р°С‚СЊ
   const dl = document.createElement('a');
   dl.href = '/api/ai-file/' + encodeURIComponent(currentUser) + '/' + fileId;
   dl.download = filename || 'ai_video.html';
@@ -4595,11 +4613,11 @@ function _aiAddVideoPreviewMessage(base64url, prompt, fileId, filename, frameCou
   _aiSmartScroll();
 }
 
-// Умный скролл: прокручиваем вниз только если пользователь УЖЕ внизу
+// РЈРјРЅС‹Р№ СЃРєСЂРѕР»Р»: РїСЂРѕРєСЂСѓС‡РёРІР°РµРј РІРЅРёР· С‚РѕР»СЊРєРѕ РµСЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЈР–Р• РІРЅРёР·Сѓ
 function _aiSmartScroll() {
   const msgs = $('aiMessages');
   if (!msgs) return;
-  const threshold = 80; // px от низа — считаем "внизу"
+  const threshold = 80; // px РѕС‚ РЅРёР·Р° вЂ” СЃС‡РёС‚Р°РµРј "РІРЅРёР·Сѓ"
   const atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < threshold;
   if (atBottom) msgs.scrollTop = msgs.scrollHeight;
 }
@@ -4617,7 +4635,7 @@ function _aiCreateStreamBubble() {
 
   const bubble = document.createElement('div');
   bubble.style.cssText = 'max-width:82%;padding:9px 13px;border-radius:16px 16px 16px 4px;font-size:13.5px;line-height:1.55;word-break:break-word;background:var(--surface3);color:var(--text);';
-  bubble.innerHTML = '<span class="ai-cursor">▋</span>';
+  bubble.innerHTML = '<span class="ai-cursor">в–‹</span>';
 
   wrap.appendChild(ava);
   wrap.appendChild(bubble);
@@ -4627,7 +4645,7 @@ function _aiCreateStreamBubble() {
   return { wrap, bubble };
 }
 
-// Живой лог инструментов — добавляется постепенно
+// Р–РёРІРѕР№ Р»РѕРі РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ вЂ” РґРѕР±Р°РІР»СЏРµС‚СЃСЏ РїРѕСЃС‚РµРїРµРЅРЅРѕ
 let _aiLiveLogWrap = null;
 let _aiLiveLogList = null;
 let _aiLiveLogItems = [];
@@ -4641,7 +4659,7 @@ function _aiAddLiveLog(d) {
     _aiLiveLogWrap.style.cssText = 'margin:2px 0 6px 36px;';
     const toggle = document.createElement('div');
     toggle.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:4px;user-select:none';
-    toggle.innerHTML = `<i class="ti ti-adjustments-horizontal" style="font-size:11px"></i><span id="aiLogSummary">Запускаю инструменты...</span><i class="ti ti-chevron-down" id="aiLogArrow" style="font-size:10px;transition:transform .2s;margin-left:auto"></i>`;
+    toggle.innerHTML = `<i class="ti ti-adjustments-horizontal" style="font-size:11px"></i><span id="aiLogSummary">Р—Р°РїСѓСЃРєР°СЋ РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹...</span><i class="ti ti-chevron-down" id="aiLogArrow" style="font-size:10px;transition:transform .2s;margin-left:auto"></i>`;
     _aiLiveLogList = document.createElement('div');
     _aiLiveLogList.style.cssText = 'padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-size:12px;display:none;';
     toggle.onclick = () => {
@@ -4657,16 +4675,16 @@ function _aiAddLiveLog(d) {
 
   const item = document.createElement('div');
   item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--text2);animation:fadeIn .2s ease';
-  // Иконка по типу (маленький индикатор без emoji-роботов)
+  // РРєРѕРЅРєР° РїРѕ С‚РёРїСѓ (РјР°Р»РµРЅСЊРєРёР№ РёРЅРґРёРєР°С‚РѕСЂ Р±РµР· emoji-СЂРѕР±РѕС‚РѕРІ)
   const typeColors = { search:'#6366f1', fetch:'#06b6d4', process:'#f59e0b', write:'#10b981', check:'#8b5cf6', think:'#9898b0', result:'#22c55e' };
   const col = typeColors[d.type] || 'var(--text3)';
   item.innerHTML = `<span style="width:6px;height:6px;border-radius:50%;background:${col};flex-shrink:0;display:inline-block;margin-top:5px"></span><span style="color:var(--text2)">${esc(d.text || '')}</span>`;
   _aiLiveLogList.appendChild(item);
   _aiLiveLogItems.push(item);
 
-  // Обновляем summary
+  // РћР±РЅРѕРІР»СЏРµРј summary
   const summary = document.getElementById('aiLogSummary');
-  if (summary) summary.textContent = d.text || 'Работаю...';
+  if (summary) summary.textContent = d.text || 'Р Р°Р±РѕС‚Р°СЋ...';
 
   _aiSmartScroll();
 }
@@ -4683,14 +4701,14 @@ function _aiRenderMarkdown(text) {
       `<pre style="background:rgba(0,0,0,.25);padding:10px;border-radius:10px;overflow-x:auto;font-family:monospace;font-size:12px;margin:6px 0;white-space:pre-wrap">${code}</pre>`)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px">$1</code>')
-    .replace(/^• (.+)$/gm, '<li style="margin-left:12px">$1</li>')
+    .replace(/^вЂў (.+)$/gm, '<li style="margin-left:12px">$1</li>')
     .replace(/\n/g, '<br>');
 }
 
-let _aiLocked = false; // блокировка пока идёт ответ
+let _aiLocked = false; // Р±Р»РѕРєРёСЂРѕРІРєР° РїРѕРєР° РёРґС‘С‚ РѕС‚РІРµС‚
 
 async function aiSend() {
-  if (_aiLocked) return; // не отправляем пока идёт ответ
+  if (_aiLocked) return; // РЅРµ РѕС‚РїСЂР°РІР»СЏРµРј РїРѕРєР° РёРґС‘С‚ РѕС‚РІРµС‚
   const inp = $('aiInput');
   if (!inp) return;
   const text = inp.value.trim();
@@ -4698,14 +4716,14 @@ async function aiSend() {
 
   if (!text && !attach) return;
 
-  // ── Перехват запросов на изображение/видео ─────────────────────────────
-  const imgKeywords  = /(нарисуй|сгенерируй|создай|сделай|покажи|draw|generate|create|make).*(картинк|изображени|фото|рисун|image|picture|photo|pic)|(image|picture|photo|img).*(of|с|кота|кот|собак|пейзаж|портрет)/i;
-  const vidKeywords  = /(сделай|создай|сгенерируй|generate|create|make).*(видео|video|анимаци|animation|клип|clip)/i;
-  const isImgRequest = imgKeywords.test(text) || text.toLowerCase().startsWith('нарисуй') || text.toLowerCase().startsWith('draw ') || text.toLowerCase().includes('картинку') || text.toLowerCase().includes('изображение') || /^(img|image|картинка|нарисуй|сгенерируй картинк)/i.test(text.trim());
+  // в”Ђв”Ђ РџРµСЂРµС…РІР°С‚ Р·Р°РїСЂРѕСЃРѕРІ РЅР° РёР·РѕР±СЂР°Р¶РµРЅРёРµ/РІРёРґРµРѕ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  const imgKeywords  = /(РЅР°СЂРёСЃСѓР№|СЃРіРµРЅРµСЂРёСЂСѓР№|СЃРѕР·РґР°Р№|СЃРґРµР»Р°Р№|РїРѕРєР°Р¶Рё|draw|generate|create|make).*(РєР°СЂС‚РёРЅРє|РёР·РѕР±СЂР°Р¶РµРЅРё|С„РѕС‚Рѕ|СЂРёСЃСѓРЅ|image|picture|photo|pic)|(image|picture|photo|img).*(of|СЃ|РєРѕС‚Р°|РєРѕС‚|СЃРѕР±Р°Рє|РїРµР№Р·Р°Р¶|РїРѕСЂС‚СЂРµС‚)/i;
+  const vidKeywords  = /(СЃРґРµР»Р°Р№|СЃРѕР·РґР°Р№|СЃРіРµРЅРµСЂРёСЂСѓР№|generate|create|make).*(РІРёРґРµРѕ|video|Р°РЅРёРјР°С†Рё|animation|РєР»РёРї|clip)/i;
+  const isImgRequest = imgKeywords.test(text) || text.toLowerCase().startsWith('РЅР°СЂРёСЃСѓР№') || text.toLowerCase().startsWith('draw ') || text.toLowerCase().includes('РєР°СЂС‚РёРЅРєСѓ') || text.toLowerCase().includes('РёР·РѕР±СЂР°Р¶РµРЅРёРµ') || /^(img|image|РєР°СЂС‚РёРЅРєР°|РЅР°СЂРёСЃСѓР№|СЃРіРµРЅРµСЂРёСЂСѓР№ РєР°СЂС‚РёРЅРє)/i.test(text.trim());
   const isVidRequest = vidKeywords.test(text);
 
   if ((isImgRequest || isVidRequest) && !attach) {
-    const sendBtn = $('aiSendBtn'); // объявляем здесь для перехвата
+    const sendBtn = $('aiSendBtn'); // РѕР±СЉСЏРІР»СЏРµРј Р·РґРµСЃСЊ РґР»СЏ РїРµСЂРµС…РІР°С‚Р°
     inp.value = '';
     autoGrow(inp);
     _aiResetLiveLog();
@@ -4719,17 +4737,17 @@ async function aiSend() {
     const typing = _aiAddTyping();
     if (sendBtn) sendBtn.disabled = true;
 
-    // Вытаскиваем промпт из сообщения
+    // Р’С‹С‚Р°СЃРєРёРІР°РµРј РїСЂРѕРјРїС‚ РёР· СЃРѕРѕР±С‰РµРЅРёСЏ
     let prompt = userMsg
-      .replace(/^(нарисуй|сгенерируй|создай|сделай|покажи|draw|generate|create|make)\s+(мне\s+)?(картинку|картинк[аеу]|изображение|фото|рисунок|image|picture|photo|видео|video|анимацию)\s*/i, '')
-      .replace(/^(картинку|изображение|фото)\s+/i, '')
+      .replace(/^(РЅР°СЂРёСЃСѓР№|СЃРіРµРЅРµСЂРёСЂСѓР№|СЃРѕР·РґР°Р№|СЃРґРµР»Р°Р№|РїРѕРєР°Р¶Рё|draw|generate|create|make)\s+(РјРЅРµ\s+)?(РєР°СЂС‚РёРЅРєСѓ|РєР°СЂС‚РёРЅРє[Р°РµСѓ]|РёР·РѕР±СЂР°Р¶РµРЅРёРµ|С„РѕС‚Рѕ|СЂРёСЃСѓРЅРѕРє|image|picture|photo|РІРёРґРµРѕ|video|Р°РЅРёРјР°С†РёСЋ)\s*/i, '')
+      .replace(/^(РєР°СЂС‚РёРЅРєСѓ|РёР·РѕР±СЂР°Р¶РµРЅРёРµ|С„РѕС‚Рѕ)\s+/i, '')
       .trim() || userMsg;
 
     const endpoint = isVidRequest ? '/api/generate-video' : '/api/generate-image';
 
-    // КРИТИЧНО: подключаем SSE ДО запроса генерации
+    // РљР РРўРР§РќРћ: РїРѕРґРєР»СЋС‡Р°РµРј SSE Р”Рћ Р·Р°РїСЂРѕСЃР° РіРµРЅРµСЂР°С†РёРё
     _aiConnectSse();
-    // Даём SSE установить соединение
+    // Р”Р°С‘Рј SSE СѓСЃС‚Р°РЅРѕРІРёС‚СЊ СЃРѕРµРґРёРЅРµРЅРёРµ
     await new Promise(r => setTimeout(r, 300));
 
     try {
@@ -4741,23 +4759,23 @@ async function aiSend() {
 
       if (d.error) {
         if (typing) typing.remove();
-        _aiAddMessage('assistant', '⚠️ ' + d.error);
+        _aiAddMessage('assistant', 'вљ пёЏ ' + d.error);
       } else if (d.pending) {
-        // Генерация идёт в фоне — typing останется до SSE события media/done
-        // typing убирается в SSE обработчике
+        // Р“РµРЅРµСЂР°С†РёСЏ РёРґС‘С‚ РІ С„РѕРЅРµ вЂ” typing РѕСЃС‚Р°РЅРµС‚СЃСЏ РґРѕ SSE СЃРѕР±С‹С‚РёСЏ media/done
+        // typing СѓР±РёСЂР°РµС‚СЃСЏ РІ SSE РѕР±СЂР°Р±РѕС‚С‡РёРєРµ
       } else {
         if (typing) typing.remove();
         if (d.message) _aiAddMessage('assistant', d.message);
       }
     } catch {
       if (typing) typing.remove();
-      _aiAddMessage('assistant', '⚠️ Нет соединения с сервером.');
+      _aiAddMessage('assistant', 'вљ пёЏ РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј.');
     } finally {
       if (sendBtn) sendBtn.disabled = false;
     }
     return;
   }
-  // ── Конец перехвата ────────────────────────────────────────────────────
+  // в”Ђв”Ђ РљРѕРЅРµС† РїРµСЂРµС…РІР°С‚Р° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   inp.value = '';
   autoGrow(inp);
@@ -4791,49 +4809,49 @@ async function aiSend() {
       body: JSON.stringify(body)
     });
     const d = await r.json();
-    // Typing убирается через SSE 'done' event, но на всякий случай
+    // Typing СѓР±РёСЂР°РµС‚СЃСЏ С‡РµСЂРµР· SSE 'done' event, РЅРѕ РЅР° РІСЃСЏРєРёР№ СЃР»СѓС‡Р°Р№
     if (typing) typing.remove();
 
     if (d.success) {
       if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
-      // Вопрос от AI пользователю
+      // Р’РѕРїСЂРѕСЃ РѕС‚ AI РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
       if (d.askUser) {
         _aiShowQuestion(d.askUser);
         return;
       }
-      // Если ответ уже пришёл через SSE streaming — _aiStreamBubble уже готов
-      // Если нет SSE клиента — добавляем обычно
-      // Добавляем ответ только если SSE стриминг не начался
+      // Р•СЃР»Рё РѕС‚РІРµС‚ СѓР¶Рµ РїСЂРёС€С‘Р» С‡РµСЂРµР· SSE streaming вЂ” _aiStreamBubble СѓР¶Рµ РіРѕС‚РѕРІ
+      // Р•СЃР»Рё РЅРµС‚ SSE РєР»РёРµРЅС‚Р° вЂ” РґРѕР±Р°РІР»СЏРµРј РѕР±С‹С‡РЅРѕ
+      // Р”РѕР±Р°РІР»СЏРµРј РѕС‚РІРµС‚ С‚РѕР»СЊРєРѕ РµСЃР»Рё SSE СЃС‚СЂРёРјРёРЅРі РЅРµ РЅР°С‡Р°Р»СЃСЏ
       if (d.reply && !_aiStreamingStarted) {
         _aiAddMessage('assistant', d.reply);
       }
-      // Файлы
+      // Р¤Р°Р№Р»С‹
       if (d.createdFiles?.length) {
         d.createdFiles.forEach(f => _aiAddFileCard(f));
         if (_aiFilePanelOpen) aiRenderFilePanel();
         else aiRefreshFileBadge();
       }
-      // Лог инструментов (fallback если SSE не было)
+      // Р›РѕРі РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ (fallback РµСЃР»Рё SSE РЅРµ Р±С‹Р»Рѕ)
       if (d.toolsUsed?.length && !_aiLiveLogWrap) _aiAddToolLog(d.toolsUsed);
-      // Показываем карточки созданных файлов
+      // РџРѕРєР°Р·С‹РІР°РµРј РєР°СЂС‚РѕС‡РєРё СЃРѕР·РґР°РЅРЅС‹С… С„Р°Р№Р»РѕРІ
       if (d.createdFiles?.length) {
         d.createdFiles.forEach(f => _aiAddFileCard(f));
         if (_aiFilePanelOpen) aiRenderFilePanel();
         else aiRefreshFileBadge();
       }
     } else {
-      _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка. Попробуй ещё раз.'));
+      _aiAddMessage('assistant', 'вљ пёЏ ' + (d.error || 'РћС€РёР±РєР°. РџРѕРїСЂРѕР±СѓР№ РµС‰С‘ СЂР°Р·.'));
     }
   } catch {
     if (typing) typing.remove();
-    _aiAddMessage('assistant', '⚠️ Нет соединения с сервером.');
+    _aiAddMessage('assistant', 'вљ пёЏ РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј.');
   } finally {
     if (sendBtn) sendBtn.disabled = false;
     inp.focus();
   }
 }
 
-// ── AI Файловая база ────────────────────────────────────────────────────────
+// в”Ђв”Ђ AI Р¤Р°Р№Р»РѕРІР°СЏ Р±Р°Р·Р° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _aiFilePanelOpen = false;
 let _aiEditingFile   = null; // { id, name, content }
 
@@ -4855,13 +4873,13 @@ async function openAiFilePanel() {
     panel.innerHTML = `
       <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
         <span style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px">
-          <i class="ti ti-files" style="color:var(--accent)"></i> База файлов
+          <i class="ti ti-files" style="color:var(--accent)"></i> Р‘Р°Р·Р° С„Р°Р№Р»РѕРІ
         </span>
         <button class="icon-btn sm" onclick="closeAiFilePanel()"><i class="ti ti-x"></i></button>
       </div>
       <div id="aiFilePanelList" style="flex:1;overflow-y:auto;padding:8px"></div>
       <div style="padding:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);text-align:center;flex-shrink:0">
-        Файлы хранятся 5 ответов
+        Р¤Р°Р№Р»С‹ С…СЂР°РЅСЏС‚СЃСЏ 5 РѕС‚РІРµС‚РѕРІ
       </div>`;
     const modal = $('aiChatModal')?.querySelector('.modal-card');
     if (modal) { modal.style.position = 'relative'; modal.style.overflow = 'hidden'; modal.appendChild(panel); }
@@ -4885,7 +4903,7 @@ async function aiRenderFilePanel() {
     const d = await r.json();
     const files = d.files || [];
     if (!files.length) {
-      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px"><i class="ti ti-file-off" style="font-size:28px;display:block;margin-bottom:6px;opacity:.3"></i>Нет файлов</div>';
+      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px"><i class="ti ti-file-off" style="font-size:28px;display:block;margin-bottom:6px;opacity:.3"></i>РќРµС‚ С„Р°Р№Р»РѕРІ</div>';
       return;
     }
     list.innerHTML = '';
@@ -4898,14 +4916,14 @@ async function aiRenderFilePanel() {
           <div style="width:32px;height:32px;border-radius:8px;background:var(--accent-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent)">${esc(ext.slice(0,4))}</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(f.name)}">${esc(f.name)}</div>
-            <div style="font-size:11px;color:var(--text3)">${f.size} байт · ещё ${f.ttl} отв.</div>
+            <div style="font-size:11px;color:var(--text3)">${f.size} Р±Р°Р№С‚ В· РµС‰С‘ ${f.ttl} РѕС‚РІ.</div>
             ${f.description ? `<div style="font-size:11px;color:var(--text2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.description)}</div>` : ''}
           </div>
         </div>
         <div style="display:flex;gap:4px;margin-top:6px">
           <a href="/api/ai-file/${encodeURIComponent(currentUser)}/${f.id}" download="${esc(f.name)}"
              style="flex:1;padding:4px 6px;background:var(--accent);color:#fff;border-radius:6px;font-size:11px;text-decoration:none;text-align:center" onclick="event.stopPropagation()">
-            <i class="ti ti-download"></i> Скачать
+            <i class="ti ti-download"></i> РЎРєР°С‡Р°С‚СЊ
           </a>
           <button onclick="aiEditFile('${f.id}','${esc(f.name).replace(/'/g,'\\\'')}')" style="padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text)">
             <i class="ti ti-edit"></i>
@@ -4921,45 +4939,45 @@ async function aiRenderFilePanel() {
       list.appendChild(item);
     });
   } catch (e) {
-    list.innerHTML = '<div style="padding:12px;color:var(--danger);font-size:12px">Ошибка загрузки</div>';
+    list.innerHTML = '<div style="padding:12px;color:var(--danger);font-size:12px">РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё</div>';
   }
   aiRefreshFileBadge();
 }
 
 async function aiEditFile(fileId, fileName) {
-  // Загружаем содержимое файла
+  // Р—Р°РіСЂСѓР¶Р°РµРј СЃРѕРґРµСЂР¶РёРјРѕРµ С„Р°Р№Р»Р°
   try {
     const r = await fetch(`/api/ai-file/${encodeURIComponent(currentUser)}/${fileId}`);
     const content = await r.text();
 
-    // Создаём редактор поверх панели
+    // РЎРѕР·РґР°С‘Рј СЂРµРґР°РєС‚РѕСЂ РїРѕРІРµСЂС… РїР°РЅРµР»Рё
     const ov = $('dialogOverlay');
     const box = $('dialogBox');
     if (!ov || !box) return;
 
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <h3 style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px"><i class="ti ti-file-code" style="color:var(--accent)"></i> Редактировать файл</h3>
+        <h3 style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px"><i class="ti ti-file-code" style="color:var(--accent)"></i> Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ С„Р°Р№Р»</h3>
         <button class="icon-btn sm" onclick="$('dialogOverlay').classList.remove('open')"><i class="ti ti-x"></i></button>
       </div>
       <div class="field-wrap" style="margin-bottom:10px">
         <i class="ti ti-file field-ico"></i>
-        <input id="aiEditName" class="field" type="text" value="${esc(fileName)}" placeholder="Имя файла" maxlength="80"/>
+        <input id="aiEditName" class="field" type="text" value="${esc(fileName)}" placeholder="РРјСЏ С„Р°Р№Р»Р°" maxlength="80"/>
       </div>
       <textarea id="aiEditContent" style="width:100%;height:300px;background:var(--surface3);color:var(--text);border:1.5px solid var(--border);border-radius:12px;padding:12px;font-family:monospace;font-size:12px;outline:none;resize:vertical;line-height:1.5" spellcheck="false">${esc(content)}</textarea>
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn-secondary" style="flex:1" onclick="$('dialogOverlay').classList.remove('open')">Отмена</button>
-        <button class="btn-primary" style="flex:2" onclick="aiSaveEdit('${fileId}')"><i class="ti ti-check"></i> Сохранить</button>
+        <button class="btn-secondary" style="flex:1" onclick="$('dialogOverlay').classList.remove('open')">РћС‚РјРµРЅР°</button>
+        <button class="btn-primary" style="flex:2" onclick="aiSaveEdit('${fileId}')"><i class="ti ti-check"></i> РЎРѕС…СЂР°РЅРёС‚СЊ</button>
       </div>`;
 
     ov.classList.add('open');
-  } catch { toast('Ошибка загрузки файла', 'error'); }
+  } catch { toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё С„Р°Р№Р»Р°', 'error'); }
 }
 
 async function aiSaveEdit(fileId) {
   const name    = $('aiEditName')?.value?.trim();
   const content = $('aiEditContent')?.value;
-  if (!name) { toast('Введите имя файла', 'warning'); return; }
+  if (!name) { toast('Р’РІРµРґРёС‚Рµ РёРјСЏ С„Р°Р№Р»Р°', 'warning'); return; }
   try {
     const r = await fetch('/api/ai-file-edit', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4968,14 +4986,14 @@ async function aiSaveEdit(fileId) {
     const d = await r.json();
     if (d.success) {
       $('dialogOverlay').classList.remove('open');
-      toast('Файл сохранён', 'success');
+      toast('Р¤Р°Р№Р» СЃРѕС…СЂР°РЅС‘РЅ', 'success');
       aiRenderFilePanel();
-    } else { toast(d.error || 'Ошибка', 'error'); }
-  } catch { toast('Нет соединения', 'error'); }
+    } else { toast(d.error || 'РћС€РёР±РєР°', 'error'); }
+  } catch { toast('РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ', 'error'); }
 }
 
 async function aiDeleteFile(fileId) {
-  const ok = await dialog({ icon:'ti-trash', iconType:'error', title:'Удалить файл?', msg:'Файл будет удалён из базы AI.', ok:'Удалить', cancel:'Отмена', danger:true });
+  const ok = await dialog({ icon:'ti-trash', iconType:'error', title:'РЈРґР°Р»РёС‚СЊ С„Р°Р№Р»?', msg:'Р¤Р°Р№Р» Р±СѓРґРµС‚ СѓРґР°Р»С‘РЅ РёР· Р±Р°Р·С‹ AI.', ok:'РЈРґР°Р»РёС‚СЊ', cancel:'РћС‚РјРµРЅР°', danger:true });
   if (!ok) return;
   try {
     await fetch('/api/ai-file-delete', {
@@ -4983,11 +5001,11 @@ async function aiDeleteFile(fileId) {
       body: JSON.stringify({ username: currentUser, fileId })
     });
     aiRenderFilePanel();
-    toast('Файл удалён', 'info');
-  } catch { toast('Ошибка', 'error'); }
+    toast('Р¤Р°Р№Р» СѓРґР°Р»С‘РЅ', 'info');
+  } catch { toast('РћС€РёР±РєР°', 'error'); }
 }
 
-// ── Debug mode handling ─────────────────────────────────────────────────────
+// в”Ђв”Ђ Debug mode handling в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function _aiSetDebugMode(active) {
   _aiDebugMode = active;
   const indicator = $('aiDebugIndicator');
@@ -5016,14 +5034,14 @@ async function aiClearHistory() {
   if (msgs) msgs.innerHTML = `
     <div class="ai-welcome">
       <i class="ti ti-robot" style="font-size:36px;color:var(--accent);display:block;text-align:center;margin-bottom:8px"></i>
-      <p style="text-align:center;color:var(--text2);font-size:14px">История очищена. Чем могу помочь?</p>
+      <p style="text-align:center;color:var(--text2);font-size:14px">РСЃС‚РѕСЂРёСЏ РѕС‡РёС‰РµРЅР°. Р§РµРј РјРѕРіСѓ РїРѕРјРѕС‡СЊ?</p>
     </div>`;
-  toast('История очищена', 'info');
+  toast('РСЃС‚РѕСЂРёСЏ РѕС‡РёС‰РµРЅР°', 'info');
 }
 
 async function resendEmailVerify() {
   const email = $('stRecoveryEmail')?.value?.trim() || userData.recoveryEmail;
-  if (!email) { toast('Введите email сначала', 'warning'); return; }
+  if (!email) { toast('Р’РІРµРґРёС‚Рµ email СЃРЅР°С‡Р°Р»Р°', 'warning'); return; }
   const btn = document.querySelector('#emailVerifyModal .btn-ghost');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>'; }
   try {
@@ -5032,11 +5050,11 @@ async function resendEmailVerify() {
       body: JSON.stringify({ username: currentUser, email })
     });
     const d = await r.json();
-    if (d.success) toast('Код отправлен повторно', 'info');
-    else toast(d.error || 'Ошибка', 'error');
-  } catch { toast('Нет соединения', 'error'); }
+    if (d.success) toast('РљРѕРґ РѕС‚РїСЂР°РІР»РµРЅ РїРѕРІС‚РѕСЂРЅРѕ', 'info');
+    else toast(d.error || 'РћС€РёР±РєР°', 'error');
+  } catch { toast('РќРµС‚ СЃРѕРµРґРёРЅРµРЅРёСЏ', 'error'); }
   finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh"></i> Отправить снова'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh"></i> РћС‚РїСЂР°РІРёС‚СЊ СЃРЅРѕРІР°'; }
   }
 }
 
@@ -5063,7 +5081,7 @@ async function saveProfile() {
     userData.nickname = nick;
     updateProfileUI();
     closeSettings();
-    toast('Профиль обновлён', 'success');
+    toast('РџСЂРѕС„РёР»СЊ РѕР±РЅРѕРІР»С‘РЅ', 'success');
   }
 }
 
@@ -5079,7 +5097,7 @@ $('avaInput').addEventListener('change', async e => {
     setAvatar($('settingsAvatar'), currentUser, d.url);
     updateProfileUI();
     socket.emit('avatar-updated', { username: currentUser, avatar: d.url });
-    toast('Аватар обновлён', 'success');
+    toast('РђРІР°С‚Р°СЂ РѕР±РЅРѕРІР»С‘РЅ', 'success');
   }
 });
 
@@ -5093,11 +5111,11 @@ async function loadAudioDevices() {
     const savMic = localStorage.getItem('aura_mic') || 'default';
     const savSpk = localStorage.getItem('aura_spk') || 'default';
     const ms = $('micSel'), ss = $('spkSel');
-    ms.innerHTML = '<option value="default">По умолчанию</option>';
-    mics.forEach(d => { const o = new Option(d.label || `Микрофон`, d.deviceId); if (d.deviceId === savMic) o.selected = true; ms.appendChild(o); });
+    ms.innerHTML = '<option value="default">РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</option>';
+    mics.forEach(d => { const o = new Option(d.label || `РњРёРєСЂРѕС„РѕРЅ`, d.deviceId); if (d.deviceId === savMic) o.selected = true; ms.appendChild(o); });
     if (typeof HTMLMediaElement.prototype.setSinkId === 'function' && spks.length) {
-      ss.innerHTML = '<option value="default">По умолчанию</option>';
-      spks.forEach(d => { const o = new Option(d.label || `Динамик`, d.deviceId); if (d.deviceId === savSpk) o.selected = true; ss.appendChild(o); });
+      ss.innerHTML = '<option value="default">РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</option>';
+      spks.forEach(d => { const o = new Option(d.label || `Р”РёРЅР°РјРёРє`, d.deviceId); if (d.deviceId === savSpk) o.selected = true; ss.appendChild(o); });
       $('spkHint').classList.add('hidden');
     } else {
       ss.disabled = true; $('spkHint').classList.remove('hidden');
@@ -5119,7 +5137,7 @@ function setVolume(v) {
 async function testMic() {
   const out = $('micTestOut');
   out.classList.remove('hidden');
-  out.textContent = '🎙️ Говорите (2 сек)…';
+  out.textContent = 'рџЋ™пёЏ Р“РѕРІРѕСЂРёС‚Рµ (2 СЃРµРє)вЂ¦';
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints() });
     const ctx  = new AudioContext();
@@ -5131,10 +5149,10 @@ async function testMic() {
     const iv = setInterval(() => { ana.getByteFrequencyData(buf); const avg = buf.reduce((a,b)=>a+b)/buf.length; if (avg > max) max = avg; }, 100);
     setTimeout(() => {
       clearInterval(iv); stream.getTracks().forEach(t=>t.stop()); ctx.close();
-      out.textContent = max > 5 ? `✅ Уровень: ${Math.round(max)} / 255` : '⚠️ Звук не обнаружен';
+      out.textContent = max > 5 ? `вњ… РЈСЂРѕРІРµРЅСЊ: ${Math.round(max)} / 255` : 'вљ пёЏ Р—РІСѓРє РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅ';
       out.style.color = max > 5 ? 'var(--success)' : 'var(--warn)';
     }, 2000);
-  } catch (e) { out.textContent = '❌ ' + e.message; out.style.color = 'var(--danger)'; }
+  } catch (e) { out.textContent = 'вќЊ ' + e.message; out.style.color = 'var(--danger)'; }
 }
 
 // Theme
@@ -5153,7 +5171,7 @@ function selectTheme(t) {
   _pendingTheme = t;
   $('thDark')?.classList.toggle('active', t === 'dark');
   $('thLight')?.classList.toggle('active', t === 'light');
-  // Apply instantly — no separate button needed
+  // Apply instantly вЂ” no separate button needed
   document.documentElement.setAttribute('data-theme', t);
   localStorage.setItem('aura_theme', t);
   userData.theme = t;
@@ -5174,12 +5192,12 @@ function applyTheme() {
     body: JSON.stringify({ username: currentUser, theme: _pendingTheme })
   });
   closeSettings();
-  toast('Тема сохранена', 'success');
+  toast('РўРµРјР° СЃРѕС…СЂР°РЅРµРЅР°', 'success');
 }
 
 // Account
 async function deleteAccount() {
-  const ok = await dialog({ icon:'ti-trash', iconType:'error', title:'Удалить аккаунт?', msg:'Все данные будут удалены без восстановления.', ok:'Удалить', cancel:'Отмена', danger:true });
+  const ok = await dialog({ icon:'ti-trash', iconType:'error', title:'РЈРґР°Р»РёС‚СЊ Р°РєРєР°СѓРЅС‚?', msg:'Р’СЃРµ РґР°РЅРЅС‹Рµ Р±СѓРґСѓС‚ СѓРґР°Р»РµРЅС‹ Р±РµР· РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ.', ok:'РЈРґР°Р»РёС‚СЊ', cancel:'РћС‚РјРµРЅР°', danger:true });
   if (!ok) return;
   await fetch('/api/delete-account', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -5190,13 +5208,13 @@ async function deleteAccount() {
 }
 
 
-// ══════════════════════════════════════════════════════════
-//  CALLS — WebRTC + Socket.IO (clean rewrite)
-// ══════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+//  CALLS вЂ” WebRTC + Socket.IO (clean rewrite)
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
-// ══════════════════════════════════════════════
-// ICE / TURN — расширенный список серверов для работы за NAT/firewall
-// ══════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// ICE / TURN вЂ” СЂР°СЃС€РёСЂРµРЅРЅС‹Р№ СЃРїРёСЃРѕРє СЃРµСЂРІРµСЂРѕРІ РґР»СЏ СЂР°Р±РѕС‚С‹ Р·Р° NAT/firewall
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const ICE_SERVERS_STATIC = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -5208,7 +5226,7 @@ const ICE_SERVERS_STATIC = [
   { urls: 'stun:stun.global.twilio.com:3478' },
   { urls: 'stun:stun.stunprotocol.org:3478' },
   { urls: 'stun:stun.nextcloud.com:443' },
-  // openrelay — все транспорты
+  // openrelay вЂ” РІСЃРµ С‚СЂР°РЅСЃРїРѕСЂС‚С‹
   { urls: 'turn:openrelay.metered.ca:80',                username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
@@ -5231,10 +5249,10 @@ const ICE_SERVERS_STATIC = [
   { urls: 'stun:stun.voipstunt.com' },
 ];
 
-let ICE_SERVERS = ICE_SERVERS_STATIC; // будет обновлён ниже если есть API ключ
+let ICE_SERVERS = ICE_SERVERS_STATIC; // Р±СѓРґРµС‚ РѕР±РЅРѕРІР»С‘РЅ РЅРёР¶Рµ РµСЃР»Рё РµСЃС‚СЊ API РєР»СЋС‡
 
-// ── Если задан METERED_API_KEY в .env — получаем временные TURN credentials ──
-// Для этого в server.js добавьте эндпоинт /api/ice-servers (уже добавлено в server.js)
+// в”Ђв”Ђ Р•СЃР»Рё Р·Р°РґР°РЅ METERED_API_KEY РІ .env вЂ” РїРѕР»СѓС‡Р°РµРј РІСЂРµРјРµРЅРЅС‹Рµ TURN credentials в”Ђв”Ђ
+// Р”Р»СЏ СЌС‚РѕРіРѕ РІ server.js РґРѕР±Р°РІСЊС‚Рµ СЌРЅРґРїРѕРёРЅС‚ /api/ice-servers (СѓР¶Рµ РґРѕР±Р°РІР»РµРЅРѕ РІ server.js)
 async function fetchIceServers() {
   try {
     const r = await fetch('/api/ice-servers', { method: 'GET' });
@@ -5242,19 +5260,19 @@ async function fetchIceServers() {
     const data = await r.json();
     if (Array.isArray(data) && data.length > 0) {
       ICE_SERVERS = data;
-      console.log('[ICE] Получены динамические TURN серверы:', data.length);
+      console.log('[ICE] РџРѕР»СѓС‡РµРЅС‹ РґРёРЅР°РјРёС‡РµСЃРєРёРµ TURN СЃРµСЂРІРµСЂС‹:', data.length);
     }
   } catch (e) {
-    console.log('[ICE] Используем статичные TURN серверы');
+    console.log('[ICE] РСЃРїРѕР»СЊР·СѓРµРј СЃС‚Р°С‚РёС‡РЅС‹Рµ TURN СЃРµСЂРІРµСЂС‹');
   }
 }
-// Загружаем ICE серверы при старте (не блокирует UI)
+// Р—Р°РіСЂСѓР¶Р°РµРј ICE СЃРµСЂРІРµСЂС‹ РїСЂРё СЃС‚Р°СЂС‚Рµ (РЅРµ Р±Р»РѕРєРёСЂСѓРµС‚ UI)
 fetchIceServers();
 
 // State
 let rtcPeer      = null;
 let _callTarget  = null;
-let _callRoom    = null; // комната где начался звонок
+let _callRoom    = null; // РєРѕРјРЅР°С‚Р° РіРґРµ РЅР°С‡Р°Р»СЃСЏ Р·РІРѕРЅРѕРє
 let _callIsVid   = false;
 let _isCaller    = false;
 let _inCall      = false;  // true from invite until cleanup
@@ -5262,7 +5280,7 @@ let _connected   = false;  // true once ICE connected
 let _muted       = false;
 let _screenSharing = false;
 let screenStream = null;
-let _partnerSharing = false; // партнёр тоже шарит экран
+let _partnerSharing = false; // РїР°СЂС‚РЅС‘СЂ С‚РѕР¶Рµ С€Р°СЂРёС‚ СЌРєСЂР°РЅ
 let _groupCall   = false;   // true if in a group call
 let _groupMembers = [];      // members in group call
 let groupPeers   = new Map(); // member -> RTCPeerConnection
@@ -5277,7 +5295,7 @@ function initCallDOM() {
   callAct   = $('callActions');
 }
 
-// ── HELPERS ─────────────────────────────────────────────
+// в”Ђв”Ђ HELPERS в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function callTarget() {
   if (!currentRoom) return null;
   if (currentRoom.startsWith('private:')) {
@@ -5316,15 +5334,15 @@ function stopRing() {
   _ringCtx = null;
 }
 
-// ── OUTGOING ────────────────────────────────────────────
+// в”Ђв”Ђ OUTGOING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // USER PROFILE MODAL
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // GROUP PROFILE MODAL
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function openGroupProfile(g) {
   let modal = document.getElementById('groupProfileModal');
   if (!modal) {
@@ -5348,7 +5366,7 @@ function openGroupProfile(g) {
         if (src && !src.startsWith('blob:') && src !== window.location.href) videos.push(src);
       });
       row.querySelectorAll('.msg-file').forEach(a => {
-        const name = a.querySelector('.msg-file-name')?.textContent || 'Файл';
+        const name = a.querySelector('.msg-file-name')?.textContent || 'Р¤Р°Р№Р»';
         if (a.href) files.push({ href: a.href, name });
       });
     });
@@ -5371,9 +5389,9 @@ function openGroupProfile(g) {
           </div>
           <div class="upm-member-info">
             <div class="upm-member-name">${esc(mNick)}</div>
-            <div class="upm-member-status">${mOn ? 'В сети' : 'Не в сети'}</div>
+            <div class="upm-member-status">${mOn ? 'Р’ СЃРµС‚Рё' : 'РќРµ РІ СЃРµС‚Рё'}</div>
           </div>
-          ${m === g.creator ? '<span class="upm-creator-badge">создатель</span>' : ''}
+          ${m === g.creator ? '<span class="upm-creator-badge">СЃРѕР·РґР°С‚РµР»СЊ</span>' : ''}
         </div>`;
       }).join('')}
     </div>`;
@@ -5381,7 +5399,7 @@ function openGroupProfile(g) {
   const imgGrid = images.length
     ? `<div class="upm-media-grid">${images.map(src =>
         `<div class="upm-media-item" onclick="viewMedia('${src.replace(/'/g,'')}','image')"><img src="${src}" loading="lazy"></div>`).join('')}</div>`
-    : `<div class="upm-empty"><i class="ti ti-photo-off"></i><span>Нет фото</span></div>`;
+    : `<div class="upm-empty"><i class="ti ti-photo-off"></i><span>РќРµС‚ С„РѕС‚Рѕ</span></div>`;
 
   const vidGrid = videos.length
     ? `<div class="upm-media-grid">${videos.map(src =>
@@ -5389,7 +5407,7 @@ function openGroupProfile(g) {
           <video src="${src}" muted preload="metadata"></video>
           <div class="upm-play-ico"><i class="ti ti-player-play-filled"></i></div>
         </div>`).join('')}</div>`
-    : `<div class="upm-empty"><i class="ti ti-video-off"></i><span>Нет видео</span></div>`;
+    : `<div class="upm-empty"><i class="ti ti-video-off"></i><span>РќРµС‚ РІРёРґРµРѕ</span></div>`;
 
   const fileList = files.length
     ? `<div class="upm-file-list">${files.map(f =>
@@ -5398,7 +5416,7 @@ function openGroupProfile(g) {
           <span class="upm-file-name">${esc(f.name)}</span>
           <i class="ti ti-download" style="margin-left:auto;color:var(--text3)"></i>
         </a>`).join('')}</div>`
-    : `<div class="upm-empty"><i class="ti ti-files-off"></i><span>Нет файлов</span></div>`;
+    : `<div class="upm-empty"><i class="ti ti-files-off"></i><span>РќРµС‚ С„Р°Р№Р»РѕРІ</span></div>`;
 
   // Group avatar
   let grpAvHtml;
@@ -5412,18 +5430,18 @@ function openGroupProfile(g) {
     <div class="user-profile-modal">
       <button class="upm-close" onclick="closeGroupProfile()"><i class="ti ti-x"></i></button>
       ${grpAvHtml}
-      <div class="upm-name">${esc(g.name || 'Группа')}</div>
-      <div class="upm-username">${members.length} участников</div>
+      <div class="upm-name">${esc(g.name || 'Р“СЂСѓРїРїР°')}</div>
+      <div class="upm-username">${members.length} СѓС‡Р°СЃС‚РЅРёРєРѕРІ</div>
       ${g.creator === currentUser ? `
       <button class="upm-delete-chat-btn" onclick="confirmClearGroup('${esc(g.id)}','${esc(g.name||'')}')">
-        <i class="ti ti-trash"></i> Очистить историю группы
+        <i class="ti ti-trash"></i> РћС‡РёСЃС‚РёС‚СЊ РёСЃС‚РѕСЂРёСЋ РіСЂСѓРїРїС‹
       </button>` : ''}
 
       <div class="upm-tabs">
-        <button class="upm-tab active" onclick="upmGTab(this,'ugm-members')"><i class="ti ti-users"></i> Участники</button>
-        <button class="upm-tab" onclick="upmGTab(this,'ugm-photos')"><i class="ti ti-photo"></i> Фото</button>
-        <button class="upm-tab" onclick="upmGTab(this,'ugm-videos')"><i class="ti ti-video"></i> Видео</button>
-        <button class="upm-tab" onclick="upmGTab(this,'ugm-files')"><i class="ti ti-files"></i> Файлы</button>
+        <button class="upm-tab active" onclick="upmGTab(this,'ugm-members')"><i class="ti ti-users"></i> РЈС‡Р°СЃС‚РЅРёРєРё</button>
+        <button class="upm-tab" onclick="upmGTab(this,'ugm-photos')"><i class="ti ti-photo"></i> Р¤РѕС‚Рѕ</button>
+        <button class="upm-tab" onclick="upmGTab(this,'ugm-videos')"><i class="ti ti-video"></i> Р’РёРґРµРѕ</button>
+        <button class="upm-tab" onclick="upmGTab(this,'ugm-files')"><i class="ti ti-files"></i> Р¤Р°Р№Р»С‹</button>
       </div>
       <div id="ugm-members" class="upm-pane">${membersHtml}</div>
       <div id="ugm-photos"  class="upm-pane" style="display:none">${imgGrid}</div>
@@ -5439,9 +5457,9 @@ async function confirmClearGroup(groupId, groupName) {
   closeGroupProfile();
   const ok = await dialog({
     icon: 'ti-trash', iconType: 'error',
-    title: 'Очистить историю группы?',
-    msg: `Все сообщения в группе «${esc(groupName)}» будут удалены у всех участников. Это действие нельзя отменить.`,
-    ok: 'Очистить', cancel: 'Отмена', danger: true
+    title: 'РћС‡РёСЃС‚РёС‚СЊ РёСЃС‚РѕСЂРёСЋ РіСЂСѓРїРїС‹?',
+    msg: `Р’СЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ РІ РіСЂСѓРїРїРµ В«${esc(groupName)}В» Р±СѓРґСѓС‚ СѓРґР°Р»РµРЅС‹ Сѓ РІСЃРµС… СѓС‡Р°СЃС‚РЅРёРєРѕРІ. Р­С‚Рѕ РґРµР№СЃС‚РІРёРµ РЅРµР»СЊР·СЏ РѕС‚РјРµРЅРёС‚СЊ.`,
+    ok: 'РћС‡РёСЃС‚РёС‚СЊ', cancel: 'РћС‚РјРµРЅР°', danger: true
   });
   if (!ok) return;
   try {
@@ -5451,9 +5469,9 @@ async function confirmClearGroup(groupId, groupName) {
       body: JSON.stringify({ groupId, username: currentUser })
     });
     const d = await r.json();
-    if (!d.success) toast(d.error || 'Ошибка', 'error');
-    else toast('История группы очищена', 'success', 2500);
-  } catch { toast('Ошибка соединения', 'error'); }
+    if (!d.success) toast(d.error || 'РћС€РёР±РєР°', 'error');
+    else toast('РСЃС‚РѕСЂРёСЏ РіСЂСѓРїРїС‹ РѕС‡РёС‰РµРЅР°', 'success', 2500);
+  } catch { toast('РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ', 'error'); }
 }
 
 function closeGroupProfile() {
@@ -5472,13 +5490,13 @@ function upmGTab(btn, paneId) {
 async function confirmDeleteChat() {
   const ok = await dialog({
     icon: 'ti-trash', iconType: 'error',
-    title: 'Вы точно хотите удалить всю переписку?',
-    msg: 'Переписка удалится только у вас. Это действие нельзя будет отменить.',
-    ok: 'Удалить', cancel: 'Отмена', danger: true
+    title: 'Р’С‹ С‚РѕС‡РЅРѕ С…РѕС‚РёС‚Рµ СѓРґР°Р»РёС‚СЊ РІСЃСЋ РїРµСЂРµРїРёСЃРєСѓ?',
+    msg: 'РџРµСЂРµРїРёСЃРєР° СѓРґР°Р»РёС‚СЃСЏ С‚РѕР»СЊРєРѕ Сѓ РІР°СЃ. Р­С‚Рѕ РґРµР№СЃС‚РІРёРµ РЅРµР»СЊР·СЏ Р±СѓРґРµС‚ РѕС‚РјРµРЅРёС‚СЊ.',
+    ok: 'РЈРґР°Р»РёС‚СЊ', cancel: 'РћС‚РјРµРЅР°', danger: true
   });
   if (!ok) return;
 
-  // Скрываем все сообщения локально
+  // РЎРєСЂС‹РІР°РµРј РІСЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ Р»РѕРєР°Р»СЊРЅРѕ
   const msgs = document.getElementById('messages');
   if (msgs) {
     const ids = [...msgs.querySelectorAll('[data-id]')].map(r => r.dataset.id);
@@ -5489,10 +5507,10 @@ async function confirmDeleteChat() {
       localStorage.setItem(key, JSON.stringify(newHidden));
     } catch {}
     msgs.innerHTML = '';
-    _lastMsgDate = null; // сбрасываем дату чтобы следующее сообщение получило разделитель
+    _lastMsgDate = null; // СЃР±СЂР°СЃС‹РІР°РµРј РґР°С‚Сѓ С‡С‚РѕР±С‹ СЃР»РµРґСѓСЋС‰РµРµ СЃРѕРѕР±С‰РµРЅРёРµ РїРѕР»СѓС‡РёР»Рѕ СЂР°Р·РґРµР»РёС‚РµР»СЊ
     if (msgsEmpty) msgsEmpty.style.display = '';
   }
-  toast('Переписка удалена у вас', 'success', 2500);
+  toast('РџРµСЂРµРїРёСЃРєР° СѓРґР°Р»РµРЅР° Сѓ РІР°СЃ', 'success', 2500);
 }
 
 function openUserProfile(username) {
@@ -5509,24 +5527,24 @@ function openUserProfile(username) {
     document.body.appendChild(modal);
   }
 
-  // Собираем медиа ОБОИХ сторон из DOM
+  // РЎРѕР±РёСЂР°РµРј РјРµРґРёР° РћР‘РћРРҐ СЃС‚РѕСЂРѕРЅ РёР· DOM
   const msgs = document.getElementById('messages');
   const images = [], videos = [], files = [];
   if (msgs) {
-    // Все строки (own + not own)
+    // Р’СЃРµ СЃС‚СЂРѕРєРё (own + not own)
     msgs.querySelectorAll('.msg-row').forEach(row => {
-      // Фото
+      // Р¤РѕС‚Рѕ
       row.querySelectorAll('.msg-img').forEach(img => {
         if (img.src) images.push(img.src);
       });
-      // Видео (обычное + квадратное)
+      // Р’РёРґРµРѕ (РѕР±С‹С‡РЅРѕРµ + РєРІР°РґСЂР°С‚РЅРѕРµ)
       row.querySelectorAll('.msg-video, .msg-square').forEach(v => {
         const src = v.src || v.getAttribute('src');
         if (src && !src.startsWith('blob:') && src !== window.location.href) videos.push(src);
       });
-      // Файлы
+      // Р¤Р°Р№Р»С‹
       row.querySelectorAll('.msg-file').forEach(a => {
-        const name = a.querySelector('.msg-file-name')?.textContent || 'Файл';
+        const name = a.querySelector('.msg-file-name')?.textContent || 'Р¤Р°Р№Р»';
         if (a.href) files.push({ href: a.href, name });
       });
     });
@@ -5537,7 +5555,7 @@ function openUserProfile(username) {
         `<div class="upm-media-item" onclick="viewMedia('${src.replace(/'/g,'')}','image')">
           <img src="${src}" loading="lazy">
         </div>`).join('')}</div>`
-    : `<div class="upm-empty"><i class="ti ti-photo-off"></i><span>Нет фото</span></div>`;
+    : `<div class="upm-empty"><i class="ti ti-photo-off"></i><span>РќРµС‚ С„РѕС‚Рѕ</span></div>`;
 
   const vidGrid = videos.length
     ? `<div class="upm-media-grid">${videos.map(src =>
@@ -5545,7 +5563,7 @@ function openUserProfile(username) {
           <video src="${src}" muted preload="metadata"></video>
           <div class="upm-play-ico"><i class="ti ti-player-play-filled"></i></div>
         </div>`).join('')}</div>`
-    : `<div class="upm-empty"><i class="ti ti-video-off"></i><span>Нет видео</span></div>`;
+    : `<div class="upm-empty"><i class="ti ti-video-off"></i><span>РќРµС‚ РІРёРґРµРѕ</span></div>`;
 
   const fileList = files.length
     ? `<div class="upm-file-list">${files.map(f =>
@@ -5554,7 +5572,7 @@ function openUserProfile(username) {
           <span class="upm-file-name">${esc(f.name)}</span>
           <i class="ti ti-download" style="margin-left:auto;color:var(--text3)"></i>
         </a>`).join('')}</div>`
-    : `<div class="upm-empty"><i class="ti ti-files-off"></i><span>Нет файлов</span></div>`;
+    : `<div class="upm-empty"><i class="ti ti-files-off"></i><span>РќРµС‚ С„Р°Р№Р»РѕРІ</span></div>`;
 
   const avHtml = av
     ? `<div class="upm-avatar" style="background-image:url('${av}');background-size:cover;background-position:center;cursor:pointer" onclick="viewMedia('${av}','image')"></div>`
@@ -5568,14 +5586,14 @@ function openUserProfile(username) {
       ${avHtml}
       <div class="upm-name">${esc(nick)}</div>
       <div class="upm-username">@${esc(username)}</div>
-      <div class="upm-status ${isOn ? 'upm-online' : ''}">${isOn ? '● В сети' : '● Не в сети'}</div>
+      <div class="upm-status ${isOn ? 'upm-online' : ''}">${isOn ? 'в—Џ Р’ СЃРµС‚Рё' : 'в—Џ РќРµ РІ СЃРµС‚Рё'}</div>
       <button class="upm-delete-chat-btn" onclick="confirmDeleteChat()">
-        <i class="ti ti-trash"></i> Удалить переписку
+        <i class="ti ti-trash"></i> РЈРґР°Р»РёС‚СЊ РїРµСЂРµРїРёСЃРєСѓ
       </button>
       <div class="upm-tabs">
-        <button class="upm-tab active" onclick="upmTab(this,'upm-photos')"><i class="ti ti-photo"></i> Фото</button>
-        <button class="upm-tab" onclick="upmTab(this,'upm-videos')"><i class="ti ti-video"></i> Видео</button>
-        <button class="upm-tab" onclick="upmTab(this,'upm-files')"><i class="ti ti-files"></i> Файлы</button>
+        <button class="upm-tab active" onclick="upmTab(this,'upm-photos')"><i class="ti ti-photo"></i> Р¤РѕС‚Рѕ</button>
+        <button class="upm-tab" onclick="upmTab(this,'upm-videos')"><i class="ti ti-video"></i> Р’РёРґРµРѕ</button>
+        <button class="upm-tab" onclick="upmTab(this,'upm-files')"><i class="ti ti-files"></i> Р¤Р°Р№Р»С‹</button>
       </div>
       <div id="upm-photos" class="upm-pane">${imgGrid}</div>
       <div id="upm-videos" class="upm-pane" style="display:none">${vidGrid}</div>
@@ -5592,7 +5610,7 @@ function upmTab(btn, paneId) {
   document.getElementById(paneId).style.display = '';
 }
 
-// ── Wake Lock: не даём устройству спать во время звонка ─────────────────
+// в”Ђв”Ђ Wake Lock: РЅРµ РґР°С‘Рј СѓСЃС‚СЂРѕР№СЃС‚РІСѓ СЃРїР°С‚СЊ РІРѕ РІСЂРµРјСЏ Р·РІРѕРЅРєР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _wakeLock = null;
 async function _acquireWakeLock() {
   try {
@@ -5600,17 +5618,17 @@ async function _acquireWakeLock() {
       _wakeLock = await navigator.wakeLock.request('screen');
       _wakeLock.addEventListener('release', () => { _wakeLock = null; });
     }
-  } catch(e) { /* не поддерживается — игнорируем */ }
+  } catch(e) { /* РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚СЃСЏ вЂ” РёРіРЅРѕСЂРёСЂСѓРµРј */ }
 }
 function _releaseWakeLock() {
   if (_wakeLock) { _wakeLock.release(); _wakeLock = null; }
 }
 
 
-// ══════════════════════════════════════════════
-// CALL SOUNDS — Web Audio API (без файлов)
-// ══════════════════════════════════════════════
-// ── Audio system ─────────────────────────────────────────────
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// CALL SOUNDS вЂ” Web Audio API (Р±РµР· С„Р°Р№Р»РѕРІ)
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// в”Ђв”Ђ Audio system в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _audioCtx = null;
 let _audioReady = false;
 
@@ -5621,7 +5639,7 @@ function _getAudioCtx() {
   return _audioCtx;
 }
 
-// Прогреваем AudioContext при первом касании/клике — убирает задержку
+// РџСЂРѕРіСЂРµРІР°РµРј AudioContext РїСЂРё РїРµСЂРІРѕРј РєР°СЃР°РЅРёРё/РєР»РёРєРµ вЂ” СѓР±РёСЂР°РµС‚ Р·Р°РґРµСЂР¶РєСѓ
 function _warmAudio() {
   if (_audioReady) return;
   try {
@@ -5631,7 +5649,7 @@ function _warmAudio() {
     } else {
       _audioReady = true;
     }
-    // Тихий пустой буфер — активирует контекст
+    // РўРёС…РёР№ РїСѓСЃС‚РѕР№ Р±СѓС„РµСЂ вЂ” Р°РєС‚РёРІРёСЂСѓРµС‚ РєРѕРЅС‚РµРєСЃС‚
     const buf = ctx.createBuffer(1, 1, 22050);
     const src = ctx.createBufferSource();
     src.buffer = buf;
@@ -5639,14 +5657,14 @@ function _warmAudio() {
     src.start(0);
   } catch {}
 }
-// Вешаем на первое взаимодействие
+// Р’РµС€Р°РµРј РЅР° РїРµСЂРІРѕРµ РІР·Р°РёРјРѕРґРµР№СЃС‚РІРёРµ
 ['touchstart','mousedown','keydown'].forEach(ev =>
   document.addEventListener(ev, _warmAudio, { once: true, passive: true })
 );
 
 
-// ── Custom notification sound ─────────────────────────────────────────────
-let _notifAudio = null; // кастомный Audio объект
+// в”Ђв”Ђ Custom notification sound в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+let _notifAudio = null; // РєР°СЃС‚РѕРјРЅС‹Р№ Audio РѕР±СЉРµРєС‚
 
 function _loadNotifSound() {
   const data = localStorage.getItem('aura_notif_sound');
@@ -5657,31 +5675,31 @@ function _loadNotifSound() {
     _notifAudio = null;
   }
 }
-_loadNotifSound(); // загружаем при старте
+_loadNotifSound(); // Р·Р°РіСЂСѓР¶Р°РµРј РїСЂРё СЃС‚Р°СЂС‚Рµ
 
 function uploadNotifSound(input) {
   const file = input.files[0];
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) {
-    toast('Файл слишком большой (макс 2 МБ)', 'error'); return;
+    toast('Р¤Р°Р№Р» СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№ (РјР°РєСЃ 2 РњР‘)', 'error'); return;
   }
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
       localStorage.setItem('aura_notif_sound', e.target.result);
       _loadNotifSound();
-      // Обновляем UI
+      // РћР±РЅРѕРІР»СЏРµРј UI
       const nameEl = document.getElementById('notifSoundName');
       const resetBtn = document.getElementById('notifSoundResetBtn');
       if (nameEl) nameEl.textContent = file.name;
       if (resetBtn) resetBtn.style.display = '';
-      toast('Звук уведомления загружен', 'success', 2000);
+      toast('Р—РІСѓРє СѓРІРµРґРѕРјР»РµРЅРёСЏ Р·Р°РіСЂСѓР¶РµРЅ', 'success', 2000);
     } catch(err) {
-      toast('Не удалось сохранить звук (возможно недостаточно места)', 'error');
+      toast('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р·РІСѓРє (РІРѕР·РјРѕР¶РЅРѕ РЅРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РјРµСЃС‚Р°)', 'error');
     }
   };
   reader.readAsDataURL(file);
-  input.value = ''; // сброс input чтобы можно было загрузить тот же файл
+  input.value = ''; // СЃР±СЂРѕСЃ input С‡С‚РѕР±С‹ РјРѕР¶РЅРѕ Р±С‹Р»Рѕ Р·Р°РіСЂСѓР·РёС‚СЊ С‚РѕС‚ Р¶Рµ С„Р°Р№Р»
 }
 
 function resetNotifSound() {
@@ -5689,9 +5707,9 @@ function resetNotifSound() {
   _loadNotifSound();
   const nameEl = document.getElementById('notifSoundName');
   const resetBtn = document.getElementById('notifSoundResetBtn');
-  if (nameEl) nameEl.textContent = 'Стандартный звук';
+  if (nameEl) nameEl.textContent = 'РЎС‚Р°РЅРґР°СЂС‚РЅС‹Р№ Р·РІСѓРє';
   if (resetBtn) resetBtn.style.display = 'none';
-  toast('Стандартный звук восстановлен', 'info', 1500);
+  toast('РЎС‚Р°РЅРґР°СЂС‚РЅС‹Р№ Р·РІСѓРє РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅ', 'info', 1500);
 }
 
 function previewNotifSound() {
@@ -5700,10 +5718,10 @@ function previewNotifSound() {
 
 function playNotifSound() {
   if (_notifAudio) {
-    // Воспроизводим кастомный звук
+    // Р’РѕСЃРїСЂРѕРёР·РІРѕРґРёРј РєР°СЃС‚РѕРјРЅС‹Р№ Р·РІСѓРє
     _notifAudio.currentTime = 0;
     _notifAudio.play().catch(() => {
-      // Если не удалось — падаем на стандартный
+      // Р•СЃР»Рё РЅРµ СѓРґР°Р»РѕСЃСЊ вЂ” РїР°РґР°РµРј РЅР° СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№
       playCallSound('message');
     });
   } else {
@@ -5714,10 +5732,10 @@ function playNotifSound() {
 function playCallSound(type) {
   try {
     const ctx = _getAudioCtx();
-    // Если suspended — resume и играем через 50мс (минимальная задержка)
+    // Р•СЃР»Рё suspended вЂ” resume Рё РёРіСЂР°РµРј С‡РµСЂРµР· 50РјСЃ (РјРёРЅРёРјР°Р»СЊРЅР°СЏ Р·Р°РґРµСЂР¶РєР°)
     const doPlay = () => {
       const now = ctx.currentTime;
-      // Компрессор для громкости и чёткости
+      // РљРѕРјРїСЂРµСЃСЃРѕСЂ РґР»СЏ РіСЂРѕРјРєРѕСЃС‚Рё Рё С‡С‘С‚РєРѕСЃС‚Рё
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -20;
       comp.knee.value = 6;
@@ -5733,7 +5751,7 @@ function playCallSound(type) {
         o.type = type;
         o.frequency.value = freq;
         g.gain.setValueAtTime(0, now + t);
-        g.gain.linearRampToValueAtTime(vol, now + t + 0.008); // быстрая атака
+        g.gain.linearRampToValueAtTime(vol, now + t + 0.008); // Р±С‹СЃС‚СЂР°СЏ Р°С‚Р°РєР°
         g.gain.setValueAtTime(vol, now + t + dur * 0.7);
         g.gain.linearRampToValueAtTime(0, now + t + dur);
         o.start(now + t);
@@ -5741,16 +5759,16 @@ function playCallSound(type) {
       };
 
       if (type === 'message') {
-        // Telegram-style: два быстрых тона, громко и чётко
+        // Telegram-style: РґРІР° Р±С‹СЃС‚СЂС‹С… С‚РѕРЅР°, РіСЂРѕРјРєРѕ Рё С‡С‘С‚РєРѕ
         tone(1318, 0,     0.07, 0.55, 'sine'); // E6
         tone(1047, 0.075, 0.10, 0.45, 'sine'); // C6
       } else if (type === 'connect') {
-        // Три восходящих тона — подключение
+        // РўСЂРё РІРѕСЃС…РѕРґСЏС‰РёС… С‚РѕРЅР° вЂ” РїРѕРґРєР»СЋС‡РµРЅРёРµ
         tone(523, 0,    0.09, 0.4); // C5
         tone(659, 0.1,  0.09, 0.4); // E5
         tone(784, 0.2,  0.13, 0.5); // G5
       } else if (type === 'end') {
-        // Два нисходящих — завершение
+        // Р”РІР° РЅРёСЃС…РѕРґСЏС‰РёС… вЂ” Р·Р°РІРµСЂС€РµРЅРёРµ
         tone(523, 0,    0.10, 0.4); // C5
         tone(392, 0.12, 0.16, 0.35); // G4
       }
@@ -5766,8 +5784,8 @@ function playCallSound(type) {
 
 async function startCall(isVid) {
   const target = callTarget();
-  if (!target) { toast('Открой чат для звонка', 'warning'); return; }
-  if (_inCall)  { toast('Звонок уже идёт', 'warning'); return; }
+  if (!target) { toast('РћС‚РєСЂРѕР№ С‡Р°С‚ РґР»СЏ Р·РІРѕРЅРєР°', 'warning'); return; }
+  if (_inCall)  { toast('Р—РІРѕРЅРѕРє СѓР¶Рµ РёРґС‘С‚', 'warning'); return; }
 
   const vidConstraints = isVid ? {
     width:       { ideal: 1280, max: 1920 },
@@ -5789,10 +5807,10 @@ async function startCall(isVid) {
       _groupCall = true;
       _groupMembers = target.members;
       _callTarget = target.name;
-      if (target.members.length === 0) { toast('В группе нет участников', 'warning'); _cleanup(); return; }
+      if (target.members.length === 0) { toast('Р’ РіСЂСѓРїРїРµ РЅРµС‚ СѓС‡Р°СЃС‚РЅРёРєРѕРІ', 'warning'); _cleanup(); return; }
       // Create peer connections for each member
       _showGroupCallUI(target.name, target.members);
-      ringBeep(); // гудок у звонящего в группе
+      ringBeep(); // РіСѓРґРѕРє Сѓ Р·РІРѕРЅСЏС‰РµРіРѕ РІ РіСЂСѓРїРїРµ
       // Initiate call with each member sequentially
       for (const member of target.members) {
         await _initiateGroupPeer(member);
@@ -5800,31 +5818,31 @@ async function startCall(isVid) {
     } else {
       // PRIVATE CALL
       _callTarget  = target;
-      _callRoom    = currentRoom; // запоминаем комнату где начался звонок
+      _callRoom    = currentRoom; // Р·Р°РїРѕРјРёРЅР°РµРј РєРѕРјРЅР°С‚Сѓ РіРґРµ РЅР°С‡Р°Р»СЃСЏ Р·РІРѕРЅРѕРє
       _groupCall = false;
       _groupMembers = [];
       socket.emit('call-invite', { to: target, from: currentUser, isVid });
       _showOutgoingUI(target, isVid);
-      // Авто-сброс через 60 секунд если нет ответа
+      // РђРІС‚Рѕ-СЃР±СЂРѕСЃ С‡РµСЂРµР· 60 СЃРµРєСѓРЅРґ РµСЃР»Рё РЅРµС‚ РѕС‚РІРµС‚Р°
       _callAutoTimeout = setTimeout(() => {
         if (_inCall && !_connected) {
-          toast('Нет ответа', 'info', 3000);
+          toast('РќРµС‚ РѕС‚РІРµС‚Р°', 'info', 3000);
           endCall();
         }
       }, 60000);
     }
   } catch(err) {
-    toast('Нет доступа к ' + (isVid ? 'камере/микрофону' : 'микрофону'), 'error');
+    toast('РќРµС‚ РґРѕСЃС‚СѓРїР° Рє ' + (isVid ? 'РєР°РјРµСЂРµ/РјРёРєСЂРѕС„РѕРЅСѓ' : 'РјРёРєСЂРѕС„РѕРЅСѓ'), 'error');
   }
 }
 
 async function _initiateGroupPeer(member) {
   const pc = new RTCPeerConnection({
     iceServers: ICE_SERVERS,
-    iceTransportPolicy: 'all',       // пробуем все пути включая TURN
-    iceCandidatePoolSize: 10,        // больше кандидатов = быстрее соединение
-    bundlePolicy: 'max-bundle',      // объединяем аудио+видео в один поток
-    rtcpMuxPolicy: 'require',        // экономим порты
+    iceTransportPolicy: 'all',       // РїСЂРѕР±СѓРµРј РІСЃРµ РїСѓС‚Рё РІРєР»СЋС‡Р°СЏ TURN
+    iceCandidatePoolSize: 10,        // Р±РѕР»СЊС€Рµ РєР°РЅРґРёРґР°С‚РѕРІ = Р±С‹СЃС‚СЂРµРµ СЃРѕРµРґРёРЅРµРЅРёРµ
+    bundlePolicy: 'max-bundle',      // РѕР±СЉРµРґРёРЅСЏРµРј Р°СѓРґРёРѕ+РІРёРґРµРѕ РІ РѕРґРёРЅ РїРѕС‚РѕРє
+    rtcpMuxPolicy: 'require',        // СЌРєРѕРЅРѕРјРёРј РїРѕСЂС‚С‹
     iceCandidatePoolSize: 10,
     sdpSemantics: 'unified-plan',
   });
@@ -5846,7 +5864,7 @@ async function _initiateGroupPeer(member) {
 
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'connected') {
-      // Первый участник принял — останавливаем гудок
+      // РџРµСЂРІС‹Р№ СѓС‡Р°СЃС‚РЅРёРє РїСЂРёРЅСЏР» вЂ” РѕСЃС‚Р°РЅР°РІР»РёРІР°РµРј РіСѓРґРѕРє
       stopRing();
       playCallSound('connect');
     } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
@@ -5861,7 +5879,7 @@ async function _initiateGroupPeer(member) {
     }
   };
 
-  // Передаём groupId чтобы получатель знал что это групповой звонок
+  // РџРµСЂРµРґР°С‘Рј groupId С‡С‚РѕР±С‹ РїРѕР»СѓС‡Р°С‚РµР»СЊ Р·РЅР°Р» С‡С‚Рѕ СЌС‚Рѕ РіСЂСѓРїРїРѕРІРѕР№ Р·РІРѕРЅРѕРє
   const gid = currentRoom?.startsWith('group:') ? currentRoom.replace('group:', '') : null;
   socket.emit('call-invite', { to: member, from: currentUser, isVid: _callIsVid, groupId: gid });
 }
@@ -5870,7 +5888,7 @@ function _addGroupParticipantStream(member, remoteStream) {
   const grid = document.getElementById('gcwGrid');
   if (!grid) return;
   _addGroupParticipantTile(grid, member, remoteStream, false);
-  // Обновляем число колонок
+  // РћР±РЅРѕРІР»СЏРµРј С‡РёСЃР»Рѕ РєРѕР»РѕРЅРѕРє
   const count = grid.querySelectorAll('.gp-tile').length;
   _updateGcwGrid(count);
   _updateGroupCallStatus();
@@ -5881,12 +5899,12 @@ function _updateGroupCallStatus() {
   const totalCount = _groupMembers.length;
   const statusEl = document.getElementById('gcStatus');
   if (statusEl) {
-    if (connectedCount === 0) statusEl.textContent = 'Соединение...';
-    else statusEl.textContent = `${connectedCount + 1} участник${connectedCount !== totalCount ? ` из ${totalCount + 1}` : ''}`;
+    if (connectedCount === 0) statusEl.textContent = 'РЎРѕРµРґРёРЅРµРЅРёРµ...';
+    else statusEl.textContent = `${connectedCount + 1} СѓС‡Р°СЃС‚РЅРёРє${connectedCount !== totalCount ? ` РёР· ${totalCount + 1}` : ''}`;
   }
 }
 
-let _gcwTimer = null; // таймер длительности звонка
+let _gcwTimer = null; // С‚Р°Р№РјРµСЂ РґР»РёС‚РµР»СЊРЅРѕСЃС‚Рё Р·РІРѕРЅРєР°
 let _gcwStartTime = null;
 
 function _gcwFormatTime(sec) {
@@ -5904,7 +5922,7 @@ function _showGroupCallUI(groupName, members) {
   win.className = 'group-call-win';
   win.id = 'groupCallWin';
 
-  // Выводим самого пользователя + участников
+  // Р’С‹РІРѕРґРёРј СЃР°РјРѕРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ + СѓС‡Р°СЃС‚РЅРёРєРѕРІ
   const allMembers = [currentUser, ...members];
 
   win.innerHTML = `
@@ -5912,24 +5930,24 @@ function _showGroupCallUI(groupName, members) {
     <div class="gcw-top">
       <div class="gcw-group-name">${esc(groupName)}</div>
       <div class="gcw-timer" id="gcwTimer">00:00</div>
-      <div class="gcw-status" id="gcStatus">Соединение…</div>
+      <div class="gcw-status" id="gcStatus">РЎРѕРµРґРёРЅРµРЅРёРµвЂ¦</div>
     </div>
     <div class="gcw-grid gp-grid" id="gcwGrid"></div>
     <div class="gcw-bottom">
       <div class="gcw-controls">
-        <button class="gcw-btn gcw-mute" id="gcwMuteBtn" onclick="toggleGroupMute()" title="Микрофон">
+        <button class="gcw-btn gcw-mute" id="gcwMuteBtn" onclick="toggleGroupMute()" title="РњРёРєСЂРѕС„РѕРЅ">
           <i class="ti ti-microphone"></i>
         </button>
-        ${_callIsVid ? `<button class="gcw-btn gcw-vid" id="gcwVidBtn" onclick="toggleGroupCamera()" title="Камера">
+        ${_callIsVid ? `<button class="gcw-btn gcw-vid" id="gcwVidBtn" onclick="toggleGroupCamera()" title="РљР°РјРµСЂР°">
           <i class="ti ti-video"></i>
         </button>` : ''}
-        <button class="gcw-btn gcw-flip" onclick="flipGroupCamera()" title="Перевернуть камеру" style="${_callIsVid?'':'display:none'}">
+        <button class="gcw-btn gcw-flip" onclick="flipGroupCamera()" title="РџРµСЂРµРІРµСЂРЅСѓС‚СЊ РєР°РјРµСЂСѓ" style="${_callIsVid?'':'display:none'}">
           <i class="ti ti-rotate"></i>
         </button>
-        <button class="gcw-btn gcw-screen" id="gcwScreenBtn" onclick="toggleGroupScreenShare()" title="Демонстрация экрана">
+        <button class="gcw-btn gcw-screen" id="gcwScreenBtn" onclick="toggleGroupScreenShare()" title="Р”РµРјРѕРЅСЃС‚СЂР°С†РёСЏ СЌРєСЂР°РЅР°">
           <i class="ti ti-screen-share"></i>
         </button>
-        <button class="gcw-btn gcw-end" onclick="endCall()" title="Завершить">
+        <button class="gcw-btn gcw-end" onclick="endCall()" title="Р—Р°РІРµСЂС€РёС‚СЊ">
           <i class="ti ti-phone-off"></i>
         </button>
       </div>
@@ -5937,14 +5955,14 @@ function _showGroupCallUI(groupName, members) {
 
   document.body.appendChild(win);
 
-  // Добавляем плитку для себя
+  // Р”РѕР±Р°РІР»СЏРµРј РїР»РёС‚РєСѓ РґР»СЏ СЃРµР±СЏ
   _addGroupParticipantTile(win.querySelector('#gcwGrid'), currentUser, localStream, true);
 
-  // Обновляем сетку по числу участников
+  // РћР±РЅРѕРІР»СЏРµРј СЃРµС‚РєСѓ РїРѕ С‡РёСЃР»Сѓ СѓС‡Р°СЃС‚РЅРёРєРѕРІ
   _updateGcwGrid(allMembers.length);
 
-  // Таймер звонка
-  _muted = false; // сбрасываем состояние микрофона при новом звонке
+  // РўР°Р№РјРµСЂ Р·РІРѕРЅРєР°
+  _muted = false; // СЃР±СЂР°СЃС‹РІР°РµРј СЃРѕСЃС‚РѕСЏРЅРёРµ РјРёРєСЂРѕС„РѕРЅР° РїСЂРё РЅРѕРІРѕРј Р·РІРѕРЅРєРµ
   _gcwStartTime = Date.now();
   _gcwTimer = setInterval(() => {
     const el = document.getElementById('gcwTimer');
@@ -5982,18 +6000,18 @@ function _addGroupParticipantTile(grid, member, stream, isLocal) {
         <span class="gp-name-label">${esc(nick)}</span>
         <span class="gp-mic-ico" id="gp_mic_${member}"><i class="ti ti-microphone"></i></span>
       </div>
-      ${isSelf ? '<div class="gp-self-label">Вы</div>' : ''}`;
+      ${isSelf ? '<div class="gp-self-label">Р’С‹</div>' : ''}`;
     grid?.appendChild(tile);
     const avaEl = document.getElementById('gp_ava_' + member);
     if (avaEl) setAvatar(avaEl, member, av);
 
-    // Клик → полный экран
+    // РљР»РёРє в†’ РїРѕР»РЅС‹Р№ СЌРєСЂР°РЅ
     tile.addEventListener('click', (e) => {
       if (e.button !== 0) return;
       _toggleTileFullscreen(tile);
     });
 
-    // Правая кнопка → громкость (только для других)
+    // РџСЂР°РІР°СЏ РєРЅРѕРїРєР° в†’ РіСЂРѕРјРєРѕСЃС‚СЊ (С‚РѕР»СЊРєРѕ РґР»СЏ РґСЂСѓРіРёС…)
     if (!isLocal) {
       tile.addEventListener('contextmenu', e => {
         e.preventDefault();
@@ -6005,10 +6023,10 @@ function _addGroupParticipantTile(grid, member, stream, isLocal) {
   const vid = document.getElementById('gp_vid_' + member);
   if (vid && stream) {
     vid.srcObject = stream;
-    // Применяем сохранённую громкость
+    // РџСЂРёРјРµРЅСЏРµРј СЃРѕС…СЂР°РЅС‘РЅРЅСѓСЋ РіСЂРѕРјРєРѕСЃС‚СЊ
     if (!isLocal) vid.volume = Math.min(1, _userVolumes.get(member) ?? 1.0);
     vid.play().catch(()=>{});
-    // Показываем видео только если есть видеодорожка
+    // РџРѕРєР°Р·С‹РІР°РµРј РІРёРґРµРѕ С‚РѕР»СЊРєРѕ РµСЃР»Рё РµСЃС‚СЊ РІРёРґРµРѕРґРѕСЂРѕР¶РєР°
     const hasVideo = stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled;
     const avaWrap = document.getElementById('gp_ava_wrap_' + member);
     if (hasVideo) { vid.style.display = 'block'; if(avaWrap) avaWrap.style.display = 'none'; }
@@ -6024,7 +6042,7 @@ function toggleGroupCamera() {
   tracks[0].enabled = enabled;
   const btn = document.getElementById('gcwVidBtn');
   if (btn) { btn.querySelector('i').className = enabled ? 'ti ti-video' : 'ti ti-video-off'; btn.classList.toggle('muted', !enabled); }
-  // Обновляем плитку себя
+  // РћР±РЅРѕРІР»СЏРµРј РїР»РёС‚РєСѓ СЃРµР±СЏ
   const vid = document.getElementById('gp_vid_' + currentUser);
   const avaWrap = document.getElementById('gp_ava_wrap_' + currentUser);
   if (vid) { vid.style.display = enabled ? 'block' : 'none'; }
@@ -6051,7 +6069,7 @@ async function flipGroupCamera() {
 }
 
 
-// Входящий групповой звонок
+// Р’С…РѕРґСЏС‰РёР№ РіСЂСѓРїРїРѕРІРѕР№ Р·РІРѕРЅРѕРє
 function _showGroupIncomingUI(from, isVid, group) {
   if (_inCall) { socket.emit('call-busy', { to: from, from: currentUser }); return; }
   _callTarget = from;
@@ -6065,7 +6083,7 @@ function _showGroupIncomingUI(from, isVid, group) {
   const fromNick = userNicknames[from] || from;
   setAvatar(callAva, `group:${group.id}`, group.avatar);
   callNm.textContent = group.name;
-  callSt.textContent = `${fromNick} начал${isVid ? ' видео' : ''}звонок`;
+  callSt.textContent = `${fromNick} РЅР°С‡Р°Р»${isVid ? ' РІРёРґРµРѕ' : ''}Р·РІРѕРЅРѕРє`;
   callAct.innerHTML = `
     <button class="call-btn call-ans" onclick="answerGroupCall()">
       <i class="ti ti-phone"></i>
@@ -6089,7 +6107,7 @@ async function answerGroupCall() {
       await _initiateGroupPeer(member);
     }
   } catch(e) {
-    toast('Нет доступа к микрофону', 'error');
+    toast('РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РјРёРєСЂРѕС„РѕРЅСѓ', 'error');
     _cleanup();
   }
 }
@@ -6097,7 +6115,7 @@ async function answerGroupCall() {
 function _showOutgoingUI(target, isVid) {
   setAvatar(callAva, target, userAvatars[target]);
   callNm.textContent = userNicknames[target] || target;
-  callSt.textContent = isVid ? 'Видеозвонок…' : 'Звоним…';
+  callSt.textContent = isVid ? 'Р’РёРґРµРѕР·РІРѕРЅРѕРєвЂ¦' : 'Р—РІРѕРЅРёРјвЂ¦';
   callAct.innerHTML  = `
     <button class="call-btn call-mute" id="callMuteBtn" onclick="toggleMute()">
       <i class="ti ti-microphone"></i>
@@ -6106,36 +6124,36 @@ function _showOutgoingUI(target, isVid) {
       <i class="ti ti-phone-off"></i>
     </button>`;
   callModal.classList.add('open');
-  ringBeep(); // гудок у звонящего
+  ringBeep(); // РіСѓРґРѕРє Сѓ Р·РІРѕРЅСЏС‰РµРіРѕ
 }
 
-// ── INCOMING ────────────────────────────────────────────
+// в”Ђв”Ђ INCOMING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 socket.on('call-invite', ({ from, isVid, resumed, groupId }) => {
-  // Уведомление если вкладка скрыта
+  // РЈРІРµРґРѕРјР»РµРЅРёРµ РµСЃР»Рё РІРєР»Р°РґРєР° СЃРєСЂС‹С‚Р°
   if (document.hidden) {
     showPushNotification(
-      isVid ? `Видеозвонок от ${userNicknames[from] || from}` : `Звонок от ${userNicknames[from] || from}`,
-      'Нажмите чтобы ответить', 'call-' + from
+      isVid ? `Р’РёРґРµРѕР·РІРѕРЅРѕРє РѕС‚ ${userNicknames[from] || from}` : `Р—РІРѕРЅРѕРє РѕС‚ ${userNicknames[from] || from}`,
+      'РќР°Р¶РјРёС‚Рµ С‡С‚РѕР±С‹ РѕС‚РІРµС‚РёС‚СЊ', 'call-' + from
     );
   }
 
-  // Уже в групповом звонке — добавляем участника
+  // РЈР¶Рµ РІ РіСЂСѓРїРїРѕРІРѕРј Р·РІРѕРЅРєРµ вЂ” РґРѕР±Р°РІР»СЏРµРј СѓС‡Р°СЃС‚РЅРёРєР°
   if (_groupCall) {
     if (groupPeers.has(from)) { _handleGroupAnswer(from, isVid); return; }
     _initiateGroupPeer(from);
     return;
   }
 
-  // Если resumed — это восстановление звонка после навигации/перезагрузки.
-  // Если уже в звонке с кем-то другим — тогда занят.
-  // Если в звонке с тем же — игнорируем (дубль).
+  // Р•СЃР»Рё resumed вЂ” СЌС‚Рѕ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ Р·РІРѕРЅРєР° РїРѕСЃР»Рµ РЅР°РІРёРіР°С†РёРё/РїРµСЂРµР·Р°РіСЂСѓР·РєРё.
+  // Р•СЃР»Рё СѓР¶Рµ РІ Р·РІРѕРЅРєРµ СЃ РєРµРј-С‚Рѕ РґСЂСѓРіРёРј вЂ” С‚РѕРіРґР° Р·Р°РЅСЏС‚.
+  // Р•СЃР»Рё РІ Р·РІРѕРЅРєРµ СЃ С‚РµРј Р¶Рµ вЂ” РёРіРЅРѕСЂРёСЂСѓРµРј (РґСѓР±Р»СЊ).
   if (_inCall) {
-    if (_callTarget === from) return; // уже принимаем/отвечаем этот звонок
+    if (_callTarget === from) return; // СѓР¶Рµ РїСЂРёРЅРёРјР°РµРј/РѕС‚РІРµС‡Р°РµРј СЌС‚РѕС‚ Р·РІРѕРЅРѕРє
     socket.emit('call-busy', { to: from, from: currentUser });
     return;
   }
 
-  // Если звонок групповой — показываем групповой UI
+  // Р•СЃР»Рё Р·РІРѕРЅРѕРє РіСЂСѓРїРїРѕРІРѕР№ вЂ” РїРѕРєР°Р·С‹РІР°РµРј РіСЂСѓРїРїРѕРІРѕР№ UI
   const incomingGroupId = groupId;
   if (incomingGroupId) {
     const grp = groups.find(g => g.id === incomingGroupId);
@@ -6143,7 +6161,7 @@ socket.on('call-invite', ({ from, isVid, resumed, groupId }) => {
   }
 
   _callTarget = from;
-  _callRoom   = currentRoom; // комната где принят звонок
+  _callRoom   = currentRoom; // РєРѕРјРЅР°С‚Р° РіРґРµ РїСЂРёРЅСЏС‚ Р·РІРѕРЅРѕРє
   _callIsVid  = isVid;
   _isCaller   = false;
   _inCall     = true;
@@ -6151,7 +6169,7 @@ socket.on('call-invite', ({ from, isVid, resumed, groupId }) => {
 
   setAvatar(callAva, from, userAvatars[from]);
   callNm.textContent = userNicknames[from] || from;
-  callSt.textContent = isVid ? 'Видеозвонок…' : 'Входящий звонок…';
+  callSt.textContent = isVid ? 'Р’РёРґРµРѕР·РІРѕРЅРѕРєвЂ¦' : 'Р’С…РѕРґСЏС‰РёР№ Р·РІРѕРЅРѕРєвЂ¦';
   callAct.innerHTML  = `
     <button class="call-btn call-ans" onclick="answerCall()">
       <i class="ti ti-phone"></i>
@@ -6185,9 +6203,9 @@ async function _createGroupPeerAnswer(member, pc) {
 
 socket.on('call-busy', ({ from }) => {
   if (_groupCall) {
-    // В групповом звонке — участник занят, пропускаем его
+    // Р’ РіСЂСѓРїРїРѕРІРѕРј Р·РІРѕРЅРєРµ вЂ” СѓС‡Р°СЃС‚РЅРёРє Р·Р°РЅСЏС‚, РїСЂРѕРїСѓСЃРєР°РµРј РµРіРѕ
     const nick = userNicknames[from] || from;
-    toast(`${nick} занят`, 'info', 1500);
+    toast(`${nick} Р·Р°РЅСЏС‚`, 'info', 1500);
     const pc = groupPeers.get(from);
     if (pc) { pc.close(); groupPeers.delete(from); }
     document.querySelector(`[data-participant="${from}"]`)?.remove();
@@ -6196,12 +6214,12 @@ socket.on('call-busy', ({ from }) => {
     if (groupPeers.size === 0 && _groupMembers.length === 0) endCall();
     return;
   }
-  // Личный звонок
-  toast((userNicknames[from] || from) + ' занят', 'info', 2500);
+  // Р›РёС‡РЅС‹Р№ Р·РІРѕРЅРѕРє
+  toast((userNicknames[from] || from) + ' Р·Р°РЅСЏС‚', 'info', 2500);
   endCall();
 });
 
-// ── ANSWER ──────────────────────────────────────────────
+// в”Ђв”Ђ ANSWER в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function answerCall() {
   stopRing();
   const vidC = _callIsVid ? { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30}, facingMode:'user' } : false;
@@ -6213,31 +6231,31 @@ function answerCall() {
       callModal.classList.remove('open');
     })
     .catch(async (err) => {
-      console.log('[Call] Медиа ошибка:', err.name, err.message);
+      console.log('[Call] РњРµРґРёР° РѕС€РёР±РєР°:', err.name, err.message);
       if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError' || err.name === 'NotReadableError') {
-        // Нет камеры — пробуем только аудио
+        // РќРµС‚ РєР°РјРµСЂС‹ вЂ” РїСЂРѕР±СѓРµРј С‚РѕР»СЊРєРѕ Р°СѓРґРёРѕ
         if (_callIsVid) {
-          toast('Камера недоступна — звонок только с аудио', 'info', 3000);
+          toast('РљР°РјРµСЂР° РЅРµРґРѕСЃС‚СѓРїРЅР° вЂ” Р·РІРѕРЅРѕРє С‚РѕР»СЊРєРѕ СЃ Р°СѓРґРёРѕ', 'info', 3000);
           try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            _callIsVid = false; // помечаем что у нас нет видео
-            _callNoCamera = true; // флаг — показываем аватарку вместо камеры
+            _callIsVid = false; // РїРѕРјРµС‡Р°РµРј С‡С‚Рѕ Сѓ РЅР°СЃ РЅРµС‚ РІРёРґРµРѕ
+            _callNoCamera = true; // С„Р»Р°Рі вЂ” РїРѕРєР°Р·С‹РІР°РµРј Р°РІР°С‚Р°СЂРєСѓ РІРјРµСЃС‚Рѕ РєР°РјРµСЂС‹
             _startCallAsCaller_noVideo();
             return;
           } catch(e2) {
-            toast('Нет доступа к микрофону', 'error');
+            toast('РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РјРёРєСЂРѕС„РѕРЅСѓ', 'error');
           }
         }
       } else {
-        toast('Нет доступа к медиа', 'error');
+        toast('РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РјРµРґРёР°', 'error');
       }
       declineCall();
     });
 }
 
-// Начинаем звонок без камеры (только аудио + аватарка)
+// РќР°С‡РёРЅР°РµРј Р·РІРѕРЅРѕРє Р±РµР· РєР°РјРµСЂС‹ (С‚РѕР»СЊРєРѕ Р°СѓРґРёРѕ + Р°РІР°С‚Р°СЂРєР°)
 async function _startCallAsCaller_noVideo() {
-  // localStream уже получен с только аудио
+  // localStream СѓР¶Рµ РїРѕР»СѓС‡РµРЅ СЃ С‚РѕР»СЊРєРѕ Р°СѓРґРёРѕ
   const target = _callTarget;
   _createPeer(target);
   if (localStream) {
@@ -6255,7 +6273,7 @@ async function _startCallAsCaller_noVideo() {
 
 function declineCall() {
   stopRing();
-  // Для группового звонка: groupId передаём чтобы звонящий знал — это decline от одного участника
+  // Р”Р»СЏ РіСЂСѓРїРїРѕРІРѕРіРѕ Р·РІРѕРЅРєР°: groupId РїРµСЂРµРґР°С‘Рј С‡С‚РѕР±С‹ Р·РІРѕРЅСЏС‰РёР№ Р·РЅР°Р» вЂ” СЌС‚Рѕ decline РѕС‚ РѕРґРЅРѕРіРѕ СѓС‡Р°СЃС‚РЅРёРєР°
   const gid = _groupCall ? (currentRoom?.replace('group:','') || null) : null;
   socket.emit('call-decline', { to: _callTarget, from: currentUser, groupId: gid });
   _cleanup();
@@ -6264,40 +6282,40 @@ function declineCall() {
 socket.on('call-decline', ({ from, groupId } = {}) => {
   const nick = userNicknames[from] || from || '?';
   if (_groupCall && groupId) {
-    // Групповой звонок — один участник отклонил, продолжаем для остальных
-    toast(`${nick} отклонил звонок`, 'info', 2000);
-    // Закрываем пир-соединение с этим участником
+    // Р“СЂСѓРїРїРѕРІРѕР№ Р·РІРѕРЅРѕРє вЂ” РѕРґРёРЅ СѓС‡Р°СЃС‚РЅРёРє РѕС‚РєР»РѕРЅРёР», РїСЂРѕРґРѕР»Р¶Р°РµРј РґР»СЏ РѕСЃС‚Р°Р»СЊРЅС‹С…
+    toast(`${nick} РѕС‚РєР»РѕРЅРёР» Р·РІРѕРЅРѕРє`, 'info', 2000);
+    // Р—Р°РєСЂС‹РІР°РµРј РїРёСЂ-СЃРѕРµРґРёРЅРµРЅРёРµ СЃ СЌС‚РёРј СѓС‡Р°СЃС‚РЅРёРєРѕРј
     const pc = groupPeers.get(from);
     if (pc) { pc.close(); groupPeers.delete(from); }
-    // Убираем плитку этого участника из UI
+    // РЈР±РёСЂР°РµРј РїР»РёС‚РєСѓ СЌС‚РѕРіРѕ СѓС‡Р°СЃС‚РЅРёРєР° РёР· UI
     document.querySelector(`[data-participant="${from}"]`)?.remove();
-    // Обновляем счётчик участников
+    // РћР±РЅРѕРІР»СЏРµРј СЃС‡С‘С‚С‡РёРє СѓС‡Р°СЃС‚РЅРёРєРѕРІ
     _groupMembers = _groupMembers.filter(m => m !== from);
     _updateGroupCallStatus();
-    // Если больше никого нет — завершаем
+    // Р•СЃР»Рё Р±РѕР»СЊС€Рµ РЅРёРєРѕРіРѕ РЅРµС‚ вЂ” Р·Р°РІРµСЂС€Р°РµРј
     if (groupPeers.size === 0 && _groupMembers.length === 0) {
-      toast('Все участники отклонили звонок', 'info', 2500);
+      toast('Р’СЃРµ СѓС‡Р°СЃС‚РЅРёРєРё РѕС‚РєР»РѕРЅРёР»Рё Р·РІРѕРЅРѕРє', 'info', 2500);
       endCall();
     }
     return;
   }
-  // Личный звонок — обычная логика
-  toast(`${nick} отклонил звонок`, 'info', 2500);
+  // Р›РёС‡РЅС‹Р№ Р·РІРѕРЅРѕРє вЂ” РѕР±С‹С‡РЅР°СЏ Р»РѕРіРёРєР°
+  toast(`${nick} РѕС‚РєР»РѕРЅРёР» Р·РІРѕРЅРѕРє`, 'info', 2500);
   _cleanup();
 });
 
-// Адресат вернулся онлайн пока мы звоним — обновляем статус
+// РђРґСЂРµСЃР°С‚ РІРµСЂРЅСѓР»СЃСЏ РѕРЅР»Р°Р№РЅ РїРѕРєР° РјС‹ Р·РІРѕРЅРёРј вЂ” РѕР±РЅРѕРІР»СЏРµРј СЃС‚Р°С‚СѓСЃ
 socket.on('call-callee-online', ({ to }) => {
   if (_inCall && _callTarget === to && callSt) {
-    callSt.textContent = 'Соединяемся…';
+    callSt.textContent = 'РЎРѕРµРґРёРЅСЏРµРјСЃСЏвЂ¦';
   }
 });
 
-// ── SIGNALING ────────────────────────────────────────────
-// 1. Callee ready → caller creates RTCPeer and offer
+// в”Ђв”Ђ SIGNALING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// 1. Callee ready в†’ caller creates RTCPeer and offer
 socket.on('call-answer-ready', async ({ from }) => {
   if (!_isCaller) return;
-  callSt.textContent = 'Соединение…';
+  callSt.textContent = 'РЎРѕРµРґРёРЅРµРЅРёРµвЂ¦';
   _createPeer();
   try {
     const offer = await rtcPeer.createOffer();
@@ -6306,7 +6324,7 @@ socket.on('call-answer-ready', async ({ from }) => {
   } catch (e) { console.error('[SDP] offer:', e); _cleanup(); }
 });
 
-// 2. Receive offer — initial call OR renegotiation (screen share)
+// 2. Receive offer вЂ” initial call OR renegotiation (screen share)
 socket.on('call-offer', async ({ from, sdp }) => {
   // Route to group peer if this is a group call
   if (groupPeers.has(from)) {
@@ -6370,9 +6388,9 @@ socket.on('call-ice', async ({ from, candidate }) => {
 // End
 socket.on('call-end', ({ from, groupId } = {}) => {
   if (_groupCall && groupId && from) {
-    // Один участник группового звонка завершил — убираем только его
+    // РћРґРёРЅ СѓС‡Р°СЃС‚РЅРёРє РіСЂСѓРїРїРѕРІРѕРіРѕ Р·РІРѕРЅРєР° Р·Р°РІРµСЂС€РёР» вЂ” СѓР±РёСЂР°РµРј С‚РѕР»СЊРєРѕ РµРіРѕ
     const nick = userNicknames[from] || from;
-    toast(`${nick} покинул звонок`, 'info', 1500);
+    toast(`${nick} РїРѕРєРёРЅСѓР» Р·РІРѕРЅРѕРє`, 'info', 1500);
     const pc = groupPeers.get(from);
     if (pc) { pc.close(); groupPeers.delete(from); }
     document.querySelector(`[data-participant="${from}"]`)?.remove();
@@ -6383,7 +6401,7 @@ socket.on('call-end', ({ from, groupId } = {}) => {
     }
     return;
   }
-  // Личный звонок — пропущенный или завершение
+  // Р›РёС‡РЅС‹Р№ Р·РІРѕРЅРѕРє вЂ” РїСЂРѕРїСѓС‰РµРЅРЅС‹Р№ РёР»Рё Р·Р°РІРµСЂС€РµРЅРёРµ
   if (_inCall && !_connected && !_isCaller && _callTarget && currentRoom) {
     socket.emit('save-call-record', {
       room: currentRoom, from: _callTarget, to: currentUser,
@@ -6394,11 +6412,11 @@ socket.on('call-end', ({ from, groupId } = {}) => {
   _cleanup();
 });
 
-// Caller started screen share (replaceTrack path — no ontrack fired)
+// Caller started screen share (replaceTrack path вЂ” no ontrack fired)
 socket.on('screen-share-started', ({ from }) => {
   console.log('[SS] screen-share-started from', from);
-  _partnerSharing = true; // партнёр начал шарить
-  // Скрываем аватар/имя у ОБОИХ — у шарера и у смотрящего
+  _partnerSharing = true; // РїР°СЂС‚РЅС‘СЂ РЅР°С‡Р°Р» С€Р°СЂРёС‚СЊ
+  // РЎРєСЂС‹РІР°РµРј Р°РІР°С‚Р°СЂ/РёРјСЏ Сѓ РћР‘РћРРҐ вЂ” Сѓ С€Р°СЂРµСЂР° Рё Сѓ СЃРјРѕС‚СЂСЏС‰РµРіРѕ
   const cwAudio = document.getElementById('cwAudioContent');
   if (cwAudio) cwAudio.style.display = 'none';
   // The video track was already replaced in peer connection
@@ -6412,7 +6430,7 @@ socket.on('screen-share-started', ({ from }) => {
     rv.play().catch(() => {});
     console.log('[SS] Refreshed #rv srcObject');
   } else if (!rv) {
-    // Audio call — need to show video
+    // Audio call вЂ” need to show video
     // The video track arrived via replaceTrack, receiver already has it in remoteStream
     // But we need to grab it fresh from the peer connection
     const receivers = rtcPeer?.getReceivers() || [];
@@ -6427,8 +6445,8 @@ socket.on('screen-share-started', ({ from }) => {
 
 // Caller stopped screen share
 socket.on('screen-share-stopped', ({ from }) => {
-  _partnerSharing = false; // партнёр остановил шаринг
-  // Убираем видео партнёра
+  _partnerSharing = false; // РїР°СЂС‚РЅС‘СЂ РѕСЃС‚Р°РЅРѕРІРёР» С€Р°СЂРёРЅРі
+  // РЈР±РёСЂР°РµРј РІРёРґРµРѕ РїР°СЂС‚РЅС‘СЂР°
   const rv = document.querySelector('#rv');
   if (rv) {
     rv.remove();
@@ -6436,7 +6454,7 @@ socket.on('screen-share-stopped', ({ from }) => {
     const win = document.getElementById('activeCallWin');
     if (win) win.style.height = '';
   }
-  // Восстанавливаем cwAudioContent только если МЫ ТОЖЕ не шарим
+  // Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј cwAudioContent С‚РѕР»СЊРєРѕ РµСЃР»Рё РњР« РўРћР–Р• РЅРµ С€Р°СЂРёРј
   if (!_screenSharing) {
     const cwAudio = document.getElementById('cwAudioContent');
     if (cwAudio) cwAudio.style.display = '';
@@ -6445,7 +6463,7 @@ socket.on('screen-share-stopped', ({ from }) => {
 
 // Offline target
 socket.on('call-target-offline', ({ target }) => {
-  toast(`${target} не в сети — получат уведомление о пропущенном звонке`, 'info', 4000);
+  toast(`${target} РЅРµ РІ СЃРµС‚Рё вЂ” РїРѕР»СѓС‡Р°С‚ СѓРІРµРґРѕРјР»РµРЅРёРµ Рѕ РїСЂРѕРїСѓС‰РµРЅРЅРѕРј Р·РІРѕРЅРєРµ`, 'info', 4000);
   _cleanup();
 });
 
@@ -6454,20 +6472,20 @@ socket.on('missed-calls', ({ calls }) => {
   if (!calls?.length) return;
   calls.forEach(c => {
     const age = Math.round((Date.now() - c.time) / 60000);
-    const when = age < 1 ? 'только что' : age < 60 ? `${age} мин. назад` : `${Math.round(age/60)} ч. назад`;
-    const label = c.isVid ? 'видеозвонок' : 'звонок';
+    const when = age < 1 ? 'С‚РѕР»СЊРєРѕ С‡С‚Рѕ' : age < 60 ? `${age} РјРёРЅ. РЅР°Р·Р°Рґ` : `${Math.round(age/60)} С‡. РЅР°Р·Р°Рґ`;
+    const label = c.isVid ? 'РІРёРґРµРѕР·РІРѕРЅРѕРє' : 'Р·РІРѕРЅРѕРє';
     const t = Object.assign(document.createElement('div'), {
       className: 'toast warning', style: 'cursor:pointer',
-      innerHTML: `<i class="ti ti-phone-missed"></i><span>Пропущен ${label} от <b>${c.from}</b> · ${when}</span>`
+      innerHTML: `<i class="ti ti-phone-missed"></i><span>РџСЂРѕРїСѓС‰РµРЅ ${label} РѕС‚ <b>${c.from}</b> В· ${when}</span>`
     });
     t.onclick = () => { t.remove(); gotoPrivate(c.from); };
     $('toastContainer')?.appendChild(t);
     setTimeout(() => { t.style.animation = 'toastOut .3s ease forwards'; setTimeout(() => t.remove(), 300); }, 10000);
   });
-  if (document.hidden) showPushNotification(`Пропущен звонок от ${calls[0].from}`, `Пропущено ${calls.length}`, 'missed');
+  if (document.hidden) showPushNotification(`РџСЂРѕРїСѓС‰РµРЅ Р·РІРѕРЅРѕРє РѕС‚ ${calls[0].from}`, `РџСЂРѕРїСѓС‰РµРЅРѕ ${calls.length}`, 'missed');
 });
 
-// ── RTC PEER ─────────────────────────────────────────────
+// в”Ђв”Ђ RTC PEER в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function _createPeer() {
   if (rtcPeer) { try { rtcPeer.close(); } catch {} }
   rtcPeer = new RTCPeerConnection({
@@ -6517,22 +6535,22 @@ function _createPeer() {
     // New video track arrived = screen share from other side
     if (_connected && track.kind === 'video') {
       if (!rv) {
-        // Audio call — create video element to show screen share
+        // Audio call вЂ” create video element to show screen share
         _showScreenReceived(remoteStream);
       }
-      // Video call — rv already updated above with new srcObject, no extra action needed
+      // Video call вЂ” rv already updated above with new srcObject, no extra action needed
     }
 
     if (!_connected && track.kind === 'audio') {
       _connected = true;
       _callConnectedTime = Date.now();
-      stopRing(); // останавливаем гудок
+      stopRing(); // РѕСЃС‚Р°РЅР°РІР»РёРІР°РµРј РіСѓРґРѕРє
       playCallSound('connect');
       _showCallWindow(remoteStream);
     } else if (!_connected && track.kind === 'video' && _callIsVid) {
       _connected = true;
       _callConnectedTime = Date.now();
-      stopRing(); // останавливаем гудок
+      stopRing(); // РѕСЃС‚Р°РЅР°РІР»РёРІР°РµРј РіСѓРґРѕРє
       playCallSound('connect');
       _showCallWindow(remoteStream);
     }
@@ -6562,7 +6580,7 @@ function _createPeer() {
   };
 }
 
-// ── TURN FALLBACK — recreate peer with TURN-first config ──
+// в”Ђв”Ђ TURN FALLBACK вЂ” recreate peer with TURN-first config в”Ђв”Ђ
 async function _recreatePeerWithTurnFallback() {
   if (!_inCall || !_callTarget || !localStream) return;
   const target = _callTarget;
@@ -6573,10 +6591,10 @@ async function _recreatePeerWithTurnFallback() {
   rtcPeer?.close();
   rtcPeer = null;
 
-  // TURN-first config — приоритет TURN relay для строгих NAT
+  // TURN-first config вЂ” РїСЂРёРѕСЂРёС‚РµС‚ TURN relay РґР»СЏ СЃС‚СЂРѕРіРёС… NAT
   const TURN_FIRST = [
     ...ICE_SERVERS.filter(s => s.urls?.toString().startsWith('turn') || s.urls?.toString().startsWith('turns')),
-    // Добавляем STUN в конец как запасной вариант
+    // Р”РѕР±Р°РІР»СЏРµРј STUN РІ РєРѕРЅРµС† РєР°Рє Р·Р°РїР°СЃРЅРѕР№ РІР°СЂРёР°РЅС‚
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:openrelay.metered.ca:3478' },
   ];
@@ -6612,15 +6630,15 @@ async function _recreatePeerWithTurnFallback() {
     const offer = await rtcPeer.createOffer();
     await rtcPeer.setLocalDescription(offer);
     socket.emit('call-offer', { to: target, from: currentUser, sdp: offer });
-    toast('Переподключение через TURN…', 'info', 3000);
+    toast('РџРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ С‡РµСЂРµР· TURNвЂ¦', 'info', 3000);
   } catch(e) {
     console.error('[TURN] Recreate peer failed:', e);
-    toast('Не удалось переподключиться', 'error', 4000);
+    toast('РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµРїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ', 'error', 4000);
     _cleanup();
   }
 }
 
-// ── SCREEN RECEIVED (other person sharing screen during audio call) ──
+// в”Ђв”Ђ SCREEN RECEIVED (other person sharing screen during audio call) в”Ђв”Ђ
 function _showScreenReceived(remoteStream) {
   document.querySelector('#screenReceiveOverlay')?.remove();
   document.querySelector('#rv')?.remove();
@@ -6632,7 +6650,7 @@ function _showScreenReceived(remoteStream) {
     return;
   }
 
-  // Скрываем аватарку/ник у смотрящего (как у шарера)
+  // РЎРєСЂС‹РІР°РµРј Р°РІР°С‚Р°СЂРєСѓ/РЅРёРє Сѓ СЃРјРѕС‚СЂСЏС‰РµРіРѕ (РєР°Рє Сѓ С€Р°СЂРµСЂР°)
   const cwAudio = document.getElementById('cwAudioContent');
   if (cwAudio) cwAudio.style.display = 'none';
 
@@ -6647,7 +6665,7 @@ function _showScreenReceived(remoteStream) {
   const badge = document.createElement('div');
   badge.id = 'screenReceiveOverlay';
   badge.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border-radius:20px;padding:4px 12px;font-size:11px;color:#fff;display:flex;align-items:center;gap:5px;white-space:nowrap;pointer-events:none;';
-  badge.innerHTML = '<i class="ti ti-screen-share" style="font-size:13px;color:var(--accent)"></i> Демонстрация экрана';
+  badge.innerHTML = '<i class="ti ti-screen-share" style="font-size:13px;color:var(--accent)"></i> Р”РµРјРѕРЅСЃС‚СЂР°С†РёСЏ СЌРєСЂР°РЅР°';
 
   win.insertBefore(scrVid, win.firstChild);
   win.appendChild(badge);
@@ -6679,24 +6697,24 @@ function _showScreenReceived(remoteStream) {
 }
 
 
-// ── Per-user volume control ───────────────────────────────────────────────
+// в”Ђв”Ђ Per-user volume control в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const _userVolumes = new Map(); // username -> volume (0.0 - 2.0, default 1.0)
 
 function _setUserVolume(username, vol) {
   vol = Math.max(0, Math.min(2, vol));
   _userVolumes.set(username, vol);
-  // Личный звонок — audio element
+  // Р›РёС‡РЅС‹Р№ Р·РІРѕРЅРѕРє вЂ” audio element
   const audio = document.getElementById('remoteAudio');
   if (audio && _callTarget === username) audio.volume = Math.min(1, vol);
-  // Групповой звонок — video element (audio plays through it)
+  // Р“СЂСѓРїРїРѕРІРѕР№ Р·РІРѕРЅРѕРє вЂ” video element (audio plays through it)
   const vid = document.getElementById('gp_vid_' + username);
-  if (vid) vid.volume = Math.min(1, vol); // браузер ограничивает до 1.0
+  if (vid) vid.volume = Math.min(1, vol); // Р±СЂР°СѓР·РµСЂ РѕРіСЂР°РЅРёС‡РёРІР°РµС‚ РґРѕ 1.0
 }
 
 function showUserVolumeMenu(e, username, displayName) {
   e.preventDefault();
   e.stopPropagation();
-  // Убираем старое меню
+  // РЈР±РёСЂР°РµРј СЃС‚Р°СЂРѕРµ РјРµРЅСЋ
   document.getElementById('userVolMenu')?.remove();
 
   const vol = _userVolumes.get(username) ?? 1.0;
@@ -6710,7 +6728,7 @@ function showUserVolumeMenu(e, username, displayName) {
       <span class="uvm-name">${esc(displayName)}</span>
     </div>
     <div class="uvm-section">
-      <div class="uvm-label"><i class="ti ti-volume"></i> Громкость пользователя</div>
+      <div class="uvm-label"><i class="ti ti-volume"></i> Р“СЂРѕРјРєРѕСЃС‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ</div>
       <div class="uvm-slider-row">
         <span class="uvm-pct" id="uvmPct">${pct}%</span>
         <input type="range" class="uvm-slider" id="uvmSlider"
@@ -6720,18 +6738,18 @@ function showUserVolumeMenu(e, username, displayName) {
     <div class="uvm-section" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
       <div class="uvm-item" id="uvmMuteBtn">
         <i class="ti ti-volume-off"></i>
-        <span>${vol === 0 ? 'Включить звук' : 'Заглушить'}</span>
+        <span>${vol === 0 ? 'Р’РєР»СЋС‡РёС‚СЊ Р·РІСѓРє' : 'Р—Р°РіР»СѓС€РёС‚СЊ'}</span>
       </div>
     </div>`;
 
-  // Позиция меню
+  // РџРѕР·РёС†РёСЏ РјРµРЅСЋ
   const x = Math.min(e.clientX, window.innerWidth - 220);
   const y = Math.min(e.clientY, window.innerHeight - 160);
   menu.style.cssText += `;left:${x}px;top:${y}px`;
 
   document.body.appendChild(menu);
 
-  // Слайдер
+  // РЎР»Р°Р№РґРµСЂ
   const slider = menu.querySelector('#uvmSlider');
   const pctEl  = menu.querySelector('#uvmPct');
   slider.addEventListener('input', () => {
@@ -6740,24 +6758,24 @@ function showUserVolumeMenu(e, username, displayName) {
     _setUserVolume(username, v);
   });
 
-  // Кнопка заглушить
+  // РљРЅРѕРїРєР° Р·Р°РіР»СѓС€РёС‚СЊ
   menu.querySelector('#uvmMuteBtn').addEventListener('click', () => {
     const curVol = _userVolumes.get(username) ?? 1.0;
     const newVol = curVol > 0 ? 0 : 1.0;
     _setUserVolume(username, newVol);
     slider.value = Math.round(newVol * 100);
     pctEl.textContent = slider.value + '%';
-    menu.querySelector('#uvmMuteBtn span').textContent = newVol === 0 ? 'Включить звук' : 'Заглушить';
+    menu.querySelector('#uvmMuteBtn span').textContent = newVol === 0 ? 'Р’РєР»СЋС‡РёС‚СЊ Р·РІСѓРє' : 'Р—Р°РіР»СѓС€РёС‚СЊ';
   });
 
-  // Закрытие по клику вне
+  // Р—Р°РєСЂС‹С‚РёРµ РїРѕ РєР»РёРєСѓ РІРЅРµ
   const closeMenu = (ev) => {
     if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', closeMenu); }
   };
   setTimeout(() => document.addEventListener('mousedown', closeMenu), 0);
 }
 
-// ── CALL WINDOW ──────────────────────────────────────────
+// в”Ђв”Ђ CALL WINDOW в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function _showCallWindow(remoteStream) {
   document.querySelectorAll('.call-win, .call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
   const win = document.createElement('div');
@@ -6765,12 +6783,12 @@ function _showCallWindow(remoteStream) {
   win.id = 'activeCallWin';
 
   const btns = `
-    <button class="cw-btn cw-mute" onclick="toggleMuteWin(this)" title="Микрофон"><i class="ti ti-microphone"></i></button>
-    <button class="cw-btn cw-screen ss-toggle" id="cwScreenBtn" title="Экран"><i class="ti ti-screen-share"></i></button>
-    <button class="cw-btn cw-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>`;
+    <button class="cw-btn cw-mute" onclick="toggleMuteWin(this)" title="РњРёРєСЂРѕС„РѕРЅ"><i class="ti ti-microphone"></i></button>
+    <button class="cw-btn cw-screen ss-toggle" id="cwScreenBtn" title="Р­РєСЂР°РЅ"><i class="ti ti-screen-share"></i></button>
+    <button class="cw-btn cw-end" onclick="endCall()" title="Р—Р°РІРµСЂС€РёС‚СЊ"><i class="ti ti-phone-off"></i></button>`;
 
   if (_callIsVid || _callNoCamera) {
-    // Если нет камеры — показываем аватарку в PIP вместо видео
+    // Р•СЃР»Рё РЅРµС‚ РєР°РјРµСЂС‹ вЂ” РїРѕРєР°Р·С‹РІР°РµРј Р°РІР°С‚Р°СЂРєСѓ РІ PIP РІРјРµСЃС‚Рѕ РІРёРґРµРѕ
     const pipContent = _callNoCamera
       ? `<div id="lv" style="position:absolute;bottom:58px;right:10px;width:90px;height:68px;border-radius:9px;border:2px solid rgba(255,255,255,.3);background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;z-index:3;font-size:24px;font-weight:700;color:#fff">${(currentUser||'?')[0].toUpperCase()}</div>`
       : `<video id="lv" autoplay playsinline webkit-playsinline muted style="position:absolute;bottom:58px;right:10px;width:90px;height:68px;border-radius:9px;border:2px solid rgba(255,255,255,.2);object-fit:cover;z-index:3;"></video>`;
@@ -6778,7 +6796,7 @@ function _showCallWindow(remoteStream) {
       <div class="cw-bg"></div>
       <video id="rv" autoplay playsinline webkit-playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;z-index:1;"></video>
       ${pipContent}
-      ${_callNoCamera ? '<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:3px 8px;border-radius:99px;z-index:5;backdrop-filter:blur(4px)">🎤 Только аудио</div>' : ''}
+      ${_callNoCamera ? '<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:3px 8px;border-radius:99px;z-index:5;backdrop-filter:blur(4px)">рџЋ¤ РўРѕР»СЊРєРѕ Р°СѓРґРёРѕ</div>' : ''}
       <div class="cw-controls" style="z-index:4;">
         <span class="cw-timer" id="cwTimer">0:00</span>
         <div class="cw-btns">${btns}</div>
@@ -6804,7 +6822,7 @@ function _showCallWindow(remoteStream) {
     const cwAva = win.querySelector('#cwAva');
     if (cwAva) {
       setAvatar(cwAva, _callTarget, userAvatars[_callTarget] || null);
-      // Правая кнопка → меню громкости
+      // РџСЂР°РІР°СЏ РєРЅРѕРїРєР° в†’ РјРµРЅСЋ РіСЂРѕРјРєРѕСЃС‚Рё
       const nick = userNicknames[_callTarget] || _callTarget;
       cwAva.style.cursor = 'context-menu';
       cwAva.addEventListener('contextmenu', e => showUserVolumeMenu(e, _callTarget, nick));
@@ -6817,10 +6835,10 @@ function _showCallWindow(remoteStream) {
     win.appendChild(audio);
   }
 
-  // Long-press screen button → quality picker
+  // Long-press screen button в†’ quality picker
   _setupScreenBtnLongPress(win);
 
-  // Long-press window → expand/collapse
+  // Long-press window в†’ expand/collapse
   _setupWinLongPress(win);
 
   makeDraggable(win);
@@ -6840,9 +6858,9 @@ function _setupScreenBtnLongPress(win) {
   const btn = win.querySelector('#cwScreenBtn');
   if (!btn) return;
   let _lpt = null;
-  // Short click → start/stop screen share
+  // Short click в†’ start/stop screen share
   btn.addEventListener('click', () => switchToScreenShare());
-  // Long press (500ms) → quality picker (only when sharing)
+  // Long press (500ms) в†’ quality picker (only when sharing)
   btn.addEventListener('pointerdown', () => {
     _lpt = setTimeout(() => {
       _lpt = null;
@@ -6889,8 +6907,8 @@ function _setupWinLongPress(win) {
   win.addEventListener('pointerleave', () => { win.classList.remove('pressing'); clearTimeout(_lpt); _lpt = null; });
 }
 
-// Make call window draggable ← УДОБСТВО
-// ── EXPAND / MINIMIZE call window ──────────────────────
+// Make call window draggable в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в”Ђв”Ђ EXPAND / MINIMIZE call window в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function toggleCallExpand() {
   const win = document.getElementById('activeCallWin');
   if (!win) return;
@@ -6914,7 +6932,7 @@ function toggleCallExpand() {
 
 function makeDraggable(el) {
   let ox=0, oy=0;
-  // Position from CSS (top-right) — let CSS handle initial position
+  // Position from CSS (top-right) вЂ” let CSS handle initial position
 
   const onDown = (e) => {
     if (e.target.closest('button, video')) return;
@@ -6946,7 +6964,7 @@ function makeDraggable(el) {
   el.addEventListener('touchstart', onDown, { passive: false });
 }
 
-// ── MUTE ────────────────────────────────────────────────
+// в”Ђв”Ђ MUTE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function toggleMute() {
   _muted = !_muted;
   localStream?.getAudioTracks().forEach(t => t.enabled = !_muted);
@@ -6961,7 +6979,7 @@ function toggleMuteWin(btn) {
 }
 
 
-// ── GROUP SCREEN SHARE ─────────────────────────────────────────────────────
+// в”Ђв”Ђ GROUP SCREEN SHARE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _groupScreenSharing = false;
 let _groupScreenStream  = null;
 
@@ -6969,12 +6987,12 @@ async function toggleGroupScreenShare() {
   if (!_groupCall) return;
 
   if (_groupScreenSharing) {
-    // Остановить демку
+    // РћСЃС‚Р°РЅРѕРІРёС‚СЊ РґРµРјРєСѓ
     _groupScreenStream?.getTracks().forEach(t => t.stop());
     _groupScreenStream = null;
     _groupScreenSharing = false;
 
-    // Восстанавливаем видеодорожку камеры (или убираем если аудио-звонок)
+    // Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РІРёРґРµРѕРґРѕСЂРѕР¶РєСѓ РєР°РјРµСЂС‹ (РёР»Рё СѓР±РёСЂР°РµРј РµСЃР»Рё Р°СѓРґРёРѕ-Р·РІРѕРЅРѕРє)
     groupPeers.forEach(async (pc, member) => {
       const sender = pc.getSenders().find(s => s.track?.kind === 'video');
       if (sender) {
@@ -6987,16 +7005,16 @@ async function toggleGroupScreenShare() {
       }
     });
 
-    // Уведомляем всех участников
+    // РЈРІРµРґРѕРјР»СЏРµРј РІСЃРµС… СѓС‡Р°СЃС‚РЅРёРєРѕРІ
     groupPeers.forEach((_, member) => {
       socket.emit('group-screen-share-stopped', { to: member, from: currentUser });
     });
 
-    // Обновляем кнопку
+    // РћР±РЅРѕРІР»СЏРµРј РєРЅРѕРїРєСѓ
     const btn = document.getElementById('gcwScreenBtn');
     if (btn) { btn.style.background = ''; btn.querySelector('i').className = 'ti ti-screen-share'; }
 
-    // Убираем большой экран из своей плитки
+    // РЈР±РёСЂР°РµРј Р±РѕР»СЊС€РѕР№ СЌРєСЂР°РЅ РёР· СЃРІРѕРµР№ РїР»РёС‚РєРё
     const myTile = document.querySelector(`[data-participant="${currentUser}"]`);
     if (myTile) {
       const vid = myTile.querySelector('.gp-vid');
@@ -7005,16 +7023,16 @@ async function toggleGroupScreenShare() {
       if (avaWrap) avaWrap.style.display = _callIsVid ? 'none' : 'flex';
     }
 
-    toast('Демонстрация остановлена', 'info', 1500);
+    toast('Р”РµРјРѕРЅСЃС‚СЂР°С†РёСЏ РѕСЃС‚Р°РЅРѕРІР»РµРЅР°', 'info', 1500);
     return;
   }
 
-  // Проверяем поддержку
+  // РџСЂРѕРІРµСЂСЏРµРј РїРѕРґРґРµСЂР¶РєСѓ
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    toast('Браузер не поддерживает демонстрацию экрана', 'warning'); return;
+    toast('Р‘СЂР°СѓР·РµСЂ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РґРµРјРѕРЅСЃС‚СЂР°С†РёСЋ СЌРєСЂР°РЅР°', 'warning'); return;
   }
 
-  // Выбор качества → захват
+  // Р’С‹Р±РѕСЂ РєР°С‡РµСЃС‚РІР° в†’ Р·Р°С…РІР°С‚
   const opts = await new Promise(res => showScreenQualityPicker(res));
   if (!opts) return;
 
@@ -7030,7 +7048,7 @@ async function toggleGroupScreenShare() {
     });
   } catch(e) {
     if (e.name !== 'NotAllowedError' && e.name !== 'AbortError')
-      toast('Не удалось захватить экран: ' + e.message, 'error');
+      toast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°С…РІР°С‚РёС‚СЊ СЌРєСЂР°РЅ: ' + e.message, 'error');
     return;
   }
 
@@ -7038,14 +7056,14 @@ async function toggleGroupScreenShare() {
   _groupScreenSharing = true;
   const vid = captured.getVideoTracks()[0];
 
-  // Заменяем видеодорожку во всех peer-соединениях
+  // Р—Р°РјРµРЅСЏРµРј РІРёРґРµРѕРґРѕСЂРѕР¶РєСѓ РІРѕ РІСЃРµС… peer-СЃРѕРµРґРёРЅРµРЅРёСЏС…
   const peerPromises = [];
   groupPeers.forEach(async (pc, member) => {
     const sender = pc.getSenders().find(s => s.track?.kind === 'video');
     if (sender) {
       peerPromises.push(sender.replaceTrack(vid).catch(() => {}));
     } else {
-      // Аудио-звонок — добавляем новый трек + рenegotiate
+      // РђСѓРґРёРѕ-Р·РІРѕРЅРѕРє вЂ” РґРѕР±Р°РІР»СЏРµРј РЅРѕРІС‹Р№ С‚СЂРµРє + СЂenegotiate
       pc.addTrack(vid, captured);
       try {
         const offer = await pc.createOffer({ offerToReceiveVideo: true });
@@ -7053,12 +7071,12 @@ async function toggleGroupScreenShare() {
         socket.emit('call-offer', { to: member, from: currentUser, sdp: offer });
       } catch {}
     }
-    // Уведомляем участника
+    // РЈРІРµРґРѕРјР»СЏРµРј СѓС‡Р°СЃС‚РЅРёРєР°
     socket.emit('group-screen-share-started', { to: member, from: currentUser });
   });
   await Promise.all(peerPromises);
 
-  // Показываем свой экран в своей плитке
+  // РџРѕРєР°Р·С‹РІР°РµРј СЃРІРѕР№ СЌРєСЂР°РЅ РІ СЃРІРѕРµР№ РїР»РёС‚РєРµ
   const myTile = document.querySelector(`[data-participant="${currentUser}"]`);
   if (myTile) {
     const myVid = myTile.querySelector('.gp-vid');
@@ -7066,29 +7084,29 @@ async function toggleGroupScreenShare() {
     if (myVid) {
       myVid.srcObject = captured;
       myVid.style.display = 'block';
-      myVid.style.objectFit = 'contain'; // не обрезать экран
+      myVid.style.objectFit = 'contain'; // РЅРµ РѕР±СЂРµР·Р°С‚СЊ СЌРєСЂР°РЅ
       myVid.style.background = '#000';
     }
     if (myAva) myAva.style.display = 'none';
-    // Открываем свою плитку на весь экран
+    // РћС‚РєСЂС‹РІР°РµРј СЃРІРѕСЋ РїР»РёС‚РєСѓ РЅР° РІРµСЃСЊ СЌРєСЂР°РЅ
     _toggleTileFullscreen(myTile);
   }
 
-  // Обновляем кнопку
+  // РћР±РЅРѕРІР»СЏРµРј РєРЅРѕРїРєСѓ
   const btn = document.getElementById('gcwScreenBtn');
   if (btn) { btn.style.background = 'var(--accent)'; btn.querySelector('i').className = 'ti ti-screen-share-off'; }
 
-  // Когда пользователь нажал "Остановить" в браузере
+  // РљРѕРіРґР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅР°Р¶Р°Р» "РћСЃС‚Р°РЅРѕРІРёС‚СЊ" РІ Р±СЂР°СѓР·РµСЂРµ
   vid.onended = () => toggleGroupScreenShare();
 
-  toast('Демонстрация экрана начата', 'info', 1500);
+  toast('Р”РµРјРѕРЅСЃС‚СЂР°С†РёСЏ СЌРєСЂР°РЅР° РЅР°С‡Р°С‚Р°', 'info', 1500);
 }
 
-// Получили сигнал что кто-то начал шарить экран в группе
+// РџРѕР»СѓС‡РёР»Рё СЃРёРіРЅР°Р» С‡С‚Рѕ РєС‚Рѕ-С‚Рѕ РЅР°С‡Р°Р» С€Р°СЂРёС‚СЊ СЌРєСЂР°РЅ РІ РіСЂСѓРїРїРµ
 socket.on('group-screen-share-started', ({ from }) => {
   if (!_groupCall) return;
   const nick = userNicknames[from] || from;
-  toast(`${nick} показывает экран`, 'info', 2000);
+  toast(`${nick} РїРѕРєР°Р·С‹РІР°РµС‚ СЌРєСЂР°РЅ`, 'info', 2000);
   const tile = document.querySelector(`[data-participant="${from}"]`);
   if (tile) {
     let badge = tile.querySelector('.gp-ss-badge');
@@ -7099,40 +7117,40 @@ socket.on('group-screen-share-started', ({ from }) => {
       badge.style.cssText = 'position:absolute;top:7px;left:7px;background:rgba(99,102,241,.85);color:#fff;border-radius:8px;padding:3px 8px;font-size:11px;display:flex;align-items:center;gap:4px;z-index:5;';
       tile.appendChild(badge);
     }
-    // Переключаем на contain чтобы не обрезало демку
+    // РџРµСЂРµРєР»СЋС‡Р°РµРј РЅР° contain С‡С‚РѕР±С‹ РЅРµ РѕР±СЂРµР·Р°Р»Рѕ РґРµРјРєСѓ
     const vid = tile.querySelector('.gp-vid');
     if (vid) { vid.style.objectFit = 'contain'; vid.style.background = '#000'; }
-    // Автоматически открываем на весь экран
+    // РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРё РѕС‚РєСЂС‹РІР°РµРј РЅР° РІРµСЃСЊ СЌРєСЂР°РЅ
     _toggleTileFullscreen(tile);
   }
 });
 
-// Получили сигнал что кто-то остановил шаринг
+// РџРѕР»СѓС‡РёР»Рё СЃРёРіРЅР°Р» С‡С‚Рѕ РєС‚Рѕ-С‚Рѕ РѕСЃС‚Р°РЅРѕРІРёР» С€Р°СЂРёРЅРі
 socket.on('group-screen-share-stopped', ({ from }) => {
   if (!_groupCall) return;
   const tile = document.querySelector(`[data-participant="${from}"]`);
   if (tile) {
     tile.querySelector('.gp-ss-badge')?.remove();
-    // Возвращаем cover и убираем fullscreen
+    // Р’РѕР·РІСЂР°С‰Р°РµРј cover Рё СѓР±РёСЂР°РµРј fullscreen
     const vid2 = tile.querySelector('.gp-vid');
     if (vid2) { vid2.style.objectFit = ''; vid2.style.background = ''; }
     if (_fullscreenTile === tile) _toggleTileFullscreen(tile);
-    // Сбрасываем video: если у участника нет камеры — скрываем, показываем аватарку
+    // РЎР±СЂР°СЃС‹РІР°РµРј video: РµСЃР»Рё Сѓ СѓС‡Р°СЃС‚РЅРёРєР° РЅРµС‚ РєР°РјРµСЂС‹ вЂ” СЃРєСЂС‹РІР°РµРј, РїРѕРєР°Р·С‹РІР°РµРј Р°РІР°С‚Р°СЂРєСѓ
     const vid = tile.querySelector('.gp-vid');
     const avaWrap = tile.querySelector('.gp-ava-wrap');
-    // Получаем текущий remoteStream этого участника из peer connection
+    // РџРѕР»СѓС‡Р°РµРј С‚РµРєСѓС‰РёР№ remoteStream СЌС‚РѕРіРѕ СѓС‡Р°СЃС‚РЅРёРєР° РёР· peer connection
     const pc = groupPeers.get(from);
     if (pc && vid) {
       const receivers = pc.getReceivers();
       const videoReceiver = receivers.find(r => r.track?.kind === 'video');
       if (videoReceiver && videoReceiver.track.readyState === 'live') {
-        // Есть живая видеодорожка (камера партнёра)
+        // Р•СЃС‚СЊ Р¶РёРІР°СЏ РІРёРґРµРѕРґРѕСЂРѕР¶РєР° (РєР°РјРµСЂР° РїР°СЂС‚РЅС‘СЂР°)
         const newStream = new MediaStream([videoReceiver.track]);
         vid.srcObject = newStream;
         vid.style.display = 'block';
         if (avaWrap) avaWrap.style.display = 'none';
       } else {
-        // Нет видео — показываем аватарку
+        // РќРµС‚ РІРёРґРµРѕ вЂ” РїРѕРєР°Р·С‹РІР°РµРј Р°РІР°С‚Р°СЂРєСѓ
         vid.srcObject = null;
         vid.style.display = 'none';
         if (avaWrap) avaWrap.style.display = 'flex';
@@ -7143,11 +7161,11 @@ socket.on('group-screen-share-stopped', ({ from }) => {
       if (avaWrap) avaWrap.style.display = 'flex';
     }
   }
-  toast(`${userNicknames[from] || from} остановил демонстрацию`, 'info', 1500);
+  toast(`${userNicknames[from] || from} РѕСЃС‚Р°РЅРѕРІРёР» РґРµРјРѕРЅСЃС‚СЂР°С†РёСЋ`, 'info', 1500);
 });
 
 
-// ── Полноэкранный режим для плитки участника ─────────────────────────────
+// в”Ђв”Ђ РџРѕР»РЅРѕСЌРєСЂР°РЅРЅС‹Р№ СЂРµР¶РёРј РґР»СЏ РїР»РёС‚РєРё СѓС‡Р°СЃС‚РЅРёРєР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _fullscreenTile = null;
 
 function _toggleTileFullscreen(tile) {
@@ -7156,7 +7174,7 @@ function _toggleTileFullscreen(tile) {
   if (!grid || !win) return;
 
   if (_fullscreenTile === tile) {
-    // Выходим
+    // Р’С‹С…РѕРґРёРј
     _fullscreenTile = null;
     tile.classList.remove('gp-tile-fullscreen');
     grid.classList.remove('has-fullscreen');
@@ -7175,7 +7193,7 @@ function _toggleTileFullscreen(tile) {
   win.classList.add('has-fs-tile');
 }
 
-// Выход из fullscreen по Escape
+// Р’С‹С…РѕРґ РёР· fullscreen РїРѕ Escape
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && _fullscreenTile) {
     _toggleTileFullscreen(_fullscreenTile);
@@ -7192,7 +7210,7 @@ function toggleGroupMute() {
   }
 }
 
-// ── SCREEN SHARE ─────────────────────────────────────────
+// в”Ђв”Ђ SCREEN SHARE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function _applyScreenShare(capturedStream) {
   if (!rtcPeer) { capturedStream.getTracks().forEach(t => t.stop()); return; }
   screenStream = capturedStream;
@@ -7204,10 +7222,10 @@ async function _applyScreenShare(capturedStream) {
   const existingSender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
 
   if (existingSender) {
-    // VIDEO CALL: use replaceTrack — seamless, no renegotiation needed, ontrack fires on receiver
+    // VIDEO CALL: use replaceTrack вЂ” seamless, no renegotiation needed, ontrack fires on receiver
     try {
       await existingSender.replaceTrack(vid);
-      console.log('[SS] replaceTrack done — receiver gets new video');
+      console.log('[SS] replaceTrack done вЂ” receiver gets new video');
       // Signal to receiver via custom socket event so they know to show screen UI
       socket.emit('screen-share-started', { to: _callTarget, from: currentUser });
     } catch(e) { console.error('[SS] replaceTrack error:', e); return; }
@@ -7230,16 +7248,16 @@ async function _applyScreenShare(capturedStream) {
       await rtcPeer.setLocalDescription(offer);
       console.log('[SS] Offer SDP (first 200):', offer.sdp.slice(0, 200));
       socket.emit('call-offer', { to: _callTarget, from: currentUser, sdp: offer });
-      console.log('[SS] Renegotiation offer sent for audio→screen');
+      console.log('[SS] Renegotiation offer sent for audioв†’screen');
     } catch(e) { console.error('[SS] renegotiation error:', e); return; }
   }
 
-  // Звонящий — показываем маленький превью своего экрана в PIP
-  // и большой экран СОБЕСЕДНИКА (rv) оставляем без изменений
+  // Р—РІРѕРЅСЏС‰РёР№ вЂ” РїРѕРєР°Р·С‹РІР°РµРј РјР°Р»РµРЅСЊРєРёР№ РїСЂРµРІСЊСЋ СЃРІРѕРµРіРѕ СЌРєСЂР°РЅР° РІ PIP
+  // Рё Р±РѕР»СЊС€РѕР№ СЌРєСЂР°РЅ РЎРћР‘Р•РЎР•Р”РќРРљРђ (rv) РѕСЃС‚Р°РІР»СЏРµРј Р±РµР· РёР·РјРµРЅРµРЅРёР№
   const win = document.getElementById('activeCallWin');
   const lv = win?.querySelector('#lv');
   if (lv) {
-    // Уже есть PIP — показываем превью своего экрана там (может быть display:none)
+    // РЈР¶Рµ РµСЃС‚СЊ PIP вЂ” РїРѕРєР°Р·С‹РІР°РµРј РїСЂРµРІСЊСЋ СЃРІРѕРµРіРѕ СЌРєСЂР°РЅР° С‚Р°Рј (РјРѕР¶РµС‚ Р±С‹С‚СЊ display:none)
     lv.srcObject = screenStream;
     lv.style.display = 'block';
     lv.style.width  = '180px';
@@ -7248,7 +7266,7 @@ async function _applyScreenShare(capturedStream) {
     lv.style.background = '#000';
     lv.play().catch(() => {});
   } else if (win) {
-    // Добавляем маленький превью своего экрана в углу
+    // Р”РѕР±Р°РІР»СЏРµРј РјР°Р»РµРЅСЊРєРёР№ РїСЂРµРІСЊСЋ СЃРІРѕРµРіРѕ СЌРєСЂР°РЅР° РІ СѓРіР»Сѓ
     const pip = document.createElement('video');
     pip.id = 'lv'; pip.autoplay = true; pip.playsinline = true; pip.muted = true;
     pip.style.cssText = 'position:absolute;bottom:58px;right:10px;width:160px;height:90px;border-radius:8px;border:2px solid rgba(255,255,255,.3);object-fit:contain;background:#000;z-index:3;';
@@ -7262,10 +7280,10 @@ async function _applyScreenShare(capturedStream) {
     b.style.background = 'var(--accent)';
     b.querySelector('i').className = 'ti ti-screen-share-off';
   });
-  // Скрываем аватарку/имя во время демонстрации экрана
+  // РЎРєСЂС‹РІР°РµРј Р°РІР°С‚Р°СЂРєСѓ/РёРјСЏ РІРѕ РІСЂРµРјСЏ РґРµРјРѕРЅСЃС‚СЂР°С†РёРё СЌРєСЂР°РЅР°
   const ac = document.getElementById('cwAudioContent');
   if (ac) { ac.style.display = 'none'; ac.style.pointerEvents = 'none'; }
-  toast('Демонстрация экрана активна', 'success', 2500);
+  toast('Р”РµРјРѕРЅСЃС‚СЂР°С†РёСЏ СЌРєСЂР°РЅР° Р°РєС‚РёРІРЅР°', 'success', 2500);
 
   vid.onended = () => switchToScreenShare(); // user clicks "stop sharing" in browser
 }
@@ -7280,12 +7298,12 @@ async function switchToScreenShare() {
     if (isMobile) {
       await dialog({
         icon: 'ti-device-mobile', iconType: 'warning',
-        title: 'Демонстрация экрана',
-        msg: 'Мобильные браузеры не позволяют приложениям захватывать экран. Чтобы поделиться экраном, используйте Aura на компьютере или установите PWA-приложение.',
-        ok: 'Понятно', cancel: null
+        title: 'Р”РµРјРѕРЅСЃС‚СЂР°С†РёСЏ СЌРєСЂР°РЅР°',
+        msg: 'РњРѕР±РёР»СЊРЅС‹Рµ Р±СЂР°СѓР·РµСЂС‹ РЅРµ РїРѕР·РІРѕР»СЏСЋС‚ РїСЂРёР»РѕР¶РµРЅРёСЏРј Р·Р°С…РІР°С‚С‹РІР°С‚СЊ СЌРєСЂР°РЅ. Р§С‚РѕР±С‹ РїРѕРґРµР»РёС‚СЊСЃСЏ СЌРєСЂР°РЅРѕРј, РёСЃРїРѕР»СЊР·СѓР№С‚Рµ Aura РЅР° РєРѕРјРїСЊСЋС‚РµСЂРµ РёР»Рё СѓСЃС‚Р°РЅРѕРІРёС‚Рµ PWA-РїСЂРёР»РѕР¶РµРЅРёРµ.',
+        ok: 'РџРѕРЅСЏС‚РЅРѕ', cancel: null
       });
     } else {
-      toast('Ваш браузер не поддерживает демонстрацию экрана', 'warning', 5000);
+      toast('Р’Р°С€ Р±СЂР°СѓР·РµСЂ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РґРµРјРѕРЅСЃС‚СЂР°С†РёСЋ СЌРєСЂР°РЅР°', 'warning', 5000);
     }
     return;
   }
@@ -7294,33 +7312,33 @@ async function switchToScreenShare() {
     screenStream = null; _screenSharing = false;
     socket.emit('screen-share-stopped', { to: _callTarget, from: currentUser });
     document.querySelectorAll('.ss-toggle').forEach(b => {
-      b.style.background = ''; b.title = 'Экран';
+      b.style.background = ''; b.title = 'Р­РєСЂР°РЅ';
       b.querySelector('i').className = 'ti ti-screen-share';
     });
-    // Восстанавливаем аватарку/имя у шарера
+    // Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј Р°РІР°С‚Р°СЂРєСѓ/РёРјСЏ Сѓ С€Р°СЂРµСЂР°
     const ac = document.getElementById('cwAudioContent');
     if (ac) { ac.style.display = ''; ac.style.pointerEvents = ''; }
-    // Убираем свой PIP превью экрана
+    // РЈР±РёСЂР°РµРј СЃРІРѕР№ PIP РїСЂРµРІСЊСЋ СЌРєСЂР°РЅР°
     const lv = document.getElementById('activeCallWin')?.querySelector('#lv');
     if (lv) {
       lv.srcObject = null;
-      lv.style.display = 'none'; // скрываем pip превью своей демки
+      lv.style.display = 'none'; // СЃРєСЂС‹РІР°РµРј pip РїСЂРµРІСЊСЋ СЃРІРѕРµР№ РґРµРјРєРё
     }
-    // Если это был аудиозвонок — убираем видео элемент
+    // Р•СЃР»Рё СЌС‚Рѕ Р±С‹Р» Р°СѓРґРёРѕР·РІРѕРЅРѕРє вЂ” СѓР±РёСЂР°РµРј РІРёРґРµРѕ СЌР»РµРјРµРЅС‚
     const win2 = document.getElementById('activeCallWin');
     if (win2) {
       if (!_callIsVid && !_partnerSharing) {
-        // Убираем #rv только если партнёр ТОЖЕ не шарит
+        // РЈР±РёСЂР°РµРј #rv С‚РѕР»СЊРєРѕ РµСЃР»Рё РїР°СЂС‚РЅС‘СЂ РўРћР–Р• РЅРµ С€Р°СЂРёС‚
         win2.querySelector('#rv')?.remove();
         win2.style.height = '';
       } else if (_partnerSharing) {
-        // Партнёр ещё шарит — показываем его экран снова (он мог быть скрыт)
+        // РџР°СЂС‚РЅС‘СЂ РµС‰С‘ С€Р°СЂРёС‚ вЂ” РїРѕРєР°Р·С‹РІР°РµРј РµРіРѕ СЌРєСЂР°РЅ СЃРЅРѕРІР° (РѕРЅ РјРѕРі Р±С‹С‚СЊ СЃРєСЂС‹С‚)
         const rvEl = document.querySelector('#rv');
         if (rvEl) rvEl.style.display = 'block';
         const cwA = document.getElementById('cwAudioContent');
-        if (cwA) cwA.style.display = 'none'; // всё ещё скрыт пока партнёр шарит
+        if (cwA) cwA.style.display = 'none'; // РІСЃС‘ РµС‰С‘ СЃРєСЂС‹С‚ РїРѕРєР° РїР°СЂС‚РЅС‘СЂ С€Р°СЂРёС‚
       }
-      // Восстанавливаем камеру в lv если видеозвонок
+      // Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РєР°РјРµСЂСѓ РІ lv РµСЃР»Рё РІРёРґРµРѕР·РІРѕРЅРѕРє
       if (_callIsVid && lv && localStream) {
         lv.srcObject = localStream;
         lv.style.width = '';
@@ -7329,13 +7347,13 @@ async function switchToScreenShare() {
         lv.style.background = '';
       }
     }
-    toast('Демонстрация остановлена', 'info', 2000);
+    toast('Р”РµРјРѕРЅСЃС‚СЂР°С†РёСЏ РѕСЃС‚Р°РЅРѕРІР»РµРЅР°', 'info', 2000);
     return;
   }
 
-  // Показываем выбор качества, потом getDisplayMedia
+  // РџРѕРєР°Р·С‹РІР°РµРј РІС‹Р±РѕСЂ РєР°С‡РµСЃС‚РІР°, РїРѕС‚РѕРј getDisplayMedia
   let _selectedOpts = await new Promise(res => showScreenQualityPicker(res));
-  if (!_selectedOpts) return; // пользователь отменил
+  if (!_selectedOpts) return; // РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РѕС‚РјРµРЅРёР»
 
   const resMap = { '1080p':{w:1920,h:1080}, '720p':{w:1280,h:720}, '480p':{w:854,h:480} };
   const rz = resMap[_selectedOpts.res] || resMap['720p'];
@@ -7349,7 +7367,7 @@ async function switchToScreenShare() {
     });
   } catch(e) {
     if (e.name !== 'NotAllowedError' && e.name !== 'AbortError')
-      toast('Не удалось захватить экран: ' + e.message, 'error');
+      toast('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°С…РІР°С‚РёС‚СЊ СЌРєСЂР°РЅ: ' + e.message, 'error');
     return;
   }
   if (!_capturedStream) return;
@@ -7362,10 +7380,10 @@ function showScreenQualityPicker(cb) {
   if (!ov || !box) { cb({ res:'720p', fps:'30' }); return; }
   box.innerHTML = `
     <div class="dlg-ico info"><i class="ti ti-screen-share"></i></div>
-    <h3>Демонстрация экрана</h3>
+    <h3>Р”РµРјРѕРЅСЃС‚СЂР°С†РёСЏ СЌРєСЂР°РЅР°</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div>
-        <p class="lbl mb-6">Разрешение</p>
+        <p class="lbl mb-6">Р Р°Р·СЂРµС€РµРЅРёРµ</p>
         ${['1080p','720p','480p'].map((v,i) => `<label class="sq-opt${i===1?' sq-sel':''}"><input type="radio" name="sqr" value="${v}"${i===1?' checked':''}> ${v}</label>`).join('')}
       </div>
       <div>
@@ -7374,8 +7392,8 @@ function showScreenQualityPicker(cb) {
       </div>
     </div>
     <div class="dlg-btns">
-      <button class="btn-secondary" id="dlgNo">Отмена</button>
-      <button class="btn-primary" id="dlgOk"><i class="ti ti-screen-share"></i> Начать</button>
+      <button class="btn-secondary" id="dlgNo">РћС‚РјРµРЅР°</button>
+      <button class="btn-primary" id="dlgOk"><i class="ti ti-screen-share"></i> РќР°С‡Р°С‚СЊ</button>
     </div>`;
   if (!document.getElementById('sqStyle')) {
     const st = document.createElement('style'); st.id='sqStyle';
@@ -7393,11 +7411,11 @@ function showScreenQualityPicker(cb) {
   ov.onclick = e => { if (e.target===ov) close(null); };
 }
 
-// ── END / CLEANUP ────────────────────────────────────────
+// в”Ђв”Ђ END / CLEANUP в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function endCall() {
   stopRing();
   if (_groupCall) {
-    // Групповой звонок — шлём завершение всем участникам с groupId
+    // Р“СЂСѓРїРїРѕРІРѕР№ Р·РІРѕРЅРѕРє вЂ” С€Р»С‘Рј Р·Р°РІРµСЂС€РµРЅРёРµ РІСЃРµРј СѓС‡Р°СЃС‚РЅРёРєР°Рј СЃ groupId
     const gid = currentRoom?.replace('group:','') || _callRoom?.replace('group:','') || '';
     const targets = [...groupPeers.keys()];
     if (_callTarget && !targets.includes(_callTarget)) targets.push(_callTarget);
@@ -7410,31 +7428,31 @@ function endCall() {
   _cleanup();
 }
 function doLogout() {
-  // Очищаем сессию и возвращаем на экран входа
+  // РћС‡РёС‰Р°РµРј СЃРµСЃСЃРёСЋ Рё РІРѕР·РІСЂР°С‰Р°РµРј РЅР° СЌРєСЂР°РЅ РІС…РѕРґР°
   localStorage.removeItem('aura_user');
   localStorage.removeItem('aura_pass');
   localStorage.removeItem('aura_last_room');
-  // Отключаемся от сокета
+  // РћС‚РєР»СЋС‡Р°РµРјСЃСЏ РѕС‚ СЃРѕРєРµС‚Р°
   socket.emit('logout', { username: currentUser });
-  // Сбрасываем состояние
+  // РЎР±СЂР°СЃС‹РІР°РµРј СЃРѕСЃС‚РѕСЏРЅРёРµ
   currentUser = null;
   if (_inCall) endCall();
-  // Показываем экран входа
+  // РџРѕРєР°Р·С‹РІР°РµРј СЌРєСЂР°РЅ РІС…РѕРґР°
   const chatApp = document.getElementById('chatApp');
   if (chatApp) chatApp.style.display = 'none';
   const loginScreen = document.getElementById('loginScreen');
   if (loginScreen) { loginScreen.style.display = 'flex'; loginScreen.classList.add('open'); }
   closeSettings();
-  toast('Вы вышли из аккаунта', 'info', 2000);
+  toast('Р’С‹ РІС‹С€Р»Рё РёР· Р°РєРєР°СѓРЅС‚Р°', 'info', 2000);
 }
 
 function _cleanup() {
-  if (_connected) playCallSound('end'); // звук только если звонок был принят
+  if (_connected) playCallSound('end'); // Р·РІСѓРє С‚РѕР»СЊРєРѕ РµСЃР»Рё Р·РІРѕРЅРѕРє Р±С‹Р» РїСЂРёРЅСЏС‚
   stopRing();
   // Add call record to chat if call was connected
   if (_callTarget && _callRoom && !_groupCall) {
     const dur = _callConnectedTime ? Math.floor((Date.now() - _callConnectedTime) / 1000) : 0;
-    // Только звонивший (caller) сохраняет запись — сервер разошлёт обоим
+    // РўРѕР»СЊРєРѕ Р·РІРѕРЅРёРІС€РёР№ (caller) СЃРѕС…СЂР°РЅСЏРµС‚ Р·Р°РїРёСЃСЊ вЂ” СЃРµСЂРІРµСЂ СЂР°Р·РѕС€Р»С‘С‚ РѕР±РѕРёРј
     if (_isCaller) {
       socket.emit('save-call-record', {
         room: _callRoom, from: currentUser, to: _callTarget,
@@ -7472,7 +7490,7 @@ function _cleanup() {
 
 let _callConnectedTime = null;
 let _callNoCamera = false;
-let _callAutoTimeout = null; // авто-сброс через 60с если не ответили
+let _callAutoTimeout = null; // Р°РІС‚Рѕ-СЃР±СЂРѕСЃ С‡РµСЂРµР· 60СЃ РµСЃР»Рё РЅРµ РѕС‚РІРµС‚РёР»Рё
 
 function addCallRecord(label, extra, time) {
   const row = document.createElement('div');
@@ -7486,21 +7504,21 @@ function addCallRecord(label, extra, time) {
 }
 
 
-// ══════════════════════════════════════════════
-// VIDEO CIRCLE — fullscreen viewer  ← КРАСОТА
-// ══════════════════════════════════════════════
-// ── Video Circle ─────────────────────────────────────────────────────────
-// Одно нажатие:  expand в чате (сообщения плавно отодвигаются)
-// Двойное:       fullscreen на весь экран
-// Конец видео:   автоматически схлопывается обратно
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// VIDEO CIRCLE вЂ” fullscreen viewer  в†ђ РљР РђРЎРћРўРђ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// в”Ђв”Ђ Video Circle в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// РћРґРЅРѕ РЅР°Р¶Р°С‚РёРµ:  expand РІ С‡Р°С‚Рµ (СЃРѕРѕР±С‰РµРЅРёСЏ РїР»Р°РІРЅРѕ РѕС‚РѕРґРІРёРіР°СЋС‚СЃСЏ)
+// Р”РІРѕР№РЅРѕРµ:       fullscreen РЅР° РІРµСЃСЊ СЌРєСЂР°РЅ
+// РљРѕРЅРµС† РІРёРґРµРѕ:   Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё СЃС…Р»РѕРїС‹РІР°РµС‚СЃСЏ РѕР±СЂР°С‚РЅРѕ
 
 let _vcExpandedId   = null;
 let _vcExpandTimer  = null;
-let _vcTapCount     = 0;    // счётчик тапов
-let _vcTapTimer     = null; // таймер для double-tap
+let _vcTapCount     = 0;    // СЃС‡С‘С‚С‡РёРє С‚Р°РїРѕРІ
+let _vcTapTimer     = null; // С‚Р°Р№РјРµСЂ РґР»СЏ double-tap
 
-// ── Одно нажатие: увеличиваем на месте + скроллим к нему
-// ── Двойное нажатие: fullscreen overlay
+// в”Ђв”Ђ РћРґРЅРѕ РЅР°Р¶Р°С‚РёРµ: СѓРІРµР»РёС‡РёРІР°РµРј РЅР° РјРµСЃС‚Рµ + СЃРєСЂРѕР»Р»РёРј Рє РЅРµРјСѓ
+// в”Ђв”Ђ Р”РІРѕР№РЅРѕРµ РЅР°Р¶Р°С‚РёРµ: fullscreen overlay
 function vcTogglePlay(id) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
@@ -7509,13 +7527,13 @@ function vcTogglePlay(id) {
   clearTimeout(_vcTapTimer);
 
   if (_vcTapCount === 1) {
-    // Ждём 260ms — если второго тапа нет, считаем одиночным
+    // Р–РґС‘Рј 260ms вЂ” РµСЃР»Рё РІС‚РѕСЂРѕРіРѕ С‚Р°РїР° РЅРµС‚, СЃС‡РёС‚Р°РµРј РѕРґРёРЅРѕС‡РЅС‹Рј
     _vcTapTimer = setTimeout(() => {
       _vcTapCount = 0;
       _vcSingleTap(id);
     }, 260);
   } else {
-    // Double-tap → fullscreen
+    // Double-tap в†’ fullscreen
     _vcTapCount = 0;
     clearTimeout(_vcTapTimer);
     _vcOpenFullscreen(id);
@@ -7530,10 +7548,10 @@ function _vcSingleTap(id) {
   const isExpanded = wrap.classList.contains('vc-expanded');
 
   if (isExpanded) {
-    // Пауза/воспроизведение если уже расширен
+    // РџР°СѓР·Р°/РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёРµ РµСЃР»Рё СѓР¶Рµ СЂР°СЃС€РёСЂРµРЅ
     if (v.paused) v.play().catch(() => {});
     else v.pause();
-    // Обновляем overlay
+    // РћР±РЅРѕРІР»СЏРµРј overlay
     const ov = document.getElementById(id + '_ov');
     if (ov) {
       ov.querySelector('i').className = v.paused ? 'ti ti-player-play vc-play-ico' : 'ti ti-player-pause vc-play-ico';
@@ -7558,12 +7576,12 @@ function _vcExpand(id) {
 
   _vcExpandedId = id;
 
-  // Целевой размер — вписываем в ширину чата
+  // Р¦РµР»РµРІРѕР№ СЂР°Р·РјРµСЂ вЂ” РІРїРёСЃС‹РІР°РµРј РІ С€РёСЂРёРЅСѓ С‡Р°С‚Р°
   const msgs  = document.getElementById('messages');
   const msgsW = msgs ? msgs.clientWidth - 32 : window.innerWidth - 32; // 16px padding each side
   const target = Math.min(Math.floor(msgsW), window.innerWidth <= 480 ? 260 : 340);
 
-  // Плавно увеличиваем wrap — сообщения автоматически раздвинутся вниз
+  // РџР»Р°РІРЅРѕ СѓРІРµР»РёС‡РёРІР°РµРј wrap вЂ” СЃРѕРѕР±С‰РµРЅРёСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё СЂР°Р·РґРІРёРЅСѓС‚СЃСЏ РІРЅРёР·
   wrap.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1), box-shadow .35s, border-radius .35s';
   wrap.style.width      = target + 'px';
   wrap.style.height     = target + 'px';
@@ -7571,38 +7589,38 @@ function _vcExpand(id) {
   wrap.style.zIndex     = '10';
   wrap.classList.add('vc-expanded');
 
-  // Видео внутри
+  // Р’РёРґРµРѕ РІРЅСѓС‚СЂРё
   v.style.transition = 'width .35s cubic-bezier(.16,1,.3,1), height .35s cubic-bezier(.16,1,.3,1)';
   v.style.width  = target + 'px';
   v.style.height = target + 'px';
 
-  // Прячем иконку play
+  // РџСЂСЏС‡РµРј РёРєРѕРЅРєСѓ play
   const ov = document.getElementById(id + '_ov');
   if (ov) { ov.style.transition = 'opacity .2s'; ov.style.opacity = '0'; }
 
-  // Запускаем
+  // Р—Р°РїСѓСЃРєР°РµРј
   v.play().catch(() => {});
   v.onended = () => _vcCollapse(id);
 
-  // Скроллим чтобы квадрат был виден — после анимации
+  // РЎРєСЂРѕР»Р»РёРј С‡С‚РѕР±С‹ РєРІР°РґСЂР°С‚ Р±С‹Р» РІРёРґРµРЅ вЂ” РїРѕСЃР»Рµ Р°РЅРёРјР°С†РёРё
   setTimeout(() => {
     const wrapEl = document.getElementById(id + '_wrap');
     if (wrapEl && msgs) {
       const wrapRect = wrapEl.getBoundingClientRect();
       const msgsRect = msgs.getBoundingClientRect();
-      // Если низ квадрата вылазит за нижний край области — скроллим вниз
+      // Р•СЃР»Рё РЅРёР· РєРІР°РґСЂР°С‚Р° РІС‹Р»Р°Р·РёС‚ Р·Р° РЅРёР¶РЅРёР№ РєСЂР°Р№ РѕР±Р»Р°СЃС‚Рё вЂ” СЃРєСЂРѕР»Р»РёРј РІРЅРёР·
       if (wrapRect.bottom > msgsRect.bottom - 20) {
         const delta = wrapRect.bottom - msgsRect.bottom + 24;
         msgs.scrollBy({ top: delta, behavior: 'smooth' });
       }
-      // Если верх квадрата выше верхнего края — скроллим вверх
+      // Р•СЃР»Рё РІРµСЂС… РєРІР°РґСЂР°С‚Р° РІС‹С€Рµ РІРµСЂС…РЅРµРіРѕ РєСЂР°СЏ вЂ” СЃРєСЂРѕР»Р»РёРј РІРІРµСЂС…
       else if (wrapRect.top < msgsRect.top + 10) {
         msgs.scrollBy({ top: wrapRect.top - msgsRect.top - 10, behavior: 'smooth' });
       }
     }
-  }, 380); // после завершения анимации
+  }, 380); // РїРѕСЃР»Рµ Р·Р°РІРµСЂС€РµРЅРёСЏ Р°РЅРёРјР°С†РёРё
 
-  // При клике на расширенный — пауза/плей
+  // РџСЂРё РєР»РёРєРµ РЅР° СЂР°СЃС€РёСЂРµРЅРЅС‹Р№ вЂ” РїР°СѓР·Р°/РїР»РµР№
   wrap._expandHandler = (e) => {
     e.stopPropagation();
     _vcSingleTap(id);
@@ -7610,13 +7628,13 @@ function _vcExpand(id) {
   wrap.addEventListener('click', wrap._expandHandler);
 }
 
-// ── Collapse обратно ──────────────────────────────────────────────────────
+// в”Ђв”Ђ Collapse РѕР±СЂР°С‚РЅРѕ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function _vcCollapse(id) {
   const v    = document.getElementById(id);
   const wrap = document.getElementById(id + '_wrap');
   if (!v || !wrap) return;
 
-  const origSize = window.innerWidth <= 480 ? '160px' : '180px'; // из CSS
+  const origSize = window.innerWidth <= 480 ? '160px' : '180px'; // РёР· CSS
 
   wrap.style.transition = 'width .3s cubic-bezier(.16,1,.3,1), height .3s cubic-bezier(.16,1,.3,1), box-shadow .3s';
   wrap.style.width  = origSize;
@@ -7645,12 +7663,12 @@ function _vcCollapse(id) {
   if (_vcExpandedId === id) _vcExpandedId = null;
 }
 
-// ── Double-tap → fullscreen overlay ──────────────────────────────────────
+// в”Ђв”Ђ Double-tap в†’ fullscreen overlay в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 function _vcOpenFullscreen(id) {
   const v = document.getElementById(id);
   if (!v) return;
 
-  // Если был расширен — сначала коллапсируем
+  // Р•СЃР»Рё Р±С‹Р» СЂР°СЃС€РёСЂРµРЅ вЂ” СЃРЅР°С‡Р°Р»Р° РєРѕР»Р»Р°РїСЃРёСЂСѓРµРј
   if (_vcExpandedId === id) _vcCollapse(id);
 
   const src = v.src || v.currentSrc;
@@ -7670,18 +7688,18 @@ function _vcOpenFullscreen(id) {
 
   const hint = document.createElement('div');
   hint.style.cssText = 'color:rgba(255,255,255,.45);font-size:12px;text-align:center;';
-  hint.textContent = 'Дважды нажмите для закрытия';
+  hint.textContent = 'Р”РІР°Р¶РґС‹ РЅР°Р¶РјРёС‚Рµ РґР»СЏ Р·Р°РєСЂС‹С‚РёСЏ';
 
   const closeBtn = document.createElement('button');
   closeBtn.style.cssText = 'background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:9px 28px;border-radius:22px;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);font-family:inherit;';
-  closeBtn.innerHTML = '<i class="ti ti-x"></i> Закрыть';
+  closeBtn.innerHTML = '<i class="ti ti-x"></i> Р—Р°РєСЂС‹С‚СЊ';
   closeBtn.onclick = () => overlay.remove();
 
   overlay.appendChild(vid2);
   overlay.appendChild(hint);
   overlay.appendChild(closeBtn);
 
-  // Закрытие по двойному тапу или клику вне видео
+  // Р—Р°РєСЂС‹С‚РёРµ РїРѕ РґРІРѕР№РЅРѕРјСѓ С‚Р°РїСѓ РёР»Рё РєР»РёРєСѓ РІРЅРµ РІРёРґРµРѕ
   let _fsoTaps = 0, _fsoTimer = null;
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay || e.target === hint) {
@@ -7693,14 +7711,14 @@ function _vcOpenFullscreen(id) {
   });
 
   document.body.appendChild(overlay);
-  v.pause(); // пауза оригинала
+  v.pause(); // РїР°СѓР·Р° РѕСЂРёРіРёРЅР°Р»Р°
 }
 
 function _vcCloseFullscreen(id) {
   document.getElementById(id + '_fso')?.remove();
 }
 
-// Оставляем для совместимости (ondblclick="viewMedia" в старом HTML)
+// РћСЃС‚Р°РІР»СЏРµРј РґР»СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚Рё (ondblclick="viewMedia" РІ СЃС‚Р°СЂРѕРј HTML)
 function closeVcFullscreen(id) { _vcCloseFullscreen(id); }
 
 function vcShowDuration(id) {
@@ -7721,10 +7739,10 @@ function vcShowDuration(id) {
   dur.textContent = `${m}:${s.toString().padStart(2,'0')}`;
 }
 
-// ══════════════════════════════════════════════
-// TEXT FORMAT BAR — панель форматирования
-// Появляется при выделении мышью в поле ввода
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// TEXT FORMAT BAR вЂ” РїР°РЅРµР»СЊ С„РѕСЂРјР°С‚РёСЂРѕРІР°РЅРёСЏ
+// РџРѕСЏРІР»СЏРµС‚СЃСЏ РїСЂРё РІС‹РґРµР»РµРЅРёРё РјС‹С€СЊСЋ РІ РїРѕР»Рµ РІРІРѕРґР°
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 (function() {
   'use strict';
   let _bar = null;
@@ -7750,11 +7768,11 @@ function vcShowDuration(id) {
     _bar = bar;
 
     const BTNS = [
-      { html:'<b>B</b>',   title:'Жирный',        fn:()=>wrapSel(ta,'**','**') },
-      { html:'<i>I</i>',   title:'Курсив',         fn:()=>wrapSel(ta,'_','_') },
-      { html:'<u>U</u>',   title:'Подчёркнутый',   fn:()=>wrapSel(ta,'__','__') },
-      { html:'<s>S</s>',   title:'Зачёркнутый',    fn:()=>wrapSel(ta,'~~','~~') },
-      { html:'<code style="font-size:11px;font-family:monospace">`·`</code>', title:'Моноширинный', fn:()=>wrapSel(ta,'`','`') },
+      { html:'<b>B</b>',   title:'Р–РёСЂРЅС‹Р№',        fn:()=>wrapSel(ta,'**','**') },
+      { html:'<i>I</i>',   title:'РљСѓСЂСЃРёРІ',         fn:()=>wrapSel(ta,'_','_') },
+      { html:'<u>U</u>',   title:'РџРѕРґС‡С‘СЂРєРЅСѓС‚С‹Р№',   fn:()=>wrapSel(ta,'__','__') },
+      { html:'<s>S</s>',   title:'Р—Р°С‡С‘СЂРєРЅСѓС‚С‹Р№',    fn:()=>wrapSel(ta,'~~','~~') },
+      { html:'<code style="font-size:11px;font-family:monospace">`В·`</code>', title:'РњРѕРЅРѕС€РёСЂРёРЅРЅС‹Р№', fn:()=>wrapSel(ta,'`','`') },
     ];
 
     BTNS.forEach(b => {
@@ -7766,20 +7784,20 @@ function vcShowDuration(id) {
       bar.appendChild(btn);
     });
 
-    // Разделитель
+    // Р Р°Р·РґРµР»РёС‚РµР»СЊ
     const sep = document.createElement('div');
     sep.className = 'fmt-sep';
     bar.appendChild(sep);
 
-    // Кнопка ссылки
+    // РљРЅРѕРїРєР° СЃСЃС‹Р»РєРё
     const lBtn = document.createElement('button');
     lBtn.className = 'fmt-btn';
-    lBtn.title = 'Вставить ссылку';
+    lBtn.title = 'Р’СЃС‚Р°РІРёС‚СЊ СЃСЃС‹Р»РєСѓ';
     lBtn.innerHTML = '<i class="ti ti-link"></i>';
     lBtn.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); showLink(ta, bar, x, y); });
     bar.appendChild(lBtn);
 
-    // Добавляем в DOM (скрытым), потом позиционируем
+    // Р”РѕР±Р°РІР»СЏРµРј РІ DOM (СЃРєСЂС‹С‚С‹Рј), РїРѕС‚РѕРј РїРѕР·РёС†РёРѕРЅРёСЂСѓРµРј
     bar.style.visibility = 'hidden';
     document.body.appendChild(bar);
 
@@ -7797,7 +7815,7 @@ function vcShowDuration(id) {
   }
 
   function showLink(ta, bar, ox, oy) {
-    // Сохраняем позицию выделения
+    // РЎРѕС…СЂР°РЅСЏРµРј РїРѕР·РёС†РёСЋ РІС‹РґРµР»РµРЅРёСЏ
     const ss = ta.selectionStart, se = ta.selectionEnd;
     bar.innerHTML = '';
     const row = document.createElement('div');
@@ -7840,28 +7858,28 @@ function vcShowDuration(id) {
     });
   }
 
-  // Закрытие по клику вне
+  // Р—Р°РєСЂС‹С‚РёРµ РїРѕ РєР»РёРєСѓ РІРЅРµ
   document.addEventListener('mousedown', e => {
     if (_skip) return;
     if (_bar && !_bar.contains(e.target)) removeBar();
   });
 
-  // Инициализация — вешаем на msgInput
+  // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ вЂ” РІРµС€Р°РµРј РЅР° msgInput
   function init() {
     const ta = document.getElementById('msgInput');
     if (!ta || ta._fmtOk) return;
     ta._fmtOk = true;
 
-    // Панель появляется ТОЛЬКО по ПКМ и только если есть выделение
+    // РџР°РЅРµР»СЊ РїРѕСЏРІР»СЏРµС‚СЃСЏ РўРћР›Р¬РљРћ РїРѕ РџРљРњ Рё С‚РѕР»СЊРєРѕ РµСЃР»Рё РµСЃС‚СЊ РІС‹РґРµР»РµРЅРёРµ
     ta.addEventListener('contextmenu', e => {
       const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
-      if (!sel) return; // нет выделения — даём браузеру показать стандартное меню
+      if (!sel) return; // РЅРµС‚ РІС‹РґРµР»РµРЅРёСЏ вЂ” РґР°С‘Рј Р±СЂР°СѓР·РµСЂСѓ РїРѕРєР°Р·Р°С‚СЊ СЃС‚Р°РЅРґР°СЂС‚РЅРѕРµ РјРµРЅСЋ
       e.preventDefault();
       e.stopPropagation();
       makeBar(ta, e.clientX, e.clientY);
     });
 
-    // Touch: показываем после долгого нажатия/выделения
+    // Touch: РїРѕРєР°Р·С‹РІР°РµРј РїРѕСЃР»Рµ РґРѕР»РіРѕРіРѕ РЅР°Р¶Р°С‚РёСЏ/РІС‹РґРµР»РµРЅРёСЏ
     ta.addEventListener('touchend', () => {
       setTimeout(() => {
         const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
@@ -7880,9 +7898,9 @@ function vcShowDuration(id) {
   window.addEventListener('load', init);
 })();
 
-// ══════════════════════════════════════════════
-// VOICE PLAYER  ← КРАСОТА + УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// VOICE PLAYER  в†ђ РљР РђРЎРћРўРђ + РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const _vpAudios = {}; // pid -> Audio element
 
 function _vpGetOrCreate(pid, url) {
@@ -8000,8 +8018,8 @@ function _vpReset(pid, a) {
 }
 
 
-// KEYBOARD SHORTCUTS  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// KEYBOARD SHORTCUTS  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', e => {
     const meta = e.metaKey || e.ctrlKey;
@@ -8016,9 +8034,9 @@ function setupKeyboardShortcuts() {
   });
 }
 
-// ══════════════════════════════════════════════
-// SIDEBAR MOBILE  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// SIDEBAR MOBILE  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 let sidebarOverlay = null;
 function toggleSidebar() {
   sidebar.classList.toggle('open');
@@ -8046,10 +8064,10 @@ document.addEventListener('touchend', e => {
     toggleSidebar();
 }, { passive:true });
 
-// ══════════════════════════════════════════════
-// REALTIME POLLING  ← УДОБСТВО: fallback
-// ══════════════════════════════════════════════
-// Smart real-time polling — every 8s as fallback for socket misses
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// REALTIME POLLING  в†ђ РЈР”РћР‘РЎРўР’Рћ: fallback
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// Smart real-time polling вЂ” every 8s as fallback for socket misses
 let _lastFriendsHash = '';
 let _lastReqsHash    = '';
 setInterval(async () => {
@@ -8078,13 +8096,13 @@ setInterval(async () => {
   } catch {}
 }, 8000);
 // Keep-alive ping every 5s
-// Увеличенный интервал — браузеры throttle-ят таймеры в фоне до ~60с
-// Socket.IO сам поддерживает соединение через собственный keepalive
+// РЈРІРµР»РёС‡РµРЅРЅС‹Р№ РёРЅС‚РµСЂРІР°Р» вЂ” Р±СЂР°СѓР·РµСЂС‹ throttle-СЏС‚ С‚Р°Р№РјРµСЂС‹ РІ С„РѕРЅРµ РґРѕ ~60СЃ
+// Socket.IO СЃР°Рј РїРѕРґРґРµСЂР¶РёРІР°РµС‚ СЃРѕРµРґРёРЅРµРЅРёРµ С‡РµСЂРµР· СЃРѕР±СЃС‚РІРµРЅРЅС‹Р№ keepalive
 setInterval(() => { if (currentUser && socket.connected) socket.emit('ping'); }, 20000);
 
-// ══════════════════════════════════════════════
-// ONLINE BADGE  ← УДОБСТВО
-// ══════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// ONLINE BADGE  в†ђ РЈР”РћР‘РЎРўР’Рћ
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 socket.on('online-count', count => {
   if (onlineCount) onlineCount.textContent = count;
   if (onlinePill) onlinePill.style.display = count > 0 ? '' : 'none';
