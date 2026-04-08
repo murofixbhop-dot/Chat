@@ -793,8 +793,71 @@ option { background: var(--surface2); color: var(--text); }
 }
 /* Вертикальное видео — JS задаёт размеры, CSS не мешает */
 .cvp-wrap.cvp-portrait video {
-  max-height: 420px;
+  max-height: none;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+}
+/* Скрываем горизонтальный слайдер у portrait */
+.cvp-wrap.cvp-portrait .cvp-vol-wrap { display: none; }
+
+/* Вертикальный слайдер громкости (portrait) */
+.cvp-vol-portrait {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 5;
+  /* Скрыт по умолчанию */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+/* Показываем при hover (десктоп) */
+.cvp-wrap.cvp-portrait:hover .cvp-vol-portrait {
+  opacity: 1;
+  pointer-events: all;
+}
+/* Показываем при тапе (мобильный) через JS класс */
+.cvp-wrap.cvp-portrait.cvp-vol-show .cvp-vol-portrait,
+.cvp-wrap.cvp-portrait:not(.controls-hidden) .cvp-vol-portrait {
+  opacity: 1;
+  pointer-events: all;
+}
+/* Вертикальный range */
+.cvp-vol-portrait-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  width: 4px;
+  height: 80px;
+  cursor: pointer;
+  accent-color: var(--accent, #6366f1);
+  background: rgba(255,255,255,.25);
+  border-radius: 99px;
+  outline: none;
+}
+.cvp-vol-portrait-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.4);
+  cursor: pointer;
+}
+.cvp-vol-portrait-btn {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  background: rgba(0,0,0,.5) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  font-size: 13px !important;
 }
 /* Видео всегда внутри пузыря */
 .msg-bubble .cvp-wrap {
@@ -1718,7 +1781,28 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
 .msg-row:not(.own) .vp-bar { background: var(--border2); }
 .msg-row:not(.own) .vp-bar.played { background: var(--accent); }
 .msg-row:not(.own) .vp-play { background: var(--accent); color: #fff; }
-.vp-meta { display: flex; justify-content: space-between; font-size: 9px; color: var(--text2); }
+.vp-waveform-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vp-waveform-row .vp-waveform {
+  flex: 1;
+  margin-bottom: 0;
+}
+.vp-dur {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,.65);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 30px;
+  text-align: right;
+  line-height: 1;
+}
+.msg-row:not(.own) .vp-dur { color: var(--text2); }
+.vp-meta { display: flex; justify-content: flex-start; font-size: 9px; color: var(--text2); margin-top: 2px; }
 
 /* File message — compact */
 .msg-file-body { min-width: 0; }
