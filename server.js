@@ -106,7 +106,8 @@ async function getAudioDuration(buffer) {
     return isFinite(dur) ? Math.round(dur) : 0;
   } catch { return 0; }
   finally { try{_fs.unlinkSync(tmpFile);}catch{} }
-} используется для Gmail SMTP (загружается динамически в sendRecoveryEmail)
+}
+// nodemailer используется для Gmail SMTP (загружается динамически в sendRecoveryEmail)
 
 const app = express();
 const server = http.createServer(app);
