@@ -8104,3 +8104,70 @@ socket.on('online-count', count => {
   if (onlineCount) onlineCount.textContent = count;
   if (onlinePill) onlinePill.style.display = count > 0 ? '' : 'none';
 });
+
+// Переопределяем uploadVoice в конце файла, чтобы гарантированно отправлять duration/durationMs.
+async function uploadVoice(blob, ext) {
+  let duration = 0;
+  try {
+    const tmpUrl = URL.createObjectURL(blob);
+    await new Promise(res => {
+      const a = new Audio(tmpUrl);
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        try { a.pause(); } catch {}
+        URL.revokeObjectURL(tmpUrl);
+        res();
+      };
+      const applyDuration = () => {
+        if (isFinite(a.duration) && a.duration > 0) {
+          duration = Math.max(duration, Math.round(a.duration));
+        }
+      };
+      a.preload = 'metadata';
+      a.addEventListener('loadedmetadata', applyDuration, { once: true });
+      a.addEventListener('durationchange', applyDuration);
+      a.addEventListener('canplaythrough', () => {
+        applyDuration();
+        finish();
+      }, { once: true });
+      a.addEventListener('error', finish, { once: true });
+      setTimeout(() => {
+        applyDuration();
+        finish();
+      }, 5000);
+      try { a.load(); } catch {}
+      if (isFinite(a.duration) && a.duration > 0) {
+        applyDuration();
+        finish();
+      }
+    });
+  } catch {}
+
+  const fd = new FormData();
+  fd.append('file', blob, `VOICE.${ext}`);
+  try {
+    const r = await fetch('/upload', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      const uploadDuration = Number(d.duration || 0);
+      const finalDuration = uploadDuration > 0 ? Math.round(uploadDuration) : duration;
+      socket.emit('media-message', {
+        mediaData: {
+          type: 'audio',
+          url: d.url,
+          fileName: d.name || `VOICE.${ext}`,
+          text: '',
+          duration: finalDuration,
+          durationMs: finalDuration > 0 ? finalDuration * 1000 : undefined
+        },
+        room: currentRoom
+      });
+    } else {
+      toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РіРѕР»РѕСЃРѕРІРѕРіРѕ', 'error');
+    }
+  } catch {
+    toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РіРѕР»РѕСЃРѕРІРѕРіРѕ', 'error');
+  }
+}
