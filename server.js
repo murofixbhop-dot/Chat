@@ -4,109 +4,6 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
-const _os   = require('os');
-const _path = require('path');
-const _fs   = require('fs');
-// nodemailer используется для Gmail SMTP (загружается динамически в sendRecoveryEmail)
-
-// ========== СЖАТИЕ МЕДИАФАЙЛОВ ==========
-let _sharp = null;
-try { _sharp = require('sharp'); } catch(e) { console.warn('[compress] sharp недоступен:', e.message); }
-
-async function compressImage(buffer, mimeType) {
-  if (!_sharp) return { buffer, mimeType };
-  try {
-    if (mimeType === 'image/gif' || mimeType === 'image/svg+xml') return { buffer, mimeType };
-    if (buffer.length < 150 * 1024) return { buffer, mimeType };
-    const img  = _sharp(buffer).rotate();
-    const meta = await img.metadata();
-    const maxDim = 1600;
-    let pipeline = (meta.width > maxDim || meta.height > maxDim)
-      ? img.resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true })
-      : img;
-    const hasTrans = meta.hasAlpha && (mimeType === 'image/png' || mimeType === 'image/webp');
-    let outBuffer, outMime;
-    if (hasTrans) {
-      outBuffer = await pipeline.webp({ quality: 80, alphaQuality: 85 }).toBuffer();
-      outMime   = 'image/webp';
-    } else {
-      outBuffer = await pipeline.jpeg({ quality: 82, progressive: true }).toBuffer();
-      outMime   = 'image/jpeg';
-    }
-    if (outBuffer.length < buffer.length * 0.95) {
-      console.log(`[compress] img ${(buffer.length/1024).toFixed(0)}KB → ${(outBuffer.length/1024).toFixed(0)}KB`);
-      return { buffer: outBuffer, mimeType: outMime };
-    }
-    return { buffer, mimeType };
-  } catch(e) { console.warn('[compress] img:', e.message); return { buffer, mimeType }; }
-}
-
-async function compressVideo(buffer, mimeType, isCircle = false) {
-  if (buffer.length < 2 * 1024 * 1024) return { buffer, mimeType: 'video/mp4' };
-  const tmpIn  = _path.join(_os.tmpdir(), `aura_vi_${Date.now()}.tmp`);
-  const tmpOut = _path.join(_os.tmpdir(), `aura_vo_${Date.now()}.mp4`);
-  try {
-    _fs.writeFileSync(tmpIn, buffer);
-    const maxSize = isCircle ? '640' : '1280';
-    const crf     = isCircle ? '30'  : '28';
-    const abr     = isCircle ? '96k' : '128k';
-    await new Promise((resolve, reject) => {
-      execFile('ffmpeg', [
-        '-y', '-i', tmpIn,
-        '-c:v', 'libx264', '-crf', crf, '-preset', 'fast',
-        '-vf', `scale='min(${maxSize},iw)':'min(${maxSize},ih)':force_original_aspect_ratio=decrease`,
-        '-c:a', 'aac', '-b:a', abr, '-movflags', '+faststart',
-        '-max_muxing_queue_size', '1024', tmpOut
-      ], { timeout: 120000 }, (err, _, stderr) => err ? reject(new Error(stderr || err.message)) : resolve());
-    });
-    const outBuf = _fs.readFileSync(tmpOut);
-    if (outBuf.length < buffer.length * 0.97) {
-      console.log(`[compress] video ${(buffer.length/1024/1024).toFixed(1)}MB → ${(outBuf.length/1024/1024).toFixed(1)}MB`);
-      return { buffer: outBuf, mimeType: 'video/mp4' };
-    }
-    return { buffer, mimeType: 'video/mp4' };
-  } catch(e) { console.warn('[compress] video:', e.message); return { buffer, mimeType }; }
-  finally { try{_fs.unlinkSync(tmpIn);}catch{} try{_fs.unlinkSync(tmpOut);}catch{} }
-}
-
-async function compressAudio(buffer, mimeType, isVoice = false) {
-  if (buffer.length < 300 * 1024) return { buffer, mimeType };
-  const ext    = isVoice ? 'opus' : 'm4a';
-  const tmpIn  = _path.join(_os.tmpdir(), `aura_ai_${Date.now()}.tmp`);
-  const tmpOut = _path.join(_os.tmpdir(), `aura_ao_${Date.now()}.${ext}`);
-  const outMime = isVoice ? 'audio/opus' : 'audio/mp4';
-  try {
-    _fs.writeFileSync(tmpIn, buffer);
-    const args = isVoice
-      ? ['-y','-i',tmpIn,'-c:a','libopus','-b:a','32k','-ac','1','-application','voip',tmpOut]
-      : ['-y','-i',tmpIn,'-c:a','aac','-b:a','128k','-movflags','+faststart',tmpOut];
-    await new Promise((resolve, reject) => {
-      execFile('ffmpeg', args, { timeout: 60000 }, (err,_,stderr) => err ? reject(new Error(stderr||err.message)) : resolve());
-    });
-    const outBuf = _fs.readFileSync(tmpOut);
-    if (outBuf.length < buffer.length * 0.97) {
-      console.log(`[compress] audio ${(buffer.length/1024).toFixed(0)}KB → ${(outBuf.length/1024).toFixed(0)}KB`);
-      return { buffer: outBuf, mimeType: outMime };
-    }
-    return { buffer, mimeType };
-  } catch(e) { console.warn('[compress] audio:', e.message); return { buffer, mimeType }; }
-  finally { try{_fs.unlinkSync(tmpIn);}catch{} try{_fs.unlinkSync(tmpOut);}catch{} }
-}
-
-async function getAudioDuration(buffer) {
-  const tmpFile = _path.join(_os.tmpdir(), `aura_dur_${Date.now()}.tmp`);
-  try {
-    _fs.writeFileSync(tmpFile, buffer);
-    const out = await new Promise((resolve, reject) => {
-      execFile('ffprobe', ['-v','quiet','-print_format','json','-show_format', tmpFile],
-        { timeout: 10000 }, (err, stdout) => err ? reject(err) : resolve(stdout));
-    });
-    const dur = parseFloat(JSON.parse(out)?.format?.duration || '0');
-    return isFinite(dur) ? Math.round(dur) : 0;
-  } catch { return 0; }
-  finally { try{_fs.unlinkSync(tmpFile);}catch{} }
-}
 // nodemailer используется для Gmail SMTP (загружается динамически в sendRecoveryEmail)
 
 const app = express();
@@ -131,7 +28,7 @@ const io = new Server(server);
 //    B2_ACCOUNT_ID, B2_APP_KEY, B2_BUCKET_NAME
 
 // Supabase
-const SB_URL    = (process.env.SUPABASE_URL || '').replace(/\/+$/, ''); // убираем trailing slash
+const SB_URL    = process.env.SUPABASE_URL;
 const SB_KEY    = process.env.SUPABASE_KEY;
 const SB_BUCKET = process.env.SUPABASE_BUCKET || 'aura-files';
 const USE_SB    = !!(SB_URL && SB_KEY);
@@ -842,65 +739,27 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
 
-    let mimeType = req.file.mimetype;
-    const _ext = (req.file.originalname || '').split('.').pop().toLowerCase();
-    if (!mimeType || mimeType === 'application/octet-stream') {
-      const _M = { mp4:'video/mp4',webm:'video/webm',mov:'video/quicktime',avi:'video/x-msvideo',mkv:'video/x-matroska',flv:'video/x-flv',wmv:'video/x-ms-wmv',m4v:'video/mp4',ogv:'video/ogg','3gp':'video/3gpp',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',avif:'image/avif',heic:'image/heic',heif:'image/heif',svg:'image/svg+xml',bmp:'image/bmp',tif:'image/tiff',tiff:'image/tiff',ico:'image/x-icon',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',flac:'audio/flac',aac:'audio/aac',m4a:'audio/mp4',opus:'audio/opus',wma:'audio/x-ms-wma' };
-      mimeType = _M[_ext] || mimeType;
-    }
+    const mimeType = req.file.mimetype;
     let fileType = 'file';
     if (mimeType.startsWith('image/')) fileType = 'image';
     else if (mimeType.startsWith('audio/')) fileType = 'audio';
     else if (mimeType.startsWith('video/')) fileType = 'video';
 
-    const origName     = req.file.originalname || '';
-    const isCircleFile = origName.startsWith('circle.');
-    const isVoiceFile  = origName.startsWith('voice.') || isCircleFile;
-
-    // ── СЖАТИЕ ──────────────────────────────────────────────────
-    let finalBuffer   = req.file.buffer;
-    let finalMimeType = mimeType;
-    let audioDuration = 0;
-
-    if (fileType === 'image') {
-      const r = await compressImage(finalBuffer, finalMimeType);
-      finalBuffer = r.buffer; finalMimeType = r.mimeType;
-    } else if (fileType === 'video') {
-      const r = await compressVideo(finalBuffer, finalMimeType, isCircleFile);
-      finalBuffer = r.buffer; finalMimeType = r.mimeType;
-    } else if (fileType === 'audio') {
-      const r = await compressAudio(finalBuffer, finalMimeType, isVoiceFile);
-      finalBuffer = r.buffer; finalMimeType = r.mimeType;
-      audioDuration = await getAudioDuration(finalBuffer);
-    }
-
-    // ── Формируем имя файла ──────────────────────────────────────
     let prefix = '';
     if (fileType === 'image') prefix = 'photos/';
     else if (fileType === 'video') prefix = 'videos/';
     else if (fileType === 'audio') prefix = 'audio/';
 
-    const extMap  = { 'image/jpeg':'jpg','image/webp':'webp','image/png':'png','video/mp4':'mp4','audio/opus':'opus','audio/mp4':'m4a' };
-    const outExt  = extMap[finalMimeType] || _ext || 'bin';
-    const safeBase = origName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
-    const fileName = prefix + Date.now() + '-' + safeBase + '.' + outExt;
+    const safeOrig = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = prefix + Date.now() + '-' + safeOrig;
 
-    await storageUpload(fileName, finalBuffer, finalMimeType);
+    await storageUpload(fileName, req.file.buffer, mimeType);
 
     const proxyUrl = (USE_SB)
-      ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName.split('/').map(encodeURIComponent).join('/')}`
+      ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${encodeURIComponent(fileName)}`
       : (USE_R2 && R2_PUBLIC) ? `${R2_PUBLIC}/${encodeURIComponent(fileName)}`
       : '/api/dl?f=' + encodeURIComponent(fileName);
-
-    res.json({
-      success: true,
-      url:            proxyUrl,
-      type:           fileType,
-      name:           origName,
-      duration:       audioDuration || undefined,
-      originalSize:   req.file.buffer.length,
-      compressedSize: finalBuffer.length,
-    });
+    res.json({ success: true, url: proxyUrl, type: fileType, name: req.file.originalname });
 
   } catch (error) {
     console.error('Ошибка загрузки:', error.response?.data || error.message);
@@ -4905,7 +4764,12 @@ io.on('connection', (socket) => {
   socket.on('media-message', (data) => {
     const { mediaData, room } = data;
     if (!currentUser) return;
-    const dur = mediaData.duration;
+    const durationMs =
+      (mediaData?.durationMs && Number.isFinite(Number(mediaData.durationMs)))
+        ? Math.max(0, Math.round(Number(mediaData.durationMs)))
+        : (mediaData?.duration && Number.isFinite(Number(mediaData.duration)))
+          ? Math.max(0, Math.round(Number(mediaData.duration) * 1000))
+          : undefined;
     const msg = {
       id: Date.now() + Math.random(),
       user: currentUser,
@@ -4913,7 +4777,8 @@ io.on('connection', (socket) => {
       type: mediaData.type,
       url: mediaData.url,
       fileName: mediaData.fileName,
-      duration: (dur && isFinite(+dur)) ? Math.round(+dur) : undefined,
+      duration: durationMs ? Math.round(durationMs / 1000) : undefined,
+      durationMs,
       time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
       date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
       ts:   Date.now(),
