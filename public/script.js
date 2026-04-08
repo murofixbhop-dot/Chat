@@ -31,20 +31,18 @@ function buildCustomVideoPlayer(src) {
   badge.innerHTML = `<i class="ti ti-video"></i><span class="cvp-badge-dur">—</span>`;
   wrap.appendChild(badge);
 
-  // Вертикальный блок громкости для portrait видео
-  const volPortrait = document.createElement('div');
-  volPortrait.className = 'cvp-vol-portrait';
-  const volPortraitSlider = document.createElement('input');
-  volPortraitSlider.type = 'range';
-  volPortraitSlider.className = 'cvp-vol-portrait-slider';
-  volPortraitSlider.min = 0; volPortraitSlider.max = 1;
-  volPortraitSlider.step = 0.05; volPortraitSlider.value = 1;
-  const volPortraitBtn = document.createElement('button');
-  volPortraitBtn.className = 'cvp-btn cvp-vol-portrait-btn';
-  volPortraitBtn.innerHTML = `<i class="ti ti-volume"></i>`;
-  volPortrait.appendChild(volPortraitSlider);
-  volPortrait.appendChild(volPortraitBtn);
-  wrap.appendChild(volPortrait);
+  // Вертикальный слайдер громкости для portrait (показывается только при hover)
+  const volP = document.createElement('div');
+  volP.className = 'cvp-vol-portrait';
+  const volPSlider = document.createElement('input');
+  volPSlider.type = 'range'; volPSlider.className = 'cvp-vol-portrait-slider';
+  volPSlider.min = 0; volPSlider.max = 1; volPSlider.step = 0.05; volPSlider.value = 1;
+  const volPBtn = document.createElement('button');
+  volPBtn.className = 'cvp-btn cvp-vol-portrait-btn';
+  volPBtn.innerHTML = `<i class="ti ti-volume"></i>`;
+  volP.appendChild(volPSlider);
+  volP.appendChild(volPBtn);
+  wrap.appendChild(volP);
 
   const bar = document.createElement('div');
   bar.className = 'cvp-bar';
@@ -121,7 +119,7 @@ function buildCustomVideoPlayer(src) {
       const h = Math.min(Math.round(w * ratio), 400);
       wrap.style.width    = w + 'px';
       wrap.style.maxWidth = w + 'px';
-      wrap.style.height   = h + 'px';
+      wrap.style.height   = h + 'px';   // ← фикс: задаём высоту обёртке
       vid.style.width     = '100%';
       vid.style.height    = '100%';
       vid.style.maxHeight = 'none';
@@ -130,6 +128,7 @@ function buildCustomVideoPlayer(src) {
       wrap.classList.remove('cvp-portrait');
       wrap.style.maxWidth = '340px';
       wrap.style.height   = '';
+      vid.style.height    = '';
       vid.style.maxHeight = '260px';
       vid.style.objectFit = 'contain';
     }
@@ -144,14 +143,14 @@ function buildCustomVideoPlayer(src) {
   vid.addEventListener('play',  () => { playBtn.innerHTML = `<i class="ti ti-player-pause"></i>`; bigPlay.classList.add('hidden'); showCtrls(); });
   vid.addEventListener('pause', () => { playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;  bigPlay.classList.remove('hidden'); showCtrls(); });
   vid.addEventListener('ended', () => { playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;  bigPlay.classList.remove('hidden'); wrap.classList.remove('controls-hidden'); });
-  const syncVolIcon = () => {
-    const ico = vid.muted || vid.volume === 0
-      ? 'ti-volume-off' : vid.volume < 0.4 ? 'ti-volume-2' : 'ti-volume';
+  const syncVol = () => {
+    const ico = vid.muted || vid.volume === 0 ? 'ti-volume-off'
+      : vid.volume < 0.4 ? 'ti-volume-2' : 'ti-volume';
     muteBtn.innerHTML = `<i class="ti ${ico}"></i>`;
-    volPortraitBtn.innerHTML = `<i class="ti ${ico}"></i>`;
-    if (!vid.muted) { volSlider.value = vid.volume; volPortraitSlider.value = vid.volume; }
+    volPBtn.innerHTML = `<i class="ti ${ico}"></i>`;
+    if (!vid.muted) { volSlider.value = vid.volume; volPSlider.value = vid.volume; }
   };
-  vid.addEventListener('volumechange', syncVolIcon);
+  vid.addEventListener('volumechange', syncVol);
 
   vid.addEventListener('click', e => { e.stopPropagation(); vid.paused ? vid.play() : vid.pause(); showCtrls(); });
   vid.addEventListener('dblclick', e => { e.stopPropagation(); fsBtn.click(); });
@@ -182,24 +181,14 @@ function buildCustomVideoPlayer(src) {
   volSlider.addEventListener('input', e => { e.stopPropagation(); vid.volume = parseFloat(volSlider.value); vid.muted = vid.volume === 0; });
   muteBtn.addEventListener('click', e => { e.stopPropagation(); vid.muted = !vid.muted; if (!vid.muted) volSlider.value = vid.volume || 0.7; });
 
-  // Portrait volume listeners
-  volPortraitSlider.addEventListener('input', e => {
-    e.stopPropagation();
-    vid.volume = parseFloat(volPortraitSlider.value);
-    vid.muted = vid.volume === 0;
-  });
-  volPortraitBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    vid.muted = !vid.muted;
-    if (!vid.muted) volPortraitSlider.value = vid.volume || 0.7;
-  });
-  // Touch: показываем portrait vol при тапе
+  volPSlider.addEventListener('input', e => { e.stopPropagation(); vid.volume = parseFloat(volPSlider.value); vid.muted = vid.volume === 0; });
+  volPBtn.addEventListener('click', e => { e.stopPropagation(); vid.muted = !vid.muted; if (!vid.muted) volPSlider.value = vid.volume || 0.7; });
+  // Touch: показать слайдер на 1.5 сек при тапе на portrait
   wrap.addEventListener('touchend', () => {
-    if (wrap.classList.contains('cvp-portrait')) {
-      wrap.classList.add('cvp-vol-show');
-      clearTimeout(wrap._volTimer);
-      wrap._volTimer = setTimeout(() => wrap.classList.remove('cvp-vol-show'), 3000);
-    }
+    if (!wrap.classList.contains('cvp-portrait')) return;
+    wrap.classList.add('cvp-vol-touch');
+    clearTimeout(wrap._volT);
+    wrap._volT = setTimeout(() => wrap.classList.remove('cvp-vol-touch'), 1500);
   }, { passive: true });
 
   speedBtn.addEventListener('click', e => {
@@ -370,18 +359,31 @@ socket.on('connect', () => {
 document.addEventListener('visibilitychange', () => {
   if (!currentUser) return;
   if (document.visibilityState === 'visible') {
-    // Вернулись — переподключаемся если нужно и обновляем данные
+    // Сохраняем позицию скролла перед переподключением
+    const savedScroll = messagesDiv ? messagesDiv.scrollTop : null;
+    const wasAtBottom = messagesDiv
+      ? messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 60
+      : true;
+
     if (!socket.connected) {
       socket.connect();
     } else {
       socket.emit('identify', currentUser);
-      if (currentRoom) socket.emit('join-room', currentRoom);
+      // Не переотправляем join-room если соединение живо — иначе история придёт заново и скроллит вниз
+      // join-room нужен только при реальном реконнекте (socket.on('connect') обработает это)
     }
     if (!_inCall) loadUserData();
     if (currentRoom) _sendReadReceipt(currentRoom);
+
+    // Восстанавливаем позицию скролла после обновления данных
+    if (messagesDiv && savedScroll !== null && !wasAtBottom) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (messagesDiv) messagesDiv.scrollTop = savedScroll;
+        });
+      });
+    }
   } else {
-    // Уходим на другую вкладку — явно говорим серверу что онлайн
-    // (таймеры в фоне throttle-ятся, поэтому шлём identify сразу)
     if (socket.connected) socket.emit('identify', currentUser);
   }
 });
@@ -1431,6 +1433,12 @@ function _updateChatOnlineStatus() {
 
 socket.on('history', msgs => {
   _historyLoading = true;
+  // Запоминаем скролл до перерисовки (для reconnect — не сбрасывать позицию)
+  const _prevScrollTop    = messagesDiv ? messagesDiv.scrollTop : 0;
+  const _prevScrollHeight = messagesDiv ? messagesDiv.scrollHeight : 0;
+  const _wasAtBottom = messagesDiv
+    ? messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 60
+    : true;
   messagesDiv.innerHTML = '';
   _lastMsgDate = null;
   if (msgsEmpty) msgsEmpty.style.display = msgs.length ? 'none' : 'flex';
@@ -1438,6 +1446,11 @@ socket.on('history', msgs => {
   // После отрисовки истории — разрешаем уведомления для новых сообщений
   requestAnimationFrame(() => {
     _historyLoading = false;
+    // Если были не внизу — восстанавливаем позицию
+    if (!_wasAtBottom && messagesDiv) {
+      const newHeight = messagesDiv.scrollHeight;
+      messagesDiv.scrollTop = _prevScrollTop + (newHeight - _prevScrollHeight);
+    }
     _applyHiddenMessages(); // скрываем удалённые у себя
     // Синхронизируем _lastMsgDate с последним видимым разделителем в DOM
     const seps = messagesDiv?.querySelectorAll('.msg-day-sep');
@@ -1713,11 +1726,11 @@ function addMessage(msg) {
     inner += `<div class="voice-player" id="${pid}">
       <button class="vp-play" onclick="vpToggle('${pid}','${u}')"><i class="ti ti-player-play"></i></button>
       <div class="vp-body">
-        <div class="vp-waveform-row">
-          <div class="vp-waveform" onclick="vpSeek(event,'${pid}','${u}')">${Array.from({length:30},(_,i)=>`<div class="vp-bar" style="height:${8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8)}px"></div>`).join('')}</div>
+        <div class="vp-waveform" onclick="vpSeek(event,'${pid}','${u}')">${Array.from({length:30},(_,i)=>`<div class="vp-bar" style="height:${8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8)}px"></div>`).join('')}</div>
+        <div class="vp-meta">
+          <span class="vp-pos vp-pos-hidden">0:00</span>
           <span class="vp-dur">${durStr}</span>
         </div>
-        <div class="vp-meta"><span class="vp-pos">0:00</span></div>
       </div>
     </div>`;
   } else if (msg.type === 'file') {
@@ -1767,7 +1780,7 @@ function addMessage(msg) {
     if (!url) return;
     const vp = document.createElement('div');
     vp.className = 'voice-player'; vp.id = pid;
-    vp.innerHTML = `<button class="vp-play" onclick="vpToggle('${pid}','${url}')"><i class="ti ti-player-play"></i></button><div class="vp-body"><div class="vp-waveform-row"><div class="vp-waveform" onclick="vpSeek(event,'${pid}','${url}')">${Array.from({length:30},(_,i)=>'<div class="vp-bar" style="height:'+(8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8))+'px"></div>').join('')}</div><span class="vp-dur">—</span></div><div class="vp-meta"><span class="vp-pos">0:00</span></div></div>`;
+    vp.innerHTML = `<button class="vp-play" onclick="vpToggle('${pid}','${url}')"><i class="ti ti-player-play"></i></button><div class="vp-body"><div class="vp-waveform" onclick="vpSeek(event,'${pid}','${url}')">${Array.from({length:30},(_,i)=>'<div class="vp-bar" style="height:'+(8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8))+'px"></div>').join('')}</div><div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">—</span></div></div>`;
     a.replaceWith(vp);
   });
 
@@ -2504,22 +2517,6 @@ function resetSendBtn() {
 }
 
 async function uploadVoice(blob, ext) {
-  // Вычисляем длительность до загрузки
-  let duration = 0;
-  try {
-    const tmpUrl = URL.createObjectURL(blob);
-    await new Promise(res => {
-      const a = new Audio(tmpUrl);
-      a.addEventListener('loadedmetadata', () => {
-        if (isFinite(a.duration)) duration = Math.round(a.duration);
-        URL.revokeObjectURL(tmpUrl);
-        res();
-      });
-      a.addEventListener('error', () => { URL.revokeObjectURL(tmpUrl); res(); });
-      setTimeout(res, 3000);
-    });
-  } catch {}
-
   const fd = new FormData();
   fd.append('file', blob, `voice.${ext}`);
   try {
@@ -2527,7 +2524,7 @@ async function uploadVoice(blob, ext) {
     const d = await r.json();
     if (d.success) {
       socket.emit('media-message', {
-        mediaData: { type: 'audio', url: d.url, fileName: d.name, text: '', duration },
+        mediaData: { type: 'audio', url: d.url, fileName: d.name, text: '' },
         room: currentRoom
       });
     } else toast('Ошибка загрузки голосового', 'error');
@@ -7924,6 +7921,12 @@ function _vpGetOrCreate(pid, url) {
         if (dur && isFinite(a.duration)) {
           const m = Math.floor(a.duration/60), s = Math.round(a.duration%60);
           dur.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+          // Если не играет — показываем dur, скрываем pos
+          if (a.paused) {
+            dur.classList.remove('vp-dur-hidden');
+            const pos = c.querySelector('.vp-pos');
+            if (pos) pos.classList.add('vp-pos-hidden');
+          }
         }
       }
     });
@@ -7996,10 +7999,14 @@ function _vpUpdate(pid, a) {
     }
   });
   const pos = c.querySelector('.vp-pos');
+  const dur = c.querySelector('.vp-dur');
   if (pos) {
     const m = Math.floor(a.currentTime/60), s = Math.floor(a.currentTime%60);
     const txt = `${m}:${s.toString().padStart(2,'0')}`;
     if (pos.textContent !== txt) pos.textContent = txt;
+    // Пока играет — показываем позицию, скрываем длительность
+    pos.classList.remove('vp-pos-hidden');
+    if (dur) dur.classList.add('vp-dur-hidden');
   }
 }
 
@@ -8011,7 +8018,9 @@ function _vpReset(pid, a) {
   const btn = c.querySelector('.vp-play i');
   if (btn) btn.className = 'ti ti-player-play';
   const pos = c.querySelector('.vp-pos');
-  if (pos) pos.textContent = '0:00';
+  if (pos) { pos.textContent = '0:00'; pos.classList.add('vp-pos-hidden'); }
+  const dur = c.querySelector('.vp-dur');
+  if (dur) dur.classList.remove('vp-dur-hidden');
 }
 
 
@@ -8104,70 +8113,3 @@ socket.on('online-count', count => {
   if (onlineCount) onlineCount.textContent = count;
   if (onlinePill) onlinePill.style.display = count > 0 ? '' : 'none';
 });
-
-// Переопределяем uploadVoice в конце файла, чтобы гарантированно отправлять duration/durationMs.
-async function uploadVoice(blob, ext) {
-  let duration = 0;
-  try {
-    const tmpUrl = URL.createObjectURL(blob);
-    await new Promise(res => {
-      const a = new Audio(tmpUrl);
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        try { a.pause(); } catch {}
-        URL.revokeObjectURL(tmpUrl);
-        res();
-      };
-      const applyDuration = () => {
-        if (isFinite(a.duration) && a.duration > 0) {
-          duration = Math.max(duration, Math.round(a.duration));
-        }
-      };
-      a.preload = 'metadata';
-      a.addEventListener('loadedmetadata', applyDuration, { once: true });
-      a.addEventListener('durationchange', applyDuration);
-      a.addEventListener('canplaythrough', () => {
-        applyDuration();
-        finish();
-      }, { once: true });
-      a.addEventListener('error', finish, { once: true });
-      setTimeout(() => {
-        applyDuration();
-        finish();
-      }, 5000);
-      try { a.load(); } catch {}
-      if (isFinite(a.duration) && a.duration > 0) {
-        applyDuration();
-        finish();
-      }
-    });
-  } catch {}
-
-  const fd = new FormData();
-  fd.append('file', blob, `VOICE.${ext}`);
-  try {
-    const r = await fetch('/upload', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (d.success) {
-      const uploadDuration = Number(d.duration || 0);
-      const finalDuration = uploadDuration > 0 ? Math.round(uploadDuration) : duration;
-      socket.emit('media-message', {
-        mediaData: {
-          type: 'audio',
-          url: d.url,
-          fileName: d.name || `VOICE.${ext}`,
-          text: '',
-          duration: finalDuration,
-          durationMs: finalDuration > 0 ? finalDuration * 1000 : undefined
-        },
-        room: currentRoom
-      });
-    } else {
-      toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РіРѕР»РѕСЃРѕРІРѕРіРѕ', 'error');
-    }
-  } catch {
-    toast('РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РіРѕР»РѕСЃРѕРІРѕРіРѕ', 'error');
-  }
-}
