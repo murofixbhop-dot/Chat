@@ -31,19 +31,6 @@ function buildCustomVideoPlayer(src) {
   badge.innerHTML = `<i class="ti ti-video"></i><span class="cvp-badge-dur">—</span>`;
   wrap.appendChild(badge);
 
-  // Вертикальный слайдер громкости для portrait (показывается только при hover)
-  const volP = document.createElement('div');
-  volP.className = 'cvp-vol-portrait';
-  const volPSlider = document.createElement('input');
-  volPSlider.type = 'range'; volPSlider.className = 'cvp-vol-portrait-slider';
-  volPSlider.min = 0; volPSlider.max = 1; volPSlider.step = 0.05; volPSlider.value = 1;
-  const volPBtn = document.createElement('button');
-  volPBtn.className = 'cvp-btn cvp-vol-portrait-btn';
-  volPBtn.innerHTML = `<i class="ti ti-volume"></i>`;
-  volP.appendChild(volPSlider);
-  volP.appendChild(volPBtn);
-  wrap.appendChild(volP);
-
   const bar = document.createElement('div');
   bar.className = 'cvp-bar';
 
@@ -114,21 +101,18 @@ function buildCustomVideoPlayer(src) {
     const ratio = vh / vw;
 
     if (isPortrait) {
-      wrap.classList.add('cvp-portrait');
+      // Вертикальное видео — ширина 220px, высота пропорционально, но не больше 400px
       const w = 220;
       const h = Math.min(Math.round(w * ratio), 400);
       wrap.style.width    = w + 'px';
       wrap.style.maxWidth = w + 'px';
-      wrap.style.height   = h + 'px';   // ← фикс: задаём высоту обёртке
       vid.style.width     = '100%';
-      vid.style.height    = '100%';
-      vid.style.maxHeight = 'none';
+      vid.style.height    = h + 'px';
+      vid.style.maxHeight = h + 'px';
       vid.style.objectFit = 'cover';
     } else {
-      wrap.classList.remove('cvp-portrait');
+      // Горизонтальное — стандартная ширина, ограничиваем высоту
       wrap.style.maxWidth = '340px';
-      wrap.style.height   = '';
-      vid.style.height    = '';
       vid.style.maxHeight = '260px';
       vid.style.objectFit = 'contain';
     }
@@ -143,14 +127,12 @@ function buildCustomVideoPlayer(src) {
   vid.addEventListener('play',  () => { playBtn.innerHTML = `<i class="ti ti-player-pause"></i>`; bigPlay.classList.add('hidden'); showCtrls(); });
   vid.addEventListener('pause', () => { playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;  bigPlay.classList.remove('hidden'); showCtrls(); });
   vid.addEventListener('ended', () => { playBtn.innerHTML = `<i class="ti ti-player-play"></i>`;  bigPlay.classList.remove('hidden'); wrap.classList.remove('controls-hidden'); });
-  const syncVol = () => {
-    const ico = vid.muted || vid.volume === 0 ? 'ti-volume-off'
-      : vid.volume < 0.4 ? 'ti-volume-2' : 'ti-volume';
-    muteBtn.innerHTML = `<i class="ti ${ico}"></i>`;
-    volPBtn.innerHTML = `<i class="ti ${ico}"></i>`;
-    if (!vid.muted) { volSlider.value = vid.volume; volPSlider.value = vid.volume; }
-  };
-  vid.addEventListener('volumechange', syncVol);
+  vid.addEventListener('volumechange', () => {
+    muteBtn.innerHTML = vid.muted || vid.volume === 0
+      ? `<i class="ti ti-volume-off"></i>`
+      : vid.volume < 0.4 ? `<i class="ti ti-volume-2"></i>` : `<i class="ti ti-volume"></i>`;
+    if (!vid.muted) volSlider.value = vid.volume;
+  });
 
   vid.addEventListener('click', e => { e.stopPropagation(); vid.paused ? vid.play() : vid.pause(); showCtrls(); });
   vid.addEventListener('dblclick', e => { e.stopPropagation(); fsBtn.click(); });
@@ -180,16 +162,6 @@ function buildCustomVideoPlayer(src) {
 
   volSlider.addEventListener('input', e => { e.stopPropagation(); vid.volume = parseFloat(volSlider.value); vid.muted = vid.volume === 0; });
   muteBtn.addEventListener('click', e => { e.stopPropagation(); vid.muted = !vid.muted; if (!vid.muted) volSlider.value = vid.volume || 0.7; });
-
-  volPSlider.addEventListener('input', e => { e.stopPropagation(); vid.volume = parseFloat(volPSlider.value); vid.muted = vid.volume === 0; });
-  volPBtn.addEventListener('click', e => { e.stopPropagation(); vid.muted = !vid.muted; if (!vid.muted) volPSlider.value = vid.volume || 0.7; });
-  // Touch: показать слайдер на 1.5 сек при тапе на portrait
-  wrap.addEventListener('touchend', () => {
-    if (!wrap.classList.contains('cvp-portrait')) return;
-    wrap.classList.add('cvp-vol-touch');
-    clearTimeout(wrap._volT);
-    wrap._volT = setTimeout(() => wrap.classList.remove('cvp-vol-touch'), 1500);
-  }, { passive: true });
 
   speedBtn.addEventListener('click', e => {
     e.stopPropagation();
@@ -359,31 +331,18 @@ socket.on('connect', () => {
 document.addEventListener('visibilitychange', () => {
   if (!currentUser) return;
   if (document.visibilityState === 'visible') {
-    // Сохраняем позицию скролла перед переподключением
-    const savedScroll = messagesDiv ? messagesDiv.scrollTop : null;
-    const wasAtBottom = messagesDiv
-      ? messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 60
-      : true;
-
+    // Вернулись — переподключаемся если нужно и обновляем данные
     if (!socket.connected) {
       socket.connect();
     } else {
       socket.emit('identify', currentUser);
-      // Не переотправляем join-room если соединение живо — иначе история придёт заново и скроллит вниз
-      // join-room нужен только при реальном реконнекте (socket.on('connect') обработает это)
+      if (currentRoom) socket.emit('join-room', currentRoom);
     }
     if (!_inCall) loadUserData();
     if (currentRoom) _sendReadReceipt(currentRoom);
-
-    // Восстанавливаем позицию скролла после обновления данных
-    if (messagesDiv && savedScroll !== null && !wasAtBottom) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (messagesDiv) messagesDiv.scrollTop = savedScroll;
-        });
-      });
-    }
   } else {
+    // Уходим на другую вкладку — явно говорим серверу что онлайн
+    // (таймеры в фоне throttle-ятся, поэтому шлём identify сразу)
     if (socket.connected) socket.emit('identify', currentUser);
   }
 });
@@ -1433,12 +1392,6 @@ function _updateChatOnlineStatus() {
 
 socket.on('history', msgs => {
   _historyLoading = true;
-  // Запоминаем скролл до перерисовки (для reconnect — не сбрасывать позицию)
-  const _prevScrollTop    = messagesDiv ? messagesDiv.scrollTop : 0;
-  const _prevScrollHeight = messagesDiv ? messagesDiv.scrollHeight : 0;
-  const _wasAtBottom = messagesDiv
-    ? messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 60
-    : true;
   messagesDiv.innerHTML = '';
   _lastMsgDate = null;
   if (msgsEmpty) msgsEmpty.style.display = msgs.length ? 'none' : 'flex';
@@ -1446,11 +1399,6 @@ socket.on('history', msgs => {
   // После отрисовки истории — разрешаем уведомления для новых сообщений
   requestAnimationFrame(() => {
     _historyLoading = false;
-    // Если были не внизу — восстанавливаем позицию
-    if (!_wasAtBottom && messagesDiv) {
-      const newHeight = messagesDiv.scrollHeight;
-      messagesDiv.scrollTop = _prevScrollTop + (newHeight - _prevScrollHeight);
-    }
     _applyHiddenMessages(); // скрываем удалённые у себя
     // Синхронизируем _lastMsgDate с последним видимым разделителем в DOM
     const seps = messagesDiv?.querySelectorAll('.msg-day-sep');
@@ -1721,16 +1669,11 @@ function addMessage(msg) {
   } else if (msg.type === 'audio') {
     const u = fileUrl(msg.url);
     const pid = 'vp_' + (msg.id || Math.random().toString(36).slice(2));
-    const durSec = msg.duration || 0;
-    const durStr = durSec > 0 ? `${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}` : '—';
     inner += `<div class="voice-player" id="${pid}">
       <button class="vp-play" onclick="vpToggle('${pid}','${u}')"><i class="ti ti-player-play"></i></button>
       <div class="vp-body">
         <div class="vp-waveform" onclick="vpSeek(event,'${pid}','${u}')">${Array.from({length:30},(_,i)=>`<div class="vp-bar" style="height:${8+Math.round(Math.sin(i*.7+1)*8+Math.random()*8)}px"></div>`).join('')}</div>
-        <div class="vp-meta">
-          <span class="vp-pos vp-pos-hidden">0:00</span>
-          <span class="vp-dur">${durStr}</span>
-        </div>
+        <div class="vp-meta"><span class="vp-pos">0:00</span><span class="vp-dur">—</span></div>
       </div>
     </div>`;
   } else if (msg.type === 'file') {
@@ -3612,9 +3555,18 @@ async function openAiChat() {
     const parent  = sendBtn?.parentElement;
     if (parent) {
       const models = [
-        { value: 'mistral', label: 'Mistral', icon: '⚡' },
-        { value: 'minimax', label: 'Aura AI', icon: '✨' },
+        { value: 'mistral',       label: 'Mistral',          icon: '⚡', group: 'Основные' },
+        { value: 'minimax',       label: 'Aura AI',          icon: '✨', group: 'Основные' },
+        { value: 'deepseek-r1',   label: 'DeepSeek R1 🧠',  icon: '🔵', group: 'OpenRouter' },
+        { value: 'deepseek-v3',   label: 'DeepSeek V3',      icon: '🔵', group: 'OpenRouter' },
+        { value: 'gemini-flash',  label: 'Gemini 2.5 Flash', icon: '🟡', group: 'OpenRouter' },
+        { value: 'gemini-pro',    label: 'Gemini 2.5 Pro 🧠',icon: '🟡', group: 'OpenRouter' },
+        { value: 'qwen3-235b',    label: 'Qwen3 235B 🧠',   icon: '🟠', group: 'OpenRouter' },
+        { value: 'grok-3-mini',   label: 'Grok 3 Mini 🧠',  icon: '⬛', group: 'OpenRouter' },
+        { value: 'claude-haiku',  label: 'Claude Haiku',     icon: '🟣', group: 'OpenRouter' },
+        { value: 'llama-maverick',label: 'Llama 4 Maverick', icon: '🦙', group: 'OpenRouter' },
       ];
+      // 🧠 = модель с thinking (рассуждением)
       let currentModel = 'mistral';
 
       const wrap = document.createElement('div');
@@ -3697,12 +3649,48 @@ async function openAiChat() {
       const hidSel = document.createElement('select');
       hidSel.id = 'aiModelSelect';
       hidSel.style.display = 'none';
-      hidSel.innerHTML = '<option value="mistral">Mistral</option><option value="minimax">Aura AI</option>';
+      models.forEach(m => {
+        const o = document.createElement('option');
+        o.value = m.value; o.textContent = m.label;
+        hidSel.appendChild(o);
+      });
 
-      document.body.appendChild(drop); // append to body, not wrap!
+      // Кнопки Thinking и MultiAgent
+      const thinkBtn = document.createElement('button');
+      thinkBtn.id = 'aiThinkBtn';
+      thinkBtn.title = 'Режим рассуждений (thinking)';
+      thinkBtn.style.cssText = 'padding:5px 9px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface3);color:var(--text2);font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;';
+      thinkBtn.textContent = '💭 Thinking';
+      thinkBtn.onclick = () => {
+        const on = thinkBtn.dataset.on === '1';
+        thinkBtn.dataset.on = on ? '0' : '1';
+        thinkBtn.style.background    = !on ? 'var(--accent)'     : 'var(--surface3)';
+        thinkBtn.style.color         = !on ? '#fff'               : 'var(--text2)';
+        thinkBtn.style.borderColor   = !on ? 'var(--accent)'     : 'var(--border)';
+        fetch('/api/ai-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username: currentUser, thinking: !on }) });
+      };
+
+      const maBtn = document.createElement('button');
+      maBtn.id = 'aiMultiAgentBtn';
+      maBtn.title = 'Мульти-агентный режим';
+      maBtn.style.cssText = 'padding:5px 9px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface3);color:var(--text2);font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;';
+      maBtn.textContent = '🤝 Multi-Agent';
+      maBtn.onclick = () => {
+        const on = maBtn.dataset.on === '1';
+        maBtn.dataset.on = on ? '0' : '1';
+        maBtn.style.background  = !on ? '#7c3aed'        : 'var(--surface3)';
+        maBtn.style.color       = !on ? '#fff'            : 'var(--text2)';
+        maBtn.style.borderColor = !on ? '#7c3aed'        : 'var(--border)';
+        fetch('/api/ai-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username: currentUser, multiagent: !on }) });
+      };
+
+      document.body.appendChild(drop);
       wrap.appendChild(btn);
       wrap.appendChild(hidSel);
       parent.insertBefore(wrap, sendBtn);
+      // Кнопки режимов — перед modelWrap
+      parent.insertBefore(maBtn, wrap);
+      parent.insertBefore(thinkBtn, maBtn);
     }
   }
   $('aiChatModal').classList.add('open');
@@ -7921,12 +7909,6 @@ function _vpGetOrCreate(pid, url) {
         if (dur && isFinite(a.duration)) {
           const m = Math.floor(a.duration/60), s = Math.round(a.duration%60);
           dur.textContent = `${m}:${s.toString().padStart(2,'0')}`;
-          // Если не играет — показываем dur, скрываем pos
-          if (a.paused) {
-            dur.classList.remove('vp-dur-hidden');
-            const pos = c.querySelector('.vp-pos');
-            if (pos) pos.classList.add('vp-pos-hidden');
-          }
         }
       }
     });
@@ -7983,9 +7965,9 @@ function _vpUpdate(pid, a) {
 
   const c = document.getElementById(pid);
   if (!c) return;
-  const audioDur = a.duration;
-  if (!audioDur || !isFinite(audioDur)) return;
-  const pct = a.currentTime / audioDur;
+  const dur = a.duration;
+  if (!dur || !isFinite(dur)) return;
+  const pct = a.currentTime / dur;
   const bars = c.querySelectorAll('.vp-bar');
   const playedCount = Math.floor(pct * bars.length);
   // Use index comparison instead of classList.toggle for speed
@@ -7999,14 +7981,10 @@ function _vpUpdate(pid, a) {
     }
   });
   const pos = c.querySelector('.vp-pos');
-  const dur = c.querySelector('.vp-dur');
   if (pos) {
     const m = Math.floor(a.currentTime/60), s = Math.floor(a.currentTime%60);
     const txt = `${m}:${s.toString().padStart(2,'0')}`;
     if (pos.textContent !== txt) pos.textContent = txt;
-    // Пока играет — показываем позицию, скрываем длительность
-    pos.classList.remove('vp-pos-hidden');
-    if (dur) dur.classList.add('vp-dur-hidden');
   }
 }
 
@@ -8018,9 +7996,7 @@ function _vpReset(pid, a) {
   const btn = c.querySelector('.vp-play i');
   if (btn) btn.className = 'ti ti-player-play';
   const pos = c.querySelector('.vp-pos');
-  if (pos) { pos.textContent = '0:00'; pos.classList.add('vp-pos-hidden'); }
-  const dur = c.querySelector('.vp-dur');
-  if (dur) dur.classList.remove('vp-dur-hidden');
+  if (pos) pos.textContent = '0:00';
 }
 
 
