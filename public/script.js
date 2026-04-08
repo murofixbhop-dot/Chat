@@ -7983,9 +7983,9 @@ function _vpUpdate(pid, a) {
 
   const c = document.getElementById(pid);
   if (!c) return;
-  const dur = a.duration;
-  if (!dur || !isFinite(dur)) return;
-  const pct = a.currentTime / dur;
+  const audioDur = a.duration;
+  if (!audioDur || !isFinite(audioDur)) return;
+  const pct = a.currentTime / audioDur;
   const bars = c.querySelectorAll('.vp-bar');
   const playedCount = Math.floor(pct * bars.length);
   // Use index comparison instead of classList.toggle for speed
