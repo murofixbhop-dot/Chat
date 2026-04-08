@@ -28,7 +28,7 @@ const io = new Server(server);
 //    B2_ACCOUNT_ID, B2_APP_KEY, B2_BUCKET_NAME
 
 // Supabase
-const SB_URL    = process.env.SUPABASE_URL;
+const SB_URL    = (process.env.SUPABASE_URL || '').replace(/\/+$/, ''); // убираем trailing slash
 const SB_KEY    = process.env.SUPABASE_KEY;
 const SB_BUCKET = process.env.SUPABASE_BUCKET || 'aura-files';
 const USE_SB    = !!(SB_URL && SB_KEY);
@@ -739,7 +739,13 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
 
-    const mimeType = req.file.mimetype;
+    // Если браузер прислал octet-stream — определяем тип по расширению файла
+    let mimeType = req.file.mimetype;
+    const _ext = (req.file.originalname || '').split('.').pop().toLowerCase();
+    if (!mimeType || mimeType === 'application/octet-stream') {
+      const _M = { mp4:'video/mp4',webm:'video/webm',mov:'video/quicktime',avi:'video/x-msvideo',mkv:'video/x-matroska',flv:'video/x-flv',wmv:'video/x-ms-wmv',m4v:'video/mp4',ogv:'video/ogg','3gp':'video/3gpp',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',avif:'image/avif',heic:'image/heic',heif:'image/heif',svg:'image/svg+xml',bmp:'image/bmp',tif:'image/tiff',tiff:'image/tiff',ico:'image/x-icon',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',flac:'audio/flac',aac:'audio/aac',m4a:'audio/mp4',opus:'audio/opus',wma:'audio/x-ms-wma' };
+      mimeType = _M[_ext] || mimeType;
+    }
     let fileType = 'file';
     if (mimeType.startsWith('image/')) fileType = 'image';
     else if (mimeType.startsWith('audio/')) fileType = 'audio';
@@ -756,7 +762,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     await storageUpload(fileName, req.file.buffer, mimeType);
 
     const proxyUrl = (USE_SB)
-      ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${encodeURIComponent(fileName)}`
+      ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName.split('/').map(encodeURIComponent).join('/')}`
       : (USE_R2 && R2_PUBLIC) ? `${R2_PUBLIC}/${encodeURIComponent(fileName)}`
       : '/api/dl?f=' + encodeURIComponent(fileName);
     res.json({ success: true, url: proxyUrl, type: fileType, name: req.file.originalname });
@@ -1110,9 +1116,86 @@ app.use(express.json());
 //  AI ЧАТ — Mistral с инструментами, памятью файлов и просмотром изображений
 // ════════════════════════════════════════════════════════════════════════════
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
-// MiniMax (Aura AI) — MiniMax-M2.5 (самая новая, март 2026)
-const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''; // Set MINIMAX_API_KEY in Render environment
-const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions'; // OpenAI-compatible
+const OPENROUTER_KEY  = process.env.OPENROUTER_API_KEY || '';
+// MiniMax (Aura AI)
+const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || '';
+const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions';
+
+// ── Модели OpenRouter ─────────────────────────────────────────────────────────
+// Ключ: https://openrouter.ai/keys (есть бесплатный тир)
+// Добавить в Render env: OPENROUTER_API_KEY=sk-or-v1-...
+const OR_MODELS = {
+  'deepseek-r1':    { id: 'deepseek/deepseek-r1',              thinking: true  },
+  'deepseek-v3':    { id: 'deepseek/deepseek-chat-v3-0324',    thinking: false },
+  'qwen3-235b':     { id: 'qwen/qwen3-235b-a22b',              thinking: true  },
+  'gemini-flash':   { id: 'google/gemini-2.5-flash-preview',   thinking: false },
+  'gemini-pro':     { id: 'google/gemini-2.5-pro-preview',     thinking: true  },
+  'claude-haiku':   { id: 'anthropic/claude-haiku-4-5',        thinking: false },
+  'llama-maverick': { id: 'meta-llama/llama-4-maverick',       thinking: false },
+  'grok-3-mini':    { id: 'x-ai/grok-3-mini-beta',            thinking: true  },
+};
+
+// ── Вызов OpenRouter (OpenAI-совместимый) ─────────────────────────────────────
+async function callOpenRouter(modelKey, messages, onChunk) {
+  if (!OPENROUTER_KEY) throw new Error('OPENROUTER_API_KEY не задан в env');
+  const mdl = OR_MODELS[modelKey];
+  if (!mdl) throw new Error('Неизвестная модель: ' + modelKey);
+
+  const resp = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+    model:       mdl.id,
+    messages,
+    max_tokens:  4000,
+    temperature: 0.7,
+    stream:      true,
+  }, {
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_KEY}`,
+      'Content-Type':  'application/json',
+      'HTTP-Referer':  'https://aura.onrender.com',
+      'X-Title':       'Aura Messenger',
+    },
+    responseType: 'stream',
+    timeout: 120000,
+  });
+
+  let full = '', inThink = false, thinkBuf = '';
+  await new Promise((resolve, reject) => {
+    let buf = '';
+    resp.data.on('data', chunk => {
+      buf += chunk.toString();
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') { resolve(); return; }
+        try {
+          const delta = JSON.parse(raw).choices?.[0]?.delta?.content || '';
+          if (!delta) continue;
+          full += delta;
+          // Парсим <think>...</think> — шлём как лог
+          for (const ch of delta) {
+            if (!inThink) {
+              thinkBuf += ch;
+              if (thinkBuf.endsWith('<think>')) { inThink = true; thinkBuf = ''; }
+              else if (thinkBuf.length > 7) { onChunk?.(thinkBuf[0]); thinkBuf = thinkBuf.slice(1); }
+            } else {
+              thinkBuf += ch;
+              if (thinkBuf.endsWith('</think>')) {
+                onChunk?.('__THINK__' + thinkBuf.slice(0,-8).trim().slice(0,200));
+                inThink = false; thinkBuf = '';
+              }
+            }
+          }
+          if (!inThink && thinkBuf.length === 0) onChunk?.(delta);
+        } catch {}
+      }
+    });
+    resp.data.on('end', resolve);
+    resp.data.on('error', reject);
+  });
+  // Убираем теги thinking из финального ответа
+  return full.replace(/<think>[\s\S]*?<\/think>/gi, '').trim() || 'Готово';
+}
 const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
 const AI_CONV_FILE = 'ai_conversations.json';
 
@@ -1243,7 +1326,21 @@ music_info/recipe_find/emoji_search/poem_generate (творчество),
 create_presentation (презентации), ask_user (уточнить у пользователя)`;
 function getAiSystem(username) {
   const sess = aiConversations.get(username);
-  return sess?.debugMode ? AI_SYSTEM_DEBUG : AI_SYSTEM_SAFE;
+  if (sess?.debugMode) return AI_SYSTEM_DEBUG;
+  let sys = AI_SYSTEM_SAFE;
+  if (sess?.multiagent) {
+    sys += `
+
+[МУЛЬТИ-АГЕНТНЫЙ РЕЖИМ АКТИВЕН]
+Ты — Координатор (главный агент). Твоя задача:
+1. Разбить задачу на подзадачи
+2. Для каждой подзадачи написать что делает отдельный агент в формате:
+   🤖 **Агент: <Название>** | <роль>
+   → <результат работы>
+3. Собрать итог под заголовком **Координатор: Итог**
+Агенты: Аналитик, Разработчик, Исследователь, Критик — используй нужных.`;
+  }
+  return sys;
 }
 
 const AI_SYSTEM = AI_SYSTEM_SAFE; // fallback
@@ -1761,15 +1858,99 @@ const AI_TOOLS = [
       description: 'Сохраняет заметку, todo или напоминание',
       parameters: { type:'object', properties:{ text:{ type:'string' }, label:{ type:'string', description:'note / todo / reminder' } }, required:['text'] }
     }
+  },
+  // ── Новые инструменты ──────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'hash_text',
+      description: 'Хэширует текст: MD5, SHA1, SHA256, SHA512, bcrypt-like',
+      parameters: { type:'object', properties:{ text:{type:'string'}, algorithm:{type:'string',description:'md5,sha1,sha256,sha512'} }, required:['text','algorithm'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'password_check',
+      description: 'Проверяет надёжность пароля и генерирует сильный пароль',
+      parameters: { type:'object', properties:{ password:{type:'string'}, action:{type:'string',description:'check, generate'}, length:{type:'number'} }, required:['action'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cron_explain',
+      description: 'Объясняет cron-выражения на русском и конвертирует описание в cron',
+      parameters: { type:'object', properties:{ input:{type:'string',description:'cron или описание на русском'}, direction:{type:'string',description:'explain или generate'} }, required:['input'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'diff_text',
+      description: 'Сравнивает два текста и показывает отличия построчно',
+      parameters: { type:'object', properties:{ text1:{type:'string'}, text2:{type:'string'} }, required:['text1','text2'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'number_facts',
+      description: 'Интересные факты о числе или дате через Numbers API',
+      parameters: { type:'object', properties:{ number:{type:'number'}, type:{type:'string',description:'trivia, math, date, year'} }, required:['number'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'timezone_now',
+      description: 'Текущее время сразу в нескольких городах мира',
+      parameters: { type:'object', properties:{ cities:{type:'string',description:'города через запятую: Москва,Токио,Нью-Йорк'} }, required:['cities'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'lorem_ipsum',
+      description: 'Генерирует lorem ipsum текст-заглушку',
+      parameters: { type:'object', properties:{ paragraphs:{type:'number'}, language:{type:'string',description:'lorem, ru, en'} }, required:[] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ascii_art',
+      description: 'Создаёт ASCII-арт из текста или рисует простые фигуры',
+      parameters: { type:'object', properties:{ text:{type:'string'}, style:{type:'string',description:'block, shadow, banner, digital'} }, required:['text'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'markdown_preview',
+      description: 'Конвертирует Markdown в красивый HTML и сохраняет как файл',
+      parameters: { type:'object', properties:{ markdown:{type:'string'}, title:{type:'string'} }, required:['markdown'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'sql_format',
+      description: 'Форматирует и валидирует SQL запросы, объясняет что делает запрос',
+      parameters: { type:'object', properties:{ sql:{type:'string'}, action:{type:'string',description:'format, explain, optimize'} }, required:['sql','action'] }
+    }
   }
 ];
 
 // ── Утилиты ──────────────────────────────────────────────────────────────────
 function aiGetSession(username) {
   if (!aiConversations.has(username)) {
-    aiConversations.set(username, { history: [], msgCount: 0, debugMode: false });
+    aiConversations.set(username, { history: [], msgCount: 0, debugMode: false, thinking: false, multiagent: false });
   }
-  return aiConversations.get(username);
+  const sess = aiConversations.get(username);
+  if (sess.thinking   === undefined) sess.thinking   = false;
+  if (sess.multiagent === undefined) sess.multiagent = false;
+  return sess;
 }
 
 function aiTickFiles(username) {
@@ -3139,7 +3320,154 @@ ${result.slice(0,800)}
       return `ASK_USER:${JSON.stringify({ questions })}`;
     }
 
-    return 'Инструмент не найден: ' + name;
+    // ── hash_text ──────────────────────────────────────────────────────────
+    if (name === 'hash_text') {
+      const { text, algorithm = 'sha256' } = args;
+      const alg = ['md5','sha1','sha256','sha512'].includes(algorithm.toLowerCase()) ? algorithm.toLowerCase() : 'sha256';
+      const hash = require('crypto').createHash(alg).update(String(text)).digest('hex');
+      return `**${alg.toUpperCase()}:** \`${hash}\``;
+    }
+
+    // ── password_check ─────────────────────────────────────────────────────
+    if (name === 'password_check') {
+      const { action = 'check', password = '', length = 16 } = args;
+      if (action === 'generate') {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*';
+        let pwd = ''; const arr = require('crypto').randomBytes(+length || 16);
+        for (let i = 0; i < (+length||16); i++) pwd += chars[arr[i] % chars.length];
+        return `🔐 Пароль: \`${pwd}\` | Длина: ${pwd.length} | Энтропия: ~${Math.round(Math.log2(chars.length ** pwd.length))} бит`;
+      }
+      const checks = [
+        { ok: password.length >= 12,          msg: 'длина ≥ 12 символов' },
+        { ok: /[A-Z]/.test(password),         msg: 'есть заглавные буквы' },
+        { ok: /[a-z]/.test(password),         msg: 'есть строчные буквы' },
+        { ok: /[0-9]/.test(password),         msg: 'есть цифры' },
+        { ok: /[^A-Za-z0-9]/.test(password),  msg: 'есть спецсимволы' },
+        { ok: !/(.)\1{2,}/.test(password),    msg: 'нет длинных повторений' },
+      ];
+      const score = checks.filter(c => c.ok).length;
+      const level = score <= 2 ? '🔴 Слабый' : score <= 4 ? '🟡 Средний' : '🟢 Надёжный';
+      const details = checks.map(c => (c.ok ? '✅' : '❌') + ' ' + c.msg).join('\n');
+      return '**Пароль:** `' + password + '`\n**Уровень:** ' + level + ' (' + score + '/6)\n\n' + details;
+    }
+
+    // ── cron_explain ───────────────────────────────────────────────────────
+    if (name === 'cron_explain') {
+      const { input = '* * * * *' } = args;
+      const parts = input.trim().split(/\s+/);
+      if (parts.length < 5) return 'Cron: минута час день месяц деньНедели — нужно 5 полей';
+      const [min, hour, dom, mon, dow] = parts;
+      const months = ['','янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+      const days   = ['вс','пн','вт','ср','чт','пт','сб'];
+      const f = (v, names) => v === '*' ? 'каждый' : (names && names[+v]) ? names[+v] : v;
+      return '**Cron:** `' + input + '`\n• Минута: ' + min + '\n• Час: ' + hour + '\n• День: ' + dom + '\n• Месяц: ' + f(mon, months) + '\n• День недели: ' + f(dow, days);
+    }
+
+    // ── diff_text ──────────────────────────────────────────────────────────
+    if (name === 'diff_text') {
+      const lines1 = (args.text1 || '').split('\n');
+      const lines2 = (args.text2 || '').split('\n');
+      const out = []; let added = 0, removed = 0, same = 0;
+      const maxLen = Math.max(lines1.length, lines2.length);
+      for (let i = 0; i < maxLen; i++) {
+        const l1 = lines1[i], l2 = lines2[i];
+        if (l1 === l2) { same++; }
+        else if (l1 === undefined) { out.push('+ ' + l2); added++; }
+        else if (l2 === undefined) { out.push('- ' + l1); removed++; }
+        else { out.push('- ' + l1); out.push('+ ' + l2); removed++; added++; }
+      }
+      const preview = out.slice(0,40).join('\n') + (out.length > 40 ? '\n...' : '');
+      return '**Diff:**\n```diff\n' + preview + '\n```\n✅ Совпадает: ' + same + ' | ➕ Добавлено: ' + added + ' | ➖ Удалено: ' + removed;
+    }
+
+    // ── number_facts ───────────────────────────────────────────────────────
+    if (name === 'number_facts') {
+      const { number = 42, type: ft = 'trivia' } = args;
+      try {
+        const r = await axios.get('http://numbersapi.com/' + number + '/' + ft + '?json', { timeout: 6000 });
+        return '🔢 **' + number + '**: ' + (r.data.text || JSON.stringify(r.data));
+      } catch { return '🔢 ' + number + ' — введи число чтобы узнать факт о нём'; }
+    }
+
+    // ── timezone_now ───────────────────────────────────────────────────────
+    if (name === 'timezone_now') {
+      const cityTz = { 'москва':'Europe/Moscow','питер':'Europe/Moscow','токио':'Asia/Tokyo','нью-йорк':'America/New_York','лондон':'Europe/London','берлин':'Europe/Berlin','пекин':'Asia/Shanghai','дубай':'Asia/Dubai','сидней':'Australia/Sydney','париж':'Europe/Paris','лос-анджелес':'America/Los_Angeles','сеул':'Asia/Seoul','сингапур':'Asia/Singapore','бангкок':'Asia/Bangkok','стамбул':'Europe/Istanbul' };
+      const cities = (args.cities || 'Москва,Лондон,Токио,Нью-Йорк').split(',').map(c => c.trim());
+      const now = new Date();
+      return cities.map(city => {
+        const tz = cityTz[city.toLowerCase()] || 'UTC';
+        const time = now.toLocaleTimeString('ru-RU', { timeZone: tz, hour:'2-digit', minute:'2-digit', hour12: false });
+        const date = now.toLocaleDateString('ru-RU', { timeZone: tz, day:'2-digit', month:'short' });
+        return '🕐 **' + city + '**: ' + time + ' (' + date + ')';
+      }).join('\n');
+    }
+
+    // ── lorem_ipsum ────────────────────────────────────────────────────────
+    if (name === 'lorem_ipsum') {
+      const { paragraphs = 2, language = 'lorem' } = args;
+      const texts = {
+        lorem: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+        ru: 'Текст-заглушка на русском языке для проверки вёрстки. Здесь будет размещён настоящий текст после его написания.',
+        en: 'This is placeholder text in English. It helps designers see how the layout looks with real content.',
+      };
+      const base = texts[language] || texts.lorem;
+      return Array.from({ length: Math.min(+paragraphs || 2, 5) }, () => base).join('\n\n');
+    }
+
+    // ── ascii_art ──────────────────────────────────────────────────────────
+    if (name === 'ascii_art') {
+      const { text = 'AURA', style = 'block' } = args;
+      const t = text.toUpperCase().trim().slice(0, 20);
+      if (style === 'shadow') {
+        return '```\n' + t.split('').map(c => '░▒▓█' + c + '█▓▒░').join(' ') + '\n```';
+      }
+      if (style === 'banner') {
+        const border = '═'.repeat(t.length * 3 + 4);
+        return '```\n╔' + border + '╗\n║  ' + t.split('').join('  ') + '  ║\n╚' + border + '╝\n```';
+      }
+      const bar = '█'.repeat(t.length * 2 + 2);
+      return '```\n█▀' + bar + '▀█\n█ ' + t.split('').join(' ') + ' █\n█▄' + bar + '▄█\n```';
+    }
+
+    // ── markdown_preview ───────────────────────────────────────────────────
+    if (name === 'markdown_preview') {
+      const { markdown = '', title = 'Preview' } = args;
+      const html = markdown
+        .replace(/^# (.+)$/gm,'<h1>$1</h1>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^### (.+)$/gm,'<h3>$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>')
+        .replace(/`(.+?)`/g,'<code>$1</code>').replace(/^- (.+)$/gm,'<li>$1</li>')
+        .replace(/\[(.+?)\]\((.+?)\)/g,'<a href="$2">$1</a>').replace(/\n\n/g,'</p><p>');
+      const full = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + title + '</title><style>body{font-family:-apple-system,sans-serif;max-width:800px;margin:2em auto;padding:0 1em;line-height:1.7;color:#e8e8f0;background:#0d0d12}h1,h2,h3{color:#a78bfa}code{background:#1e1e2e;padding:2px 6px;border-radius:4px;font-family:monospace}a{color:#6366f1}li{margin:.3em 0}</style></head><body><p>' + html + '</p></body></html>';
+      const { fileId, safe } = aiSaveFile(username, title.replace(/\s+/g,'_') + '.html', full, 'Markdown: ' + title);
+      return 'FILE_CREATED:' + fileId + ':' + safe + ':Markdown Preview:' + full.length;
+    }
+
+    // ── sql_format ─────────────────────────────────────────────────────────
+    if (name === 'sql_format') {
+      const { sql = '', action = 'format' } = args;
+      if (action === 'format') {
+        const fmt = sql
+          .replace(/\bSELECT\b/gi,'\nSELECT').replace(/\bFROM\b/gi,'\nFROM')
+          .replace(/\bWHERE\b/gi,'\nWHERE').replace(/\bAND\b/gi,'\n  AND').replace(/\bOR\b/gi,'\n  OR')
+          .replace(/\bJOIN\b/gi,'\nJOIN').replace(/\bLEFT\s+JOIN\b/gi,'\nLEFT JOIN')
+          .replace(/\bINNER\s+JOIN\b/gi,'\nINNER JOIN').replace(/\bORDER\s+BY\b/gi,'\nORDER BY')
+          .replace(/\bGROUP\s+BY\b/gi,'\nGROUP BY').replace(/\bHAVING\b/gi,'\nHAVING').replace(/\bLIMIT\b/gi,'\nLIMIT').trim();
+        return '```sql\n' + fmt + '\n```';
+      }
+      const ops = [];
+      if (/SELECT/i.test(sql)) ops.push('выбирает данные');
+      if (/FROM/i.test(sql)) { const t = sql.match(/FROM\s+(\w+)/i); if(t) ops.push('из таблицы ' + t[1]); }
+      if (/WHERE/i.test(sql))  ops.push('с фильтрацией');
+      if (/JOIN/i.test(sql))   ops.push('с объединением таблиц');
+      if (/GROUP\s+BY/i.test(sql)) ops.push('с группировкой');
+      if (/ORDER\s+BY/i.test(sql)) ops.push('с сортировкой');
+      if (/INSERT/i.test(sql)) ops.push('вставляет запись');
+      if (/UPDATE/i.test(sql)) ops.push('обновляет записи');
+      if (/DELETE/i.test(sql)) ops.push('удаляет записи');
+      return '📊 **SQL:** ' + (ops.join(', ') || 'неизвестная операция') + '.';
+    }
+
+        return 'Инструмент не найден: ' + name;
   } catch (e) {
     console.error(`[AI Tool ${name}]:`, e.message);
     return `Ошибка ${name}: ${e.message}`;
@@ -3267,9 +3595,20 @@ app.get('/api/ai-history/:username', (req, res) => {
   res.json({ history: clean, files: files.map(f => ({ id: f.id, name: f.name, description: f.description, content: f.content })) });
 });
 
+// ── /api/ai-settings — переключение режимов ─────────────────────────────────
+app.post('/api/ai-settings', (req, res) => {
+  const { username, thinking, multiagent } = req.body;
+  if (!username) return res.status(400).json({ error: 'no username' });
+  const sess = aiGetSession(username);
+  if (thinking   !== undefined) sess.thinking   = !!thinking;
+  if (multiagent !== undefined) sess.multiagent = !!multiagent;
+  res.json({ ok: true, thinking: sess.thinking, multiagent: sess.multiagent });
+});
+
 app.post('/api/ai-chat', async (req, res) => {
   const { username, message, imageData, imageType, fileName, fileContent, model } = req.body;
-  const useAuraAI = model === 'minimax'; // Aura AI = MiniMax
+  const useAuraAI = model === 'minimax';
+  const useOR     = model && OR_MODELS[model]; // OpenRouter модель
   if (!username) return res.status(400).json({ error: 'Нет username' });
   if (!message?.trim() && !imageData && !fileContent) return res.status(400).json({ error: 'Нет сообщения' });
 
@@ -3319,7 +3658,33 @@ app.post('/api/ai-chat', async (req, res) => {
   try {
     const isDebug  = session.debugMode;
 
-    // Если выбрана Aura AI (MiniMax) — отвечаем напрямую без инструментов
+    // ── OpenRouter модели ──────────────────────────────────────────────────────
+    if (useOR) {
+      let reply = '';
+      try {
+        aiSseEmit(username, 'log', { icon: '🤖', text: `${model} думает...`, type: 'process' });
+        reply = await callOpenRouter(model,
+          [{ role: 'system', content: currentSystemPrompt }, ...history],
+          delta => {
+            if (delta.startsWith('__THINK__')) {
+              aiSseEmit(username, 'log', { icon: '💭', text: delta.slice(9), type: 'think' });
+            } else {
+              aiSseEmit(username, 'chunk', { text: delta });
+            }
+          }
+        );
+      } catch(orErr) {
+        console.error('[OR] Ошибка:', orErr.message);
+        reply = `⚠️ Ошибка ${model}: ${orErr.message}`;
+      }
+      if (!reply) reply = 'Готово';
+      history.push({ role: 'assistant', content: reply });
+      scheduleAiConvSave();
+      aiSseEmit(username, 'done', {});
+      return res.json({ success: true, reply, toolsUsed: [], createdFiles: [] });
+    }
+
+    // ── Aura AI (MiniMax) ──────────────────────────────────────────────────────
     if (useAuraAI) {
       let reply = '';
       try {
@@ -3329,7 +3694,7 @@ app.post('/api/ai-chat', async (req, res) => {
         );
       } catch(mmErr) {
         console.error('[MiniMax] Ошибка:', mmErr.response?.data || mmErr.message);
-        reply = '⚠️ Aura AI временно недоступна. Попробуй позже или выбери Mistral.';
+        reply = '⚠️ Aura AI временно недоступна. Попробуй позже или выбери другую модель.';
       }
       if (!reply) reply = 'Готово';
       history.push({ role: 'assistant', content: reply });
@@ -4764,12 +5129,6 @@ io.on('connection', (socket) => {
   socket.on('media-message', (data) => {
     const { mediaData, room } = data;
     if (!currentUser) return;
-    const durationMs =
-      (mediaData?.durationMs && Number.isFinite(Number(mediaData.durationMs)))
-        ? Math.max(0, Math.round(Number(mediaData.durationMs)))
-        : (mediaData?.duration && Number.isFinite(Number(mediaData.duration)))
-          ? Math.max(0, Math.round(Number(mediaData.duration) * 1000))
-          : undefined;
     const msg = {
       id: Date.now() + Math.random(),
       user: currentUser,
@@ -4777,8 +5136,6 @@ io.on('connection', (socket) => {
       type: mediaData.type,
       url: mediaData.url,
       fileName: mediaData.fileName,
-      duration: durationMs ? Math.round(durationMs / 1000) : undefined,
-      durationMs,
       time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
       date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
       ts:   Date.now(),
