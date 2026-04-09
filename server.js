@@ -1117,7 +1117,7 @@ app.use(express.json());
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
 const OMNIROUTER_KEY  = process.env.OMNIROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
-const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || 'https://api.omnirouter.com/api/v1/chat/completions';
+const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || 'http://localhost:20128/v1';
 // MiniMax (Aura AI)
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || '';
 const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions';
@@ -1168,11 +1168,13 @@ async function callOmniRouter(modelKey, messages, onChunk) {
     push(noSlash + '/v1/chat/completions');
     return list;
   })();
+  console.log('[OmniRouter] model=', modelKey, 'base=', noSlash, 'candidates=', endpointCandidates.join(' | '));
 
   let resp = null;
   let lastErr = null;
   for (const endpoint of endpointCandidates) {
     try {
+      console.log('[OmniRouter] trying', endpoint);
       resp = await axios.post(endpoint, {
         model:       mdl.id,
         messages,
@@ -1192,6 +1194,7 @@ async function callOmniRouter(modelKey, messages, onChunk) {
       break;
     } catch (e) {
       lastErr = e;
+      console.log('[OmniRouter] failed', endpoint, 'status=', e?.response?.status, 'msg=', String(e?.response?.data || e?.message || '').slice(0, 220));
       const status = e?.response?.status;
       const isPathIssue = status === 404 || status === 405 || /not found|cannot post/i.test(String(e?.response?.data || e?.message || ''));
       if (!isPathIssue) break;
@@ -3755,6 +3758,7 @@ app.post('/api/ai-chat', async (req, res) => {
   const { username, message, imageData, imageType, fileName, fileContent, model: selectedModel } = req.body;
   const useAuraAI = selectedModel === 'minimax';
   const useOR     = selectedModel && OR_MODELS[selectedModel]; // OmniRouter модель
+  console.log('[AI Chat] selectedModel=', selectedModel, 'useOR=', !!useOR, 'OMNIROUTER_API_URL=', OMNIROUTER_API_URL);
   if (!username) return res.status(400).json({ error: 'Нет username' });
   if (!message?.trim() && !imageData && !fileContent) return res.status(400).json({ error: 'Нет сообщения' });
 
