@@ -2060,11 +2060,23 @@ const AI_TOOLS = [
 // ── Утилиты ──────────────────────────────────────────────────────────────────
 function aiGetSession(username) {
   if (!aiConversations.has(username)) {
-    aiConversations.set(username, { history: [], msgCount: 0, debugMode: false, thinking: false, multiagent: false });
+    aiConversations.set(username, {
+      history: [],
+      msgCount: 0,
+      debugMode: false,
+      thinking: false,
+      multiagent: false,
+      pendingAsk: null,
+      lastAskHash: '',
+      lastAskAt: 0
+    });
   }
   const sess = aiConversations.get(username);
   if (sess.thinking   === undefined) sess.thinking   = false;
   if (sess.multiagent === undefined) sess.multiagent = false;
+  if (sess.pendingAsk === undefined) sess.pendingAsk = null;
+  if (sess.lastAskHash === undefined) sess.lastAskHash = '';
+  if (sess.lastAskAt === undefined) sess.lastAskAt = 0;
   return sess;
 }
 
@@ -2090,7 +2102,12 @@ function aiBuildAskUserFromText(text) {
   const clean = String(text || '').trim();
   if (!clean) return null;
   const src = clean.replace(/\r/g, '');
-  const hasAskIntent = /нужно уточнение|уточни|уточнение|вопрос\s*:|укажите|какой|какая|какие|что именно|выбери|выберите|\?/i.test(src);
+  if (/```[\s\S]*?```/.test(src)) return null;
+  // Не превращаем структурные план-ответы в ask_user
+  if (/ЗАДАЧА[\s\S]*ПЛАН[\s\S]*КОМАНДЫ АГЕНТАМ/i.test(src) && !/НУЖНО УТОЧНЕНИЕ|Вопрос\s*:/i.test(src)) return null;
+
+  const first = src.slice(0, 420);
+  const hasAskIntent = /нужно уточнение|уточни|уточнение|вопрос\s*:|укажите|какой|какая|какие|что именно|выбери|выберите|\?/i.test(first);
   if (!hasAskIntent) return null;
 
   // 1) Вопрос + нумерованные варианты
@@ -2103,7 +2120,7 @@ function aiBuildAskUserFromText(text) {
   const options = optionMatches
     .map(m => (m[2] || '').replace(/^[*\-–]\s*/, '').trim())
     .filter(Boolean)
-    .slice(0, 10);
+    .slice(0, 6);
   const qLikeCount = options.filter(o => /\?\s*$/.test(o) || /что|какой|какая|какие|укажи|уточни/i.test(o)).length;
   if (options.length >= 2 && options.length <= 10 && qLikeCount <= 1) {
     return {
@@ -2121,7 +2138,7 @@ function aiBuildAskUserFromText(text) {
   const numberedQuestions = optionMatches
     .map(m => (m[2] || '').trim())
     .filter(Boolean)
-    .slice(0, 5)
+    .slice(0, 3)
     .map(q => ({
       question: q.endsWith('?') ? q : (q + '?'),
       options: [],
@@ -2134,11 +2151,11 @@ function aiBuildAskUserFromText(text) {
   }
 
   // 3) Фолбэк
-  const looksQuestion = /\?[\s]*$/.test(src) || /^уточни|^подскажи|^какой|^какая|^какие|^нужно уточнить/i.test(src);
+  const looksQuestion = (/\?[\s]*$/.test(first) || /^уточни|^подскажи|^какой|^какая|^какие|^нужно уточнить/i.test(first)) && src.length < 700;
   if (!looksQuestion) return null;
   return {
     questions: [{
-      question: src,
+      question: first,
       options: ['1', '2'],
       multi_select: false,
       allow_custom: true,
@@ -2167,6 +2184,28 @@ function aiDedupeRepeatedText(text) {
     if (last.length > 120 && last === prev) return parts.slice(0, -1).join('\n\n');
   }
   return s;
+}
+
+function aiNeedsWebResearch(text) {
+  const t = String(text || '').toLowerCase();
+  return /(бесплатн|api key|api-ключ|ключ api|последн|latest|свеж|документац|поиск в интернет|найди в интернете|как получить ключ)/.test(t);
+}
+
+async function aiQuickWebSearch(query) {
+  const q = String(query || '').trim();
+  if (!q) return '';
+  try {
+    const r = await axios.get('https://duckduckgo.com/?q=' + encodeURIComponent(q) + '&format=json&pretty=1', {
+      timeout: 9000,
+      responseType: 'text',
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    const txt = String(r.data || '').replace(/\s+/g, ' ').trim();
+    if (!txt) return '';
+    return txt.slice(0, 1200);
+  } catch {
+    return '';
+  }
 }
 
 function aiExtractCodeBlocks(text) {
@@ -3939,18 +3978,24 @@ app.post('/api/ai-chat', async (req, res) => {
 
   // Строим контент сообщения
   let userContent;
+  let askReplyContext = '';
+  if (session.pendingAsk && message?.trim()) {
+    const qs = (session.pendingAsk.questions || []).slice(0, 3).map((q, i) => `${i + 1}. ${q.question}`).join('\n');
+    askReplyContext = `\n\n[Ответы на последнее уточнение]\nВопросы:\n${qs}\nОтвет пользователя:\n${message.trim()}\n[/Ответы на последнее уточнение]`;
+    session.pendingAsk = null;
+  }
   if (imageData) {
     userContent = [
-      { type: 'text', text: message?.trim() || 'Проанализируй это изображение подробно' },
+      { type: 'text', text: (message?.trim() || 'Проанализируй это изображение подробно') + askReplyContext },
       { type: 'image_url', image_url: { url: `data:${imageType || 'image/jpeg'};base64,${imageData}` } }
     ];
   } else if (fileContent) {
     const isArchive = /\.(zip|tar|gz|rar|7z)$/i.test(fileName || '');
     const preview = fileContent.slice(0, 10000);
     const fileType = isArchive ? 'архив' : 'файл';
-    userContent = `📎 ${fileType}: **${fileName || 'file'}**\n\`\`\`\n${preview}${fileContent.length > 10000 ? '\n...(обрезано)' : ''}\n\`\`\`\n\n${message?.trim() || (isArchive ? 'Проанализируй этот архив' : 'Проанализируй этот файл')}`;
+    userContent = `📎 ${fileType}: **${fileName || 'file'}**\n\`\`\`\n${preview}${fileContent.length > 10000 ? '\n...(обрезано)' : ''}\n\`\`\`\n\n${message?.trim() || (isArchive ? 'Проанализируй этот архив' : 'Проанализируй этот файл')}${askReplyContext}`;
   } else {
-    let ctx = msgText;
+    let ctx = msgText + askReplyContext;
     if (currentFiles.length) ctx += `\n\n[Файлы в базе: ${currentFiles.map(f => f.name + '(' + f.ttl + 'отв)').join(', ')}]`;
     userContent = ctx;
   }
@@ -3960,6 +4005,27 @@ app.post('/api/ai-chat', async (req, res) => {
 
   try {
     const isDebug  = session.debugMode;
+    const sendAskUser = (askData, tools = ['ask_user'], createdFiles = []) => {
+      if (!askData?.questions?.length) return null;
+      const trimmed = { ...askData, questions: askData.questions.slice(0, 3) };
+      const askSig = JSON.stringify(trimmed.questions.map(q => ({ q: q.question, o: q.options || [] })));
+      const now = Date.now();
+      if (session.pendingAsk && (now - session.lastAskAt) < 180000) {
+        aiSseEmit(username, 'done', {});
+        return res.json({ success: true, reply: 'Ответь на текущий вопрос выше, затем продолжим задачу без новых уточнений.', toolsUsed: tools, createdFiles, askUser: session.pendingAsk });
+      }
+      // Анти-спам одинаковых вопросов в коротком окне
+      if (session.lastAskHash === askSig && (now - session.lastAskAt) < 90000) {
+        return res.json({ success: true, reply: 'Уточнение уже отправлено. Ответь на вопрос выше, и мы продолжим.', toolsUsed: tools, createdFiles });
+      }
+      session.lastAskHash = askSig;
+      session.lastAskAt = now;
+      session.pendingAsk = trimmed;
+      aiSseEmit(username, 'ask_user', trimmed);
+      aiSseEmit(username, 'done', {});
+      scheduleAiConvSave();
+      return res.json({ success: true, reply: '', toolsUsed: tools, createdFiles, askUser: trimmed });
+    };
 
     // ── Реальный multi-agent pipeline ─────────────────────────────────────────
     // Coordinator: Aura (MiniMax M2.7) -> Coder: Qwen3 Coder Plus -> Visual: Qwen Vision/Mistral -> Final: Aura
@@ -3978,23 +4044,30 @@ app.post('/api/ai-chat', async (req, res) => {
       const makeThoughtStreamer = (agent, label) => {
         let buf = '';
         let lastEmitAt = 0;
+        let emitted = 0;
+        const MAX_EMIT = 10;
         const flush = () => {
+          if (emitted >= MAX_EMIT) { buf = ''; return; }
           const t = buf.replace(/\s+/g, ' ').trim();
-          if (!t) return;
-          emitAgentLog(agent, '💭', `${label}: ${t.slice(-220)}`, 'think');
+          if (!t || t.length < 36) return;
+          emitAgentLog(agent, '💭', `${label}: ${t.slice(-140)}`, 'think');
           buf = '';
           lastEmitAt = Date.now();
+          emitted++;
         };
         const onDelta = (delta) => {
           if (!delta) return;
           if (delta.startsWith('__THINK__')) {
             const t = delta.slice(9).trim();
-            if (t) emitAgentLog(agent, '💭', `${label}: ${t.slice(0, 220)}`, 'think');
+            if (t) {
+              buf += ' ' + t;
+              if (/[.!?]$/.test(t) || buf.length > 180) flush();
+            }
             return;
           }
           buf += delta;
           const now = Date.now();
-          if (buf.length >= 220 || (now - lastEmitAt) > 1200 || /[.!?]\s$/.test(buf)) flush();
+          if (buf.length >= 180 || (now - lastEmitAt) > 1700 || /[.!?]\s$/.test(buf)) flush();
         };
         return { onDelta, flush };
       };
@@ -4018,10 +4091,21 @@ app.post('/api/ai-chat', async (req, res) => {
           emitAgentStatus('aura', 'ready', 'Жду уточнение от пользователя');
           emitAgentStatus('coder', 'idle', 'Ожидаю уточнение');
           emitAgentStatus('visual', 'idle', 'Ожидаю уточнение');
-          aiSseEmit(username, 'ask_user', plannerAsk);
-          aiSseEmit(username, 'done', {});
-          scheduleAiConvSave();
-          return res.json({ success: true, reply: '', toolsUsed: ['multiagent', 'ask_user'], createdFiles: [], askUser: plannerAsk });
+          return sendAskUser(plannerAsk, ['multiagent', 'ask_user'], []);
+        }
+
+        let webContext = '';
+        if (aiNeedsWebResearch(plainUserText)) {
+          emitAgentLog('visual', '🌐', 'Visual запрашивает доступ к web_search.', 'process');
+          emitAgentLog('aura', '🛂', 'Aura проверяет запрос на web_search и даёт разрешение.', 'process');
+          const webQ = `${plainUserText} free api key official docs`;
+          const webRaw = await aiQuickWebSearch(webQ);
+          if (webRaw) {
+            webContext = `\n\n[WEB_SEARCH_CONTEXT]\n${webRaw}\n[/WEB_SEARCH_CONTEXT]`;
+            emitAgentLog('aura', '🌐', 'Aura: web_search выполнен, контекст передан агентам.', 'result');
+          } else {
+            emitAgentLog('aura', '⚠️', 'Aura: web_search не дал данных, продолжаем без него.', 'result');
+          }
         }
 
         emitAgentLog('aura', '🧭', 'Aura выдала команды. Запускаю Coder и Visual параллельно.', 'process');
@@ -4031,7 +4115,7 @@ app.post('/api/ai-chat', async (req, res) => {
         const coderStream = makeThoughtStreamer('coder', 'Мысли Coder');
         const coderPromise = callOmniRouter('qw/qwen3-coder-plus', [
           { role: 'system', content: 'Ты Code Worker. Всегда сначала выполняешь указания Aura. ОБЯЗАТЕЛЬНО: 1) ТЕСТ-ПЛАН, 2) ПРОВЕРКА ОШИБОК/СИНТАКСИСА, 3) код возвращай ТОЛЬКО в markdown-блоках с указанием языка. Перед каждым кодблоком укажи строку "File: имя_файла.ext". Если нужны уточнения, используй только блок "НУЖНО УТОЧНЕНИЕ: ...". НИКОГДА не отправляй код обычным текстом. Считай что итог будет сохранен через create_file, поэтому именуй файлы корректно.' },
-          { role: 'user', content: `План координатора:\n${plannerOut}\n\nЗапрос пользователя:\n${plainUserText}` }
+          { role: 'user', content: `План координатора:\n${plannerOut}\n\nЗапрос пользователя:\n${plainUserText}${webContext}` }
         ], coderStream.onDelta, omniBaseUrl)
           .then((out) => {
             coderStream.flush();
@@ -4068,7 +4152,7 @@ app.post('/api/ai-chat', async (req, res) => {
             model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
             messages: [
               { role: 'system', content: 'Ты Visual/QA Reviewer. Проверь запрос пользователя глазами ревьюера: UX, ясность, риски, недочёты и что нужно проверить в результате.' },
-              { role: 'user', content: `Запрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}` }
+              { role: 'user', content: `Запрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}${webContext}` }
             ],
             max_tokens: 1200,
             temperature: 0.3,
@@ -4089,16 +4173,15 @@ app.post('/api/ai-chat', async (req, res) => {
 
         [coderOut, visualOut] = await Promise.all([coderPromise, visualPromise]);
 
-        const teamAsk = aiBuildAskUserFromText(`${coderOut}\n${visualOut}`);
+        const teamRaw = `${coderOut}\n${visualOut}`;
+        const teamHasCode = aiExtractCodeBlocks(teamRaw).length > 0 || /File:\s*[A-Za-z0-9._-]+\.[A-Za-z0-9]+/i.test(teamRaw);
+        const teamAsk = teamHasCode ? null : aiBuildAskUserFromText(teamRaw);
         if (teamAsk) {
           emitAgentLog('aura', '❓', 'Команда запросила уточнение. Передаю вопрос пользователю через ask_user.', 'process');
           emitAgentStatus('aura', 'ready', 'Жду уточнение');
           emitAgentStatus('coder', 'idle', 'Жду уточнение');
           emitAgentStatus('visual', 'idle', 'Жду уточнение');
-          aiSseEmit(username, 'ask_user', teamAsk);
-          aiSseEmit(username, 'done', {});
-          scheduleAiConvSave();
-          return res.json({ success: true, reply: '', toolsUsed: ['multiagent', 'ask_user'], createdFiles: [], askUser: teamAsk });
+          return sendAskUser(teamAsk, ['multiagent', 'ask_user'], []);
         }
 
         emitAgentLog('aura', '✨', 'Aura: объединяю ответы команды и делаю финальную проверку...', 'process');
@@ -4122,10 +4205,7 @@ app.post('/api/ai-chat', async (req, res) => {
       finalOut = aiDedupeRepeatedText(finalOut).replace(/<\/?think>/gi, '').trim();
       const autoAskMa = aiBuildAskUserFromText(finalOut);
       if (autoAskMa) {
-        aiSseEmit(username, 'ask_user', autoAskMa);
-        aiSseEmit(username, 'done', {});
-        scheduleAiConvSave();
-        return res.json({ success: true, reply: '', toolsUsed: ['multiagent', 'ask_user'], createdFiles: [], askUser: autoAskMa });
+        return sendAskUser(autoAskMa, ['multiagent', 'ask_user'], []);
       }
 
       const createdFiles = [];
@@ -4214,10 +4294,7 @@ app.post('/api/ai-chat', async (req, res) => {
       reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
       const autoAskOr = aiBuildAskUserFromText(reply);
       if (autoAskOr) {
-        aiSseEmit(username, 'ask_user', autoAskOr);
-        aiSseEmit(username, 'done', {});
-        scheduleAiConvSave();
-        return res.json({ success: true, reply: '', toolsUsed: ['ask_user'], createdFiles: [], askUser: autoAskOr });
+        return sendAskUser(autoAskOr, ['ask_user'], []);
       }
       history.push({ role: 'assistant', content: reply });
       scheduleAiConvSave();
@@ -4241,10 +4318,7 @@ app.post('/api/ai-chat', async (req, res) => {
       reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
       const autoAskAura = aiBuildAskUserFromText(reply);
       if (autoAskAura) {
-        aiSseEmit(username, 'ask_user', autoAskAura);
-        aiSseEmit(username, 'done', {});
-        scheduleAiConvSave();
-        return res.json({ success: true, reply: '', toolsUsed: ['ask_user'], createdFiles: [], askUser: autoAskAura });
+        return sendAskUser(autoAskAura, ['ask_user'], []);
       }
       history.push({ role: 'assistant', content: reply });
       scheduleAiConvSave();
@@ -4342,10 +4416,7 @@ app.post('/api/ai-chat', async (req, res) => {
       // Если есть pending вопрос — возвращаем его без второго запроса
       if (pendingAskUser) {
         // Отправляем через SSE чтобы клиент успел обработать до HTTP ответа
-        aiSseEmit(username, 'ask_user', pendingAskUser);
-        aiSseEmit(username, 'done', {});
-        scheduleAiConvSave();
-        return res.json({ success: true, reply: '', toolsUsed, createdFiles, askUser: pendingAskUser });
+        return sendAskUser(pendingAskUser, toolsUsed, createdFiles);
       }
 
       // Стриминг финального ответа через SSE
@@ -4411,10 +4482,7 @@ app.post('/api/ai-chat', async (req, res) => {
       reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
       const autoAsk = aiBuildAskUserFromText(reply);
       if (autoAsk) {
-        aiSseEmit(username, 'ask_user', autoAsk);
-        aiSseEmit(username, 'done', {});
-        scheduleAiConvSave();
-        return res.json({ success: true, reply: '', toolsUsed: [...toolsUsed, 'ask_user'], createdFiles, askUser: autoAsk });
+        return sendAskUser(autoAsk, [...toolsUsed, 'ask_user'], createdFiles);
       }
       history.push({ role: 'assistant', content: reply });
       scheduleAiConvSave();
@@ -4425,10 +4493,7 @@ app.post('/api/ai-chat', async (req, res) => {
       const reply = aiDedupeRepeatedText(String(msg1?.content || 'Нет ответа').replace(/<\/?think>/gi, '').trim());
       const autoAsk = aiBuildAskUserFromText(reply);
       if (autoAsk) {
-        aiSseEmit(username, 'ask_user', autoAsk);
-        aiSseEmit(username, 'done', {});
-        scheduleAiConvSave();
-        return res.json({ success: true, reply: '', toolsUsed: ['ask_user'], createdFiles: [], askUser: autoAsk });
+        return sendAskUser(autoAsk, ['ask_user'], []);
       }
       history.push({ role: 'assistant', content: reply });
       if (aiSseClients.has(username)) {
