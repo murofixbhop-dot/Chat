@@ -4421,6 +4421,13 @@ function _aiConnectSse() {
     } catch {}
   });
 
+  _aiSse.addEventListener('agent_status', (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      _aiUpdateAgentStatus(d.agent, d.status, d.text);
+    } catch {}
+  });
+
   _aiSse.addEventListener('chunk', (e) => {
     try {
       const { text } = JSON.parse(e.data);
@@ -4711,50 +4718,228 @@ function _aiCreateStreamBubble() {
 let _aiLiveLogWrap = null;
 let _aiLiveLogList = null;
 let _aiLiveLogItems = [];
+let _aiLiveLogQueue = [];
+let _aiLiveLogFlushTimer = null;
+let _aiLiveLogAgent = 'all';
+let _aiAgentPanel = null;
+let _aiAgentStatus = {
+  aura:   { status: 'idle', text: 'Ожидаю' },
+  coder:  { status: 'idle', text: 'Ожидаю' },
+  visual: { status: 'idle', text: 'Ожидаю' }
+};
 
-function _aiAddLiveLog(d) {
+function _aiGetAgentLabel(agent) {
+  const a = String(agent || 'system');
+  if (a === 'aura') return 'Aura';
+  if (a === 'coder') return 'Qwen Coder';
+  if (a === 'visual') return 'Visual';
+  return 'System';
+}
+
+function _aiStatusColor(status) {
+  if (status === 'working' || status === 'thinking') return '#f59e0b';
+  if (status === 'ready') return '#22c55e';
+  if (status === 'error') return '#ef4444';
+  return 'var(--text3)';
+}
+
+function _aiEnsureAgentPanel() {
+  if (_aiAgentPanel) return;
   const msgs = $('aiMessages');
   if (!msgs) return;
+  _aiAgentPanel = document.createElement('div');
+  _aiAgentPanel.id = 'aiAgentPanel';
+  _aiAgentPanel.style.cssText = 'margin:2px 0 8px 36px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;display:flex;gap:8px;flex-wrap:wrap';
+  msgs.appendChild(_aiAgentPanel);
+  _aiRenderAgentPanel();
+}
 
-  if (!_aiLiveLogWrap) {
-    _aiLiveLogWrap = document.createElement('div');
-    _aiLiveLogWrap.style.cssText = 'margin:2px 0 6px 36px;';
-    const toggle = document.createElement('div');
-    toggle.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:4px;user-select:none';
-    toggle.innerHTML = `<i class="ti ti-adjustments-horizontal" style="font-size:11px"></i><span id="aiLogSummary">Запускаю инструменты...</span><i class="ti ti-chevron-down" id="aiLogArrow" style="font-size:10px;transition:transform .2s;margin-left:auto"></i>`;
-    _aiLiveLogList = document.createElement('div');
-    _aiLiveLogList.style.cssText = 'padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-size:12px;display:none;';
-    toggle.onclick = () => {
-      const open = _aiLiveLogList.style.display === 'none';
-      _aiLiveLogList.style.display = open ? 'block' : 'none';
-      const arrow = document.getElementById('aiLogArrow');
-      if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
-    };
-    _aiLiveLogWrap.appendChild(toggle);
-    _aiLiveLogWrap.appendChild(_aiLiveLogList);
-    msgs.appendChild(_aiLiveLogWrap);
+function _aiRenderAgentPanel() {
+  if (!_aiAgentPanel) return;
+  const make = (key) => {
+    const st = _aiAgentStatus[key] || { status: 'idle', text: 'Ожидаю' };
+    const c = _aiStatusColor(st.status);
+    return `<button data-agent-chip="${key}" style="display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;border:1px solid var(--border);background:var(--surface3);color:var(--text2);font-size:11px;cursor:pointer;font-family:inherit">
+      <span style="width:7px;height:7px;border-radius:50%;background:${c}"></span>
+      <span style="font-weight:600">${_aiGetAgentLabel(key)}</span>
+      <span style="opacity:.82;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(st.text || '')}</span>
+    </button>`;
+  };
+  _aiAgentPanel.innerHTML = make('aura') + make('coder') + make('visual');
+  _aiAgentPanel.querySelectorAll('[data-agent-chip]').forEach((el) => {
+    const agent = el.getAttribute('data-agent-chip');
+    el.onclick = () => _aiSetLiveLogAgent(agent);
+  });
+}
+
+function _aiUpdateAgentStatus(agent, status, text) {
+  const a = String(agent || '').toLowerCase();
+  if (!['aura', 'coder', 'visual'].includes(a)) return;
+  _aiEnsureAgentPanel();
+  _aiAgentStatus[a] = {
+    status: status || _aiAgentStatus[a]?.status || 'idle',
+    text: String(text || _aiAgentStatus[a]?.text || '').slice(0, 120)
+  };
+  _aiRenderAgentPanel();
+}
+
+function _aiSetLiveLogAgent(agent) {
+  _aiLiveLogAgent = agent || 'all';
+  const wrap = document.getElementById('aiLogAgents');
+  if (wrap) {
+    wrap.querySelectorAll('[data-agent-filter]').forEach(btn => {
+      const on = btn.getAttribute('data-agent-filter') === _aiLiveLogAgent;
+      btn.style.background = on ? 'var(--accent)' : 'var(--surface3)';
+      btn.style.color = on ? '#fff' : 'var(--text2)';
+      btn.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
+    });
   }
+  if (_aiLiveLogList) {
+    _aiLiveLogList.querySelectorAll('[data-log-agent]').forEach(row => {
+      const a = row.getAttribute('data-log-agent') || 'system';
+      row.style.display = (_aiLiveLogAgent === 'all' || _aiLiveLogAgent === a) ? 'flex' : 'none';
+    });
+  }
+}
 
-  const item = document.createElement('div');
-  item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--text2);animation:fadeIn .2s ease';
-  // Иконка по типу (маленький индикатор без emoji-роботов)
+function _aiEnsureAgentFilter(agent) {
+  const wrap = document.getElementById('aiLogAgents');
+  if (!wrap) return;
+  if (wrap.querySelector(`[data-agent-filter="${agent}"]`)) return;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.setAttribute('data-agent-filter', agent);
+  btn.style.cssText = 'padding:2px 8px;border-radius:999px;border:1px solid var(--border);background:var(--surface3);color:var(--text2);font-size:11px;cursor:pointer;font-family:inherit';
+  btn.textContent = _aiGetAgentLabel(agent);
+  btn.onclick = () => _aiSetLiveLogAgent(agent);
+  wrap.appendChild(btn);
+}
+
+function _aiEnsureLiveLogWrap() {
+  const msgs = $('aiMessages');
+  if (!msgs) return false;
+  if (_aiLiveLogWrap) return true;
+
+  _aiLiveLogWrap = document.createElement('div');
+  _aiLiveLogWrap.id = 'aiLiveLogWrap';
+  _aiLiveLogWrap.style.cssText = 'margin:2px 0 6px 36px;';
+  const toggle = document.createElement('div');
+  toggle.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:4px;user-select:none';
+  toggle.innerHTML = `<i class="ti ti-adjustments-horizontal" style="font-size:11px"></i><span id="aiLogSummary">Запускаю инструменты...</span><i class="ti ti-chevron-down" id="aiLogArrow" style="font-size:10px;transition:transform .2s;margin-left:auto"></i>`;
+
+  const agents = document.createElement('div');
+  agents.id = 'aiLogAgents';
+  agents.style.cssText = 'display:none;flex-wrap:wrap;gap:6px;margin:6px 0 6px;';
+
+  _aiLiveLogList = document.createElement('div');
+  _aiLiveLogList.style.cssText = 'padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-size:12px;display:none;';
+  toggle.onclick = () => {
+    const open = _aiLiveLogList.style.display === 'none';
+    _aiLiveLogList.style.display = open ? 'block' : 'none';
+    agents.style.display = open ? 'flex' : 'none';
+    const arrow = document.getElementById('aiLogArrow');
+    if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+  };
+
+  const allBtn = document.createElement('button');
+  allBtn.type = 'button';
+  allBtn.setAttribute('data-agent-filter', 'all');
+  allBtn.style.cssText = 'padding:2px 8px;border-radius:999px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:11px;cursor:pointer;font-family:inherit';
+  allBtn.textContent = 'Все';
+  allBtn.onclick = () => _aiSetLiveLogAgent('all');
+  agents.appendChild(allBtn);
+
+  _aiLiveLogWrap.appendChild(toggle);
+  _aiLiveLogWrap.appendChild(agents);
+  _aiLiveLogWrap.appendChild(_aiLiveLogList);
+  msgs.appendChild(_aiLiveLogWrap);
+  return true;
+}
+
+function _aiFlushLiveLogQueue() {
+  _aiLiveLogFlushTimer = null;
+  if (!_aiLiveLogQueue.length) return;
+  if (!_aiEnsureLiveLogWrap()) return;
+
+  const batch = _aiLiveLogQueue.splice(0, 24);
   const typeColors = { search:'#6366f1', fetch:'#06b6d4', process:'#f59e0b', write:'#10b981', check:'#8b5cf6', think:'#9898b0', result:'#22c55e' };
-  const col = typeColors[d.type] || 'var(--text3)';
-  item.innerHTML = `<span style="width:6px;height:6px;border-radius:50%;background:${col};flex-shrink:0;display:inline-block;margin-top:5px"></span><span style="color:var(--text2)">${esc(d.text || '')}</span>`;
-  _aiLiveLogList.appendChild(item);
-  _aiLiveLogItems.push(item);
 
-  // Обновляем summary
-  const summary = document.getElementById('aiLogSummary');
-  if (summary) summary.textContent = d.text || 'Работаю...';
+  batch.forEach((d) => {
+    const agent = String(d.agent || 'system');
+    if (['aura', 'coder', 'visual'].includes(agent)) {
+      if (d.type === 'result') _aiUpdateAgentStatus(agent, 'ready', d.text || 'Готово');
+      else if (d.type === 'think') _aiUpdateAgentStatus(agent, 'thinking', d.text || 'Думаю');
+      else if (d.type === 'process' || d.type === 'write' || d.type === 'check' || d.type === 'fetch') _aiUpdateAgentStatus(agent, 'working', d.text || 'Работаю');
+    }
+    _aiEnsureAgentFilter(agent);
 
+    const item = document.createElement('div');
+    item.setAttribute('data-log-agent', agent);
+    item.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:3px 0;color:var(--text2);animation:fadeIn .16s ease';
+    const col = typeColors[d.type] || 'var(--text3)';
+    const agentLabel = _aiGetAgentLabel(agent);
+
+    const agentBtn = document.createElement('button');
+    agentBtn.type = 'button';
+    agentBtn.style.cssText = 'border:none;background:none;color:var(--accent);font-size:11px;cursor:pointer;padding:0;font-weight:600;flex-shrink:0';
+    agentBtn.textContent = agentLabel;
+    agentBtn.onclick = () => _aiSetLiveLogAgent(agent);
+
+    const dot = document.createElement('span');
+    dot.style.cssText = `width:6px;height:6px;border-radius:50%;background:${col};flex-shrink:0;display:inline-block;margin-top:6px`;
+
+    const text = document.createElement('span');
+    text.style.color = 'var(--text2)';
+    text.textContent = String(d.text || '').slice(0, 500);
+
+    item.appendChild(dot);
+    item.appendChild(agentBtn);
+    item.appendChild(text);
+    if (_aiLiveLogAgent !== 'all' && _aiLiveLogAgent !== agent) item.style.display = 'none';
+    _aiLiveLogList.appendChild(item);
+    _aiLiveLogItems.push(item);
+
+    const summary = document.getElementById('aiLogSummary');
+    if (summary) summary.textContent = `${agentLabel}: ${String(d.text || 'Работаю...').slice(0, 120)}`;
+  });
+
+  while (_aiLiveLogItems.length > 220) {
+    const old = _aiLiveLogItems.shift();
+    old?.remove();
+  }
   _aiSmartScroll();
+
+  if (_aiLiveLogQueue.length) {
+    _aiLiveLogFlushTimer = setTimeout(_aiFlushLiveLogQueue, 90);
+  }
+}
+
+function _aiAddLiveLog(d) {
+  if (!d || typeof d !== 'object') return;
+  if (d.agent) _aiEnsureAgentPanel();
+  _aiLiveLogQueue.push(d);
+  if (!_aiLiveLogFlushTimer) _aiLiveLogFlushTimer = setTimeout(_aiFlushLiveLogQueue, 70);
 }
 
 function _aiResetLiveLog() {
+  if (_aiLiveLogFlushTimer) {
+    clearTimeout(_aiLiveLogFlushTimer);
+    _aiLiveLogFlushTimer = null;
+  }
+  document.getElementById('aiLiveLogWrap')?.remove();
+  document.getElementById('aiAgentPanel')?.remove();
   _aiLiveLogWrap = null;
   _aiLiveLogList = null;
   _aiLiveLogItems = [];
+  _aiLiveLogQueue = [];
+  _aiLiveLogAgent = 'all';
+  _aiAgentPanel = null;
+  _aiAgentStatus = {
+    aura:   { status: 'idle', text: 'Ожидаю' },
+    coder:  { status: 'idle', text: 'Ожидаю' },
+    visual: { status: 'idle', text: 'Ожидаю' }
+  };
 }
 
 function _aiRenderMarkdown(text) {
