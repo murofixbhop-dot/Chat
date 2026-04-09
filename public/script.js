@@ -4804,6 +4804,8 @@ async function aiSend() {
     }
 
     body.model = document.getElementById('aiModelSelect')?.value || 'mistral';
+    const omniUrl = localStorage.getItem('omni_url');
+    if (omniUrl) body.omniUrl = omniUrl.trim();
     const r = await fetch('/api/ai-chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
