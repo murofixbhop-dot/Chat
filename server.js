@@ -1166,6 +1166,10 @@ async function callOmniRouter(modelKey, messages, onChunk) {
 
     push(noSlash + '/api/v1/chat/completions');
     push(noSlash + '/v1/chat/completions');
+    if (noSlash.includes('localhost')) {
+      push((noSlash + '/api/v1/chat/completions').replace('localhost', '127.0.0.1'));
+      push((noSlash + '/v1/chat/completions').replace('localhost', '127.0.0.1'));
+    }
     return list;
   })();
   console.log('[OmniRouter] model=', modelKey, 'base=', noSlash, 'candidates=', endpointCandidates.join(' | '));
@@ -1182,6 +1186,7 @@ async function callOmniRouter(modelKey, messages, onChunk) {
         temperature: 0.7,
         stream:      true,
       }, {
+        proxy: false,
         headers: {
           ...(OMNIROUTER_KEY ? { 'Authorization': `Bearer ${OMNIROUTER_KEY}` } : {}),
           'Content-Type':  'application/json',
@@ -1194,10 +1199,12 @@ async function callOmniRouter(modelKey, messages, onChunk) {
       break;
     } catch (e) {
       lastErr = e;
-      console.log('[OmniRouter] failed', endpoint, 'status=', e?.response?.status, 'msg=', String(e?.response?.data || e?.message || '').slice(0, 220));
+      console.log('[OmniRouter] failed', endpoint, 'status=', e?.response?.status, 'code=', e?.code, 'msg=', String(e?.response?.data || e?.message || '').slice(0, 220));
       const status = e?.response?.status;
-      const isPathIssue = status === 404 || status === 405 || /not found|cannot post/i.test(String(e?.response?.data || e?.message || ''));
-      if (!isPathIssue) break;
+      const msg = String(e?.response?.data || e?.message || '');
+      const isPathIssue = status === 404 || status === 405 || /not found|cannot post/i.test(msg);
+      const isNetworkIssue = !status || ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH'].includes(e?.code);
+      if (!isPathIssue && !isNetworkIssue) break;
     }
   }
   if (!resp) throw (lastErr || new Error('OmniRouter request failed'));
