@@ -1411,6 +1411,16 @@ function getAiSystem(username) {
   const sess = aiConversations.get(username);
   if (sess?.debugMode) return AI_SYSTEM_DEBUG;
   let sys = AI_SYSTEM_SAFE;
+  if (sess?.thinking) {
+    sys += `
+
+[THINKING MODE]
+Перед финальным ответом проведи более глубокую внутреннюю проверку:
+1) проверь логику и граничные случаи,
+2) сверку фактов/предположений,
+3) короткий план верификации результата.
+Не растягивай ответ — думай дольше, пиши компактно.`;
+  }
   if (sess?.multiagent) {
     sys += `
 
@@ -2068,7 +2078,10 @@ function aiGetSession(username) {
       multiagent: false,
       pendingAsk: null,
       lastAskHash: '',
-      lastAskAt: 0
+      lastAskAt: 0,
+      taskId: 1,
+      taskAskCount: 0,
+      taskUpdatedAt: Date.now()
     });
   }
   const sess = aiConversations.get(username);
@@ -2077,6 +2090,9 @@ function aiGetSession(username) {
   if (sess.pendingAsk === undefined) sess.pendingAsk = null;
   if (sess.lastAskHash === undefined) sess.lastAskHash = '';
   if (sess.lastAskAt === undefined) sess.lastAskAt = 0;
+  if (sess.taskId === undefined) sess.taskId = 1;
+  if (sess.taskAskCount === undefined) sess.taskAskCount = 0;
+  if (sess.taskUpdatedAt === undefined) sess.taskUpdatedAt = Date.now();
   return sess;
 }
 
@@ -2206,6 +2222,81 @@ async function aiQuickWebSearch(query) {
   } catch {
     return '';
   }
+}
+
+function aiParseJsonContract(text) {
+  const src = String(text || '');
+  if (!src.trim()) return null;
+  const fenced = src.match(/```json\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1] || src;
+  const fromBraces = (() => {
+    const s = candidate.indexOf('{');
+    const e = candidate.lastIndexOf('}');
+    if (s >= 0 && e > s) return candidate.slice(s, e + 1);
+    return candidate;
+  })();
+  try {
+    const obj = JSON.parse(fromBraces);
+    if (obj && typeof obj === 'object') return obj;
+  } catch {}
+  return null;
+}
+
+function aiBuildDefaultContract(requestText) {
+  return {
+    goal: String(requestText || '').slice(0, 240),
+    scope: 'single_project',
+    deliverables: ['source_code', 'run_instructions', 'test_plan'],
+    assumptions: ['use sensible defaults', 'prefer minimal dependencies'],
+    quality_gate: ['syntax_check', 'basic_smoke_test'],
+    clarifications_needed: []
+  };
+}
+
+function aiNormalizeContract(raw, requestText) {
+  const c = raw && typeof raw === 'object' ? raw : {};
+  return {
+    goal: String(c.goal || requestText || 'Implement task').slice(0, 300),
+    scope: String(c.scope || 'single_project').slice(0, 80),
+    deliverables: Array.isArray(c.deliverables) ? c.deliverables.slice(0, 10) : ['source_code', 'run_instructions', 'test_plan'],
+    assumptions: Array.isArray(c.assumptions) ? c.assumptions.slice(0, 10) : ['use sensible defaults'],
+    quality_gate: Array.isArray(c.quality_gate) ? c.quality_gate.slice(0, 10) : ['syntax_check'],
+    clarifications_needed: Array.isArray(c.clarifications_needed) ? c.clarifications_needed.slice(0, 5) : []
+  };
+}
+
+function aiRunQualityGate(codeBlocks) {
+  const failures = [];
+  const warnings = [];
+  if (!Array.isArray(codeBlocks) || !codeBlocks.length) return { ok: true, failures, warnings };
+  const { execSync } = require('child_process');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aura-qg-'));
+  try {
+    const written = [];
+    codeBlocks.forEach((b, i) => {
+      const name = (b.name || `qg_${i + 1}.${b.ext || 'txt'}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fp = path.join(tmpDir, name);
+      fs.writeFileSync(fp, b.code || '', 'utf8');
+      written.push({ ...b, name, fp, ext: (b.ext || '').toLowerCase() });
+    });
+
+    for (const w of written) {
+      try {
+        if (w.ext === 'js') execSync(`node --check "${w.fp}"`, { stdio: 'pipe', timeout: 12000 });
+        else if (w.ext === 'json') JSON.parse(fs.readFileSync(w.fp, 'utf8'));
+        else if (w.ext === 'py') execSync(`python -m py_compile "${w.fp}"`, { stdio: 'pipe', timeout: 15000 });
+        else if (w.ext === 'html') {
+          const t = fs.readFileSync(w.fp, 'utf8');
+          if (!/<html|<!doctype html/i.test(t)) warnings.push(`${w.name}: no full HTML scaffold`);
+        }
+      } catch (e) {
+        failures.push(`${w.name}: ${String(e.message || e).slice(0, 220)}`);
+      }
+    }
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+  return { ok: failures.length === 0, failures, warnings };
 }
 
 function aiExtractCodeBlocks(text) {
@@ -3945,6 +4036,13 @@ app.post('/api/ai-settings', (req, res) => {
   res.json({ ok: true, thinking: sess.thinking, multiagent: sess.multiagent });
 });
 
+app.get('/api/ai-settings/:username', (req, res) => {
+  const username = req.params.username;
+  if (!username) return res.status(400).json({ error: 'no username' });
+  const sess = aiGetSession(username);
+  res.json({ ok: true, thinking: !!sess.thinking, multiagent: !!sess.multiagent });
+});
+
 app.post('/api/ai-chat', async (req, res) => {
   const { username, message, imageData, imageType, fileName, fileContent, model: selectedModel, omniUrl } = req.body;
   const useAuraAI = selectedModel === 'minimax';
@@ -3958,6 +4056,15 @@ app.post('/api/ai-chat', async (req, res) => {
   const { history } = session;
   session.msgCount++;
   aiTickFiles(username);
+  const nowTs = Date.now();
+  if (!session.pendingAsk && message?.trim()) {
+    session.taskId = (session.taskId || 0) + 1;
+    session.taskAskCount = 0;
+    session.taskUpdatedAt = nowTs;
+  }
+  if (session.pendingAsk && message?.trim()) {
+    session.taskUpdatedAt = nowTs;
+  }
 
   // Проверка debug-промпа
   const msgText = message?.trim() || '';
@@ -4010,6 +4117,10 @@ app.post('/api/ai-chat', async (req, res) => {
       const trimmed = { ...askData, questions: askData.questions.slice(0, 3) };
       const askSig = JSON.stringify(trimmed.questions.map(q => ({ q: q.question, o: q.options || [] })));
       const now = Date.now();
+      if ((session.taskAskCount || 0) >= 1) {
+        aiSseEmit(username, 'log', { agent: 'aura', type: 'result', text: 'Лимит уточнений достигнут, продолжаю по умолчанию.' });
+        return null;
+      }
       if (session.pendingAsk && (now - session.lastAskAt) < 180000) {
         aiSseEmit(username, 'done', {});
         return res.json({ success: true, reply: 'Ответь на текущий вопрос выше, затем продолжим задачу без новых уточнений.', toolsUsed: tools, createdFiles, askUser: session.pendingAsk });
@@ -4021,6 +4132,7 @@ app.post('/api/ai-chat', async (req, res) => {
       session.lastAskHash = askSig;
       session.lastAskAt = now;
       session.pendingAsk = trimmed;
+      session.taskAskCount = (session.taskAskCount || 0) + 1;
       aiSseEmit(username, 'ask_user', trimmed);
       aiSseEmit(username, 'done', {});
       scheduleAiConvSave();
@@ -4031,7 +4143,9 @@ app.post('/api/ai-chat', async (req, res) => {
     // Coordinator: Aura (MiniMax M2.7) -> Coder: Qwen3 Coder Plus -> Visual: Qwen Vision/Mistral -> Final: Aura
     if (session.multiagent) {
       const plainUserText = message?.trim() || (typeof userContent === 'string' ? userContent : 'Задача без текста');
+      const thinkingHint = session.thinking ? 'Thinking mode ON: делай более глубокую проверку и сверку перед финалом.' : '';
       let plannerOut = '';
+      let contract = aiBuildDefaultContract(plainUserText);
       let coderOut = '';
       let visualOut = '';
       let finalOut = '';
@@ -4041,15 +4155,22 @@ app.post('/api/ai-chat', async (req, res) => {
       const emitAgentStatus = (agent, status, text) => {
         aiSseEmit(username, 'agent_status', { agent, status, text: text || '' });
       };
+      const emitAgentRelation = (from, to, action, note = '') => {
+        aiSseEmit(username, 'log', {
+          agent: from,
+          type: 'relation',
+          text: `[${String(from).toUpperCase()} -> ${String(to).toUpperCase()}] ${action}${note ? `: ${note}` : ''}`
+        });
+      };
       const makeThoughtStreamer = (agent, label) => {
         let buf = '';
         let lastEmitAt = 0;
         let emitted = 0;
-        const MAX_EMIT = 10;
+        const MAX_EMIT = 6;
         const flush = () => {
           if (emitted >= MAX_EMIT) { buf = ''; return; }
           const t = buf.replace(/\s+/g, ' ').trim();
-          if (!t || t.length < 36) return;
+          if (!t || t.length < 70) return;
           emitAgentLog(agent, '💭', `${label}: ${t.slice(-140)}`, 'think');
           buf = '';
           lastEmitAt = Date.now();
@@ -4079,24 +4200,29 @@ app.post('/api/ai-chat', async (req, res) => {
         emitAgentLog('aura', '👑', 'Aura (главный): анализирую запрос и готовлю план для команды...', 'process');
         const plannerStream = makeThoughtStreamer('aura', 'Мысли Aura');
         plannerOut = await callMiniMax([
-          { role: 'system', content: 'Ты Aura Planner (MiniMax M2.7), главный агент. Дай четкие указания подагентам: что делает кодер, что делает визуальный агент, как проверяем результат. Формат: ЗАДАЧА, ПЛАН, КОМАНДЫ АГЕНТАМ, КРИТЕРИИ ПРОВЕРКИ. Контракт инструментов: уточнения только через ask_user, код готовим к сохранению как файлы (create_file), перед финалом укажи проверку синтаксиса/запуска (check_code/run_code). Пиши кратко и структурно.' },
+          { role: 'system', content: `Ты Aura Planner (MiniMax M2.7), главный агент. Верни JSON-контракт задачи (без лишнего текста) в формате: {"goal":"","scope":"","deliverables":[],"assumptions":[],"quality_gate":[],"clarifications_needed":[]}. Контракт инструментов: уточнения только через ask_user, код сохраняем файлами, перед финалом проверка синтаксиса/запуска. ${thinkingHint}` },
           { role: 'user', content: plainUserText }
         ], plannerStream.onDelta);
         plannerStream.flush();
+        contract = aiNormalizeContract(aiParseJsonContract(plannerOut), plainUserText);
         emitAgentStatus('aura', 'ready', 'План готов');
 
-        const plannerAsk = aiBuildAskUserFromText(plannerOut);
+        const plannerAsk = (contract.clarifications_needed?.length && (session.taskAskCount || 0) < 1)
+          ? { questions: contract.clarifications_needed.slice(0, 3).map(q => ({ question: String(q), options: [], multi_select: false, allow_custom: true, required: true })) }
+          : aiBuildAskUserFromText(plannerOut);
         if (plannerAsk) {
           emitAgentLog('aura', '❓', 'Aura: запрос слишком общий, сначала запрашиваю уточнение через инструмент.', 'process');
           emitAgentStatus('aura', 'ready', 'Жду уточнение от пользователя');
           emitAgentStatus('coder', 'idle', 'Ожидаю уточнение');
           emitAgentStatus('visual', 'idle', 'Ожидаю уточнение');
-          return sendAskUser(plannerAsk, ['multiagent', 'ask_user'], []);
+          if (sendAskUser(plannerAsk, ['multiagent', 'ask_user'], [])) return;
         }
 
         let webContext = '';
         if (aiNeedsWebResearch(plainUserText)) {
+          emitAgentRelation('visual', 'aura', 'request_permission', 'web_search');
           emitAgentLog('visual', '🌐', 'Visual запрашивает доступ к web_search.', 'process');
+          emitAgentRelation('aura', 'visual', 'grant_permission', 'web_search');
           emitAgentLog('aura', '🛂', 'Aura проверяет запрос на web_search и даёт разрешение.', 'process');
           const webQ = `${plainUserText} free api key official docs`;
           const webRaw = await aiQuickWebSearch(webQ);
@@ -4114,8 +4240,8 @@ app.post('/api/ai-chat', async (req, res) => {
 
         const coderStream = makeThoughtStreamer('coder', 'Мысли Coder');
         const coderPromise = callOmniRouter('qw/qwen3-coder-plus', [
-          { role: 'system', content: 'Ты Code Worker. Всегда сначала выполняешь указания Aura. ОБЯЗАТЕЛЬНО: 1) ТЕСТ-ПЛАН, 2) ПРОВЕРКА ОШИБОК/СИНТАКСИСА, 3) код возвращай ТОЛЬКО в markdown-блоках с указанием языка. Перед каждым кодблоком укажи строку "File: имя_файла.ext". Если нужны уточнения, используй только блок "НУЖНО УТОЧНЕНИЕ: ...". НИКОГДА не отправляй код обычным текстом. Считай что итог будет сохранен через create_file, поэтому именуй файлы корректно.' },
-          { role: 'user', content: `План координатора:\n${plannerOut}\n\nЗапрос пользователя:\n${plainUserText}${webContext}` }
+          { role: 'system', content: `Ты Code Worker. Работай строго по JSON-контракту. ОБЯЗАТЕЛЬНО: 1) ТЕСТ-ПЛАН, 2) ПРОВЕРКА ОШИБОК/СИНТАКСИСА, 3) код ТОЛЬКО в markdown-блоках + перед каждым "File: имя_файла.ext". Вопросы задавай только через блок "НУЖНО УТОЧНЕНИЕ". Используй bug-hunt: проверь граничные случаи и потенциальные баги. ${thinkingHint}` },
+          { role: 'user', content: `Контракт задачи (JSON):\n${JSON.stringify(contract, null, 2)}\n\nПлан координатора:\n${plannerOut}\n\nЗапрос пользователя:\n${plainUserText}${webContext}` }
         ], coderStream.onDelta, omniBaseUrl)
           .then((out) => {
             coderStream.flush();
@@ -4151,8 +4277,8 @@ app.post('/api/ai-chat', async (req, res) => {
           const visResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
             model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
             messages: [
-              { role: 'system', content: 'Ты Visual/QA Reviewer. Проверь запрос пользователя глазами ревьюера: UX, ясность, риски, недочёты и что нужно проверить в результате.' },
-              { role: 'user', content: `Запрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}${webContext}` }
+              { role: 'system', content: `Ты Visual/QA Reviewer. Проверь запрос пользователя глазами ревьюера: UX, ясность, риски, недочёты и что нужно проверить в результате. ${thinkingHint}` },
+              { role: 'user', content: `Контракт задачи (JSON):\n${JSON.stringify(contract, null, 2)}\n\nЗапрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}${webContext}` }
             ],
             max_tokens: 1200,
             temperature: 0.3,
@@ -4181,7 +4307,7 @@ app.post('/api/ai-chat', async (req, res) => {
           emitAgentStatus('aura', 'ready', 'Жду уточнение');
           emitAgentStatus('coder', 'idle', 'Жду уточнение');
           emitAgentStatus('visual', 'idle', 'Жду уточнение');
-          return sendAskUser(teamAsk, ['multiagent', 'ask_user'], []);
+          if (sendAskUser(teamAsk, ['multiagent', 'ask_user'], [])) return;
         }
 
         emitAgentLog('aura', '✨', 'Aura: объединяю ответы команды и делаю финальную проверку...', 'process');
@@ -4205,7 +4331,7 @@ app.post('/api/ai-chat', async (req, res) => {
       finalOut = aiDedupeRepeatedText(finalOut).replace(/<\/?think>/gi, '').trim();
       const autoAskMa = aiBuildAskUserFromText(finalOut);
       if (autoAskMa) {
-        return sendAskUser(autoAskMa, ['multiagent', 'ask_user'], []);
+        if (sendAskUser(autoAskMa, ['multiagent', 'ask_user'], [])) return;
       }
 
       const createdFiles = [];
@@ -4229,6 +4355,35 @@ app.post('/api/ai-chat', async (req, res) => {
         if (loose) codeBlocks = [loose];
       }
       if (codeBlocks.length) {
+        const qg1 = aiRunQualityGate(codeBlocks);
+        if (!qg1.ok) {
+          emitAgentLog('aura', '🧪', 'Quality-gate: найдены ошибки, запускаю авто-фикс.', 'process');
+          const fixed = await callMiniMax([
+            { role: 'system', content: 'Исправь код так, чтобы прошёл синтаксическую проверку. Верни ТОЛЬКО markdown-кодблоки. Перед каждым кодблоком строка "File: name.ext".' },
+            { role: 'user', content: `Контракт:\n${JSON.stringify(contract, null, 2)}\n\nОшибки quality-gate:\n${qg1.failures.join('\n')}\n\nТекущий ответ:\n${finalOut}` }
+          ]);
+          const fixedBlocks = aiExtractCodeBlocks(fixed);
+          if (fixedBlocks.length) {
+            codeBlocks = fixedBlocks;
+            finalOut = fixed;
+          }
+          const qg2 = aiRunQualityGate(codeBlocks);
+          if (!qg2.ok) {
+            emitAgentLog('aura', '⛔', 'Quality-gate не пройден. Выдача кода остановлена.', 'result');
+            aiSseEmit(username, 'done', {});
+            return res.json({
+              success: true,
+              reply: `⛔ Quality-gate не пройден.\n\nОшибки:\n${qg2.failures.slice(0, 6).join('\n')}\n\nУточни требования или попроси авто-починку по пунктам.`,
+              toolsUsed: ['multiagent', 'quality_gate'],
+              createdFiles: []
+            });
+          }
+          emitAgentLog('aura', '✅', 'Quality-gate пройден после авто-фикса.', 'result');
+        } else {
+          emitAgentLog('aura', '✅', 'Quality-gate пройден.', 'result');
+        }
+      }
+      if (codeBlocks.length) {
         codeBlocks.forEach((b, idx) => {
           const fname = b.name || `agent_result_${idx + 1}.${b.ext}`;
           const { fileId, safe } = aiSaveFile(username, fname, b.code, `Код от Multi-Agent (${b.lang || b.ext})`);
@@ -4249,11 +4404,12 @@ app.post('/api/ai-chat', async (req, res) => {
     if (useOR) {
       let reply = '';
       try {
-        const orSystemPrompt = selectedModel === 'qw/qwen3-coder-plus'
+        const targetModel = imageData ? 'qw/vision-model' : selectedModel;
+        const orSystemPrompt = targetModel === 'qw/qwen3-coder-plus'
           ? `${currentSystemPrompt}\n\n[ЖЕСТКОЕ ПРАВИЛО ДЛЯ CODER]\nПеред финальным ответом ОБЯЗАТЕЛЬНО выдай блок:\n1) ТЕСТ-ПЛАН\n2) КАК ПРОВЕРИТЬ ОШИБКИ\n3) ГОТОВО ТОЛЬКО ПОСЛЕ ПРОВЕРКИ\nНе пропускай эти пункты.`
           : currentSystemPrompt;
-        aiSseEmit(username, 'log', { icon: '🤖', text: `${selectedModel} думает...`, type: 'process' });
-        reply = await callOmniRouter(selectedModel,
+        aiSseEmit(username, 'log', { icon: '🤖', text: `${targetModel} думает...`, type: 'process' });
+        reply = await callOmniRouter(targetModel,
           [{ role: 'system', content: orSystemPrompt }, ...history],
           delta => {
             if (delta.startsWith('__THINK__')) {
@@ -4287,14 +4443,28 @@ app.post('/api/ai-chat', async (req, res) => {
             reply = '⚠️ OmniRoute упал (ошибка модуля zod), а резервный запрос тоже не прошёл. Проверь OmniRoute или временно выбери Mistral.';
           }
         } else {
-          reply = `⚠️ Ошибка ${selectedModel}: ${orErr.message}`;
+          aiSseEmit(username, 'log', { icon: '⚠️', type: 'process', text: `Qwen недоступен (${orErr.message}). Aura делает задачу вместо него.` });
+          try {
+            const auraFallbackPrompt = selectedModel === 'qw/qwen3-coder-plus'
+              ? `${currentSystemPrompt}\n\nQwen недоступен. Выполни задачу как coder: обязательно ТЕСТ-ПЛАН, проверка синтаксиса и код в markdown-блоках с "File: name.ext".`
+              : currentSystemPrompt;
+            reply = await callMiniMax(
+              [{ role: 'system', content: auraFallbackPrompt }, ...history],
+              delta => {
+                if (delta.startsWith('__THINK__')) aiSseEmit(username, 'log', { icon: '💭', text: delta.slice(9), type: 'think' });
+                else aiSseEmit(username, 'chunk', { text: delta });
+              }
+            );
+          } catch (aErr) {
+            reply = `⚠️ Ошибка ${selectedModel}: ${orErr.message}. Fallback Aura тоже не сработал: ${aErr.message}`;
+          }
         }
       }
       if (!reply) reply = 'Готово';
       reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
       const autoAskOr = aiBuildAskUserFromText(reply);
       if (autoAskOr) {
-        return sendAskUser(autoAskOr, ['ask_user'], []);
+        if (sendAskUser(autoAskOr, ['ask_user'], [])) return;
       }
       history.push({ role: 'assistant', content: reply });
       scheduleAiConvSave();
@@ -4318,7 +4488,7 @@ app.post('/api/ai-chat', async (req, res) => {
       reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
       const autoAskAura = aiBuildAskUserFromText(reply);
       if (autoAskAura) {
-        return sendAskUser(autoAskAura, ['ask_user'], []);
+        if (sendAskUser(autoAskAura, ['ask_user'], [])) return;
       }
       history.push({ role: 'assistant', content: reply });
       scheduleAiConvSave();
@@ -4416,7 +4586,7 @@ app.post('/api/ai-chat', async (req, res) => {
       // Если есть pending вопрос — возвращаем его без второго запроса
       if (pendingAskUser) {
         // Отправляем через SSE чтобы клиент успел обработать до HTTP ответа
-        return sendAskUser(pendingAskUser, toolsUsed, createdFiles);
+        if (sendAskUser(pendingAskUser, toolsUsed, createdFiles)) return;
       }
 
       // Стриминг финального ответа через SSE
@@ -4482,7 +4652,7 @@ app.post('/api/ai-chat', async (req, res) => {
       reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
       const autoAsk = aiBuildAskUserFromText(reply);
       if (autoAsk) {
-        return sendAskUser(autoAsk, [...toolsUsed, 'ask_user'], createdFiles);
+        if (sendAskUser(autoAsk, [...toolsUsed, 'ask_user'], createdFiles)) return;
       }
       history.push({ role: 'assistant', content: reply });
       scheduleAiConvSave();
@@ -4493,7 +4663,7 @@ app.post('/api/ai-chat', async (req, res) => {
       const reply = aiDedupeRepeatedText(String(msg1?.content || 'Нет ответа').replace(/<\/?think>/gi, '').trim());
       const autoAsk = aiBuildAskUserFromText(reply);
       if (autoAsk) {
-        return sendAskUser(autoAsk, ['ask_user'], []);
+        if (sendAskUser(autoAsk, ['ask_user'], [])) return;
       }
       history.push({ role: 'assistant', content: reply });
       if (aiSseClients.has(username)) {
