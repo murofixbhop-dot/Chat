@@ -1117,7 +1117,7 @@ app.use(express.json());
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
 const OMNIROUTER_KEY  = process.env.OMNIROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
-const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || 'http://localhost:20128/v1';
+const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || 'https://src-dakota-strip-con.trycloudflare.com/v1';
 // MiniMax (Aura AI)
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || '';
 const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions';
@@ -1132,11 +1132,11 @@ const OR_MODELS = {
 };
 
 // в”Ђв”Ђ Р’С‹Р·РѕРІ OmniRouter (OpenAI-СЃРѕРІРјРµСЃС‚РёРјС‹Р№) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-async function callOmniRouter(modelKey, messages, onChunk) {
+async function callOmniRouter(modelKey, messages, onChunk, customBaseUrl) {
   const mdl = OR_MODELS[modelKey];
   if (!mdl) throw new Error('Неизвестная модель: ' + modelKey);
 
-  const raw = String(OMNIROUTER_API_URL || '').trim();
+  const raw = String(customBaseUrl || OMNIROUTER_API_URL || '').trim();
   const noSlash = raw.replace(/\/+$/, '');
   const isLocalOmni = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(noSlash);
   if (!OMNIROUTER_KEY && !isLocalOmni) throw new Error('OMNIROUTER_API_KEY не задан в env');
@@ -1209,7 +1209,7 @@ async function callOmniRouter(modelKey, messages, onChunk) {
   }
   if (!resp) {
     if (lastErr?.code === 'ECONNREFUSED') {
-      throw new Error('Нет соединения с OmniRoute (ECONNREFUSED). Проверь, что OmniRoute запущен в той же сети/хосте, где работает server.js.');
+      throw new Error('Нет соединения с OmniRoute (ECONNREFUSED). Если OmniRoute на другом ПК, укажи omniUrl с LAN IP или Cloudflare Tunnel (не localhost).');
     }
     throw (lastErr || new Error('OmniRouter request failed'));
   }
@@ -3767,10 +3767,11 @@ app.post('/api/ai-settings', (req, res) => {
 });
 
 app.post('/api/ai-chat', async (req, res) => {
-  const { username, message, imageData, imageType, fileName, fileContent, model: selectedModel } = req.body;
+  const { username, message, imageData, imageType, fileName, fileContent, model: selectedModel, omniUrl } = req.body;
   const useAuraAI = selectedModel === 'minimax';
   const useOR     = selectedModel && OR_MODELS[selectedModel]; // OmniRouter модель
-  console.log('[AI Chat] selectedModel=', selectedModel, 'useOR=', !!useOR, 'OMNIROUTER_API_URL=', OMNIROUTER_API_URL);
+  const omniBaseUrl = String(omniUrl || OMNIROUTER_API_URL || '').trim();
+  console.log('[AI Chat] selectedModel=', selectedModel, 'useOR=', !!useOR, 'OMNIROUTER_API_URL=', omniBaseUrl);
   if (!username) return res.status(400).json({ error: 'Нет username' });
   if (!message?.trim() && !imageData && !fileContent) return res.status(400).json({ error: 'Нет сообщения' });
 
@@ -3820,20 +3821,92 @@ app.post('/api/ai-chat', async (req, res) => {
   try {
     const isDebug  = session.debugMode;
 
+    // ── Реальный multi-agent pipeline ─────────────────────────────────────────
+    // Coordinator: Aura (MiniMax M2.7) -> Coder: Qwen3 Coder Plus -> Visual: Qwen Vision/Mistral -> Final: Aura
+    if (session.multiagent) {
+      const plainUserText = message?.trim() || (typeof userContent === 'string' ? userContent : 'Задача без текста');
+      let plannerOut = '';
+      let coderOut = '';
+      let visualOut = '';
+      let finalOut = '';
+
+      try {
+        aiSseEmit(username, 'log', { icon: '🧭', text: 'Multi-Agent: Aura планирует задачу...', type: 'process' });
+        plannerOut = await callMiniMax([
+          { role: 'system', content: 'Ты Aura Planner (MiniMax M2.7). Коротко разложи задачу на шаги: цель, план, критерии проверки, риски. Ответ на русском, структурировано.' },
+          { role: 'user', content: plainUserText }
+        ]);
+
+        aiSseEmit(username, 'log', { icon: '🧑‍💻', text: 'Multi-Agent: Qwen Coder Plus готовит решение...', type: 'process' });
+        coderOut = await callOmniRouter('qw/qwen3-coder-plus', [
+          { role: 'system', content: 'Ты Code Worker. Дай практичное решение по плану. ОБЯЗАТЕЛЬНО добавь раздел "ТЕСТ-ПЛАН" и "ПРОВЕРКА ОШИБОК" перед финалом. Нельзя отдавать готово без теста.' },
+          { role: 'user', content: `План координатора:\n${plannerOut}\n\nЗапрос пользователя:\n${plainUserText}` }
+        ], null, omniBaseUrl);
+
+        if (imageData) {
+          aiSseEmit(username, 'log', { icon: '🖼️', text: 'Multi-Agent: Vision анализирует изображение...', type: 'process' });
+          try {
+            visualOut = await callOmniRouter('qw/vision-model', [
+              { role: 'system', content: 'Ты Vision Worker. Дай технический разбор изображения, полезный для решения задачи.' },
+              { role: 'user', content: [
+                { type: 'text', text: plainUserText || 'Проанализируй изображение' },
+                { type: 'image_url', image_url: { url: `data:${imageType || 'image/jpeg'};base64,${imageData}` } }
+              ] }
+            ], null, omniBaseUrl);
+          } catch (visErr) {
+            visualOut = `Vision недоступен: ${visErr.message}`;
+          }
+        } else {
+          aiSseEmit(username, 'log', { icon: '🔎', text: 'Multi-Agent: Visual-ревью от Mistral...', type: 'process' });
+          const visResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+            model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
+            messages: [
+              { role: 'system', content: 'Ты Visual/QA Reviewer. Проверь решение глазами ревьюера: UX, ясность, риски, недочёты.' },
+              { role: 'user', content: `Запрос:\n${plainUserText}\n\nРешение кодера:\n${coderOut}` }
+            ],
+            max_tokens: 1200,
+            temperature: 0.3,
+          }, {
+            headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+            timeout: 30000,
+          });
+          visualOut = visResp.data.choices?.[0]?.message?.content || '';
+        }
+
+        aiSseEmit(username, 'log', { icon: '✨', text: 'Multi-Agent: Aura объединяет и проверяет на ошибки...', type: 'process' });
+        finalOut = await callMiniMax([
+          { role: 'system', content: 'Ты Aura Coordinator (MiniMax M2.7). Объедини результаты агентов, проверь логические ошибки, исправь несостыковки, дай финальный ответ. Если есть код — явно укажи как протестировать.' },
+          { role: 'user', content: `Запрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}\n\nQwen Coder Plus:\n${coderOut}\n\nVisual Reviewer:\n${visualOut}` }
+        ], delta => aiSseEmit(username, 'chunk', { text: delta }));
+      } catch (maErr) {
+        finalOut = `⚠️ Multi-Agent ошибка: ${maErr.message}`;
+      }
+
+      if (!finalOut) finalOut = 'Готово';
+      history.push({ role: 'assistant', content: finalOut });
+      scheduleAiConvSave();
+      aiSseEmit(username, 'done', {});
+      return res.json({ success: true, reply: finalOut, toolsUsed: ['multiagent'], createdFiles: [] });
+    }
+
     // ── OmniRouter модели ──────────────────────────────────────────────────────
     if (useOR) {
       let reply = '';
       try {
+        const orSystemPrompt = selectedModel === 'qw/qwen3-coder-plus'
+          ? `${currentSystemPrompt}\n\n[ЖЕСТКОЕ ПРАВИЛО ДЛЯ CODER]\nПеред финальным ответом ОБЯЗАТЕЛЬНО выдай блок:\n1) ТЕСТ-ПЛАН\n2) КАК ПРОВЕРИТЬ ОШИБКИ\n3) ГОТОВО ТОЛЬКО ПОСЛЕ ПРОВЕРКИ\nНе пропускай эти пункты.`
+          : currentSystemPrompt;
         aiSseEmit(username, 'log', { icon: '🤖', text: `${selectedModel} думает...`, type: 'process' });
         reply = await callOmniRouter(selectedModel,
-          [{ role: 'system', content: currentSystemPrompt }, ...history],
+          [{ role: 'system', content: orSystemPrompt }, ...history],
           delta => {
             if (delta.startsWith('__THINK__')) {
               aiSseEmit(username, 'log', { icon: 'рџ’­', text: delta.slice(9), type: 'think' });
             } else {
               aiSseEmit(username, 'chunk', { text: delta });
             }
-          }
+          },
+          omniBaseUrl
         );
       } catch(orErr) {
         console.error('[OmniRouter] Ошибка:', orErr.response?.data || orErr.message);
