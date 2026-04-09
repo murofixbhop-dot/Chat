@@ -3559,10 +3559,9 @@ async function openAiChat() {
         { value: 'minimax',               label: 'Aura AI',           icon: '+', group: 'Core' },
         { value: 'qw/qwen3-coder-plus',   label: 'Qwen3 Coder Plus',  icon: 'Q', group: 'OmniRouter' },
         { value: 'qw/qwen3-coder-flash',  label: 'Qwen3 Coder Flash', icon: 'Q', group: 'OmniRouter' },
-        { value: 'qw/vision-model',       label: 'Qwen Vision',       icon: 'V', group: 'OmniRouter' },
         { value: 'qw/coder-model',        label: 'Qwen Coder',        icon: 'C', group: 'OmniRouter' },
       ];
-      let currentModel = 'mistral';
+      let currentModel = localStorage.getItem('ai_model') || 'mistral';
       const modeState = {
         thinking: localStorage.getItem('ai_thinking') === '1',
         multiagent: localStorage.getItem('ai_multiagent') === '1',
@@ -3626,6 +3625,7 @@ async function openAiChat() {
           drop.querySelectorAll('[data-val]').forEach(d => { d.style.background = d.dataset.val === m.value ? 'var(--accent-dim)' : ''; });
           let sel = document.getElementById('aiModelSelect');
           if (sel) sel.value = m.value;
+          localStorage.setItem('ai_model', m.value);
           closeDrop();
         };
         drop.appendChild(item);
@@ -3693,10 +3693,36 @@ async function openAiChat() {
         o.value = m.value; o.textContent = m.label;
         hidSel.appendChild(o);
       });
+      if (!models.some(m => m.value === currentModel)) currentModel = 'mistral';
+      hidSel.value = currentModel;
+      const cur = models.find(m => m.value === currentModel) || models[0];
+      btn.querySelector('#aiModelIcon').textContent = cur.icon;
+      btn.querySelector('#aiModelLabel').textContent = cur.label;
       document.body.appendChild(drop);
       wrap.appendChild(btn);
       wrap.appendChild(hidSel);
       parent.insertBefore(wrap, sendBtn);
+
+      if (currentUser) {
+        fetch('/api/ai-settings/' + encodeURIComponent(currentUser))
+          .then(r => r.json())
+          .then(d => {
+            if (!d || !d.ok) return;
+            modeState.thinking = !!d.thinking;
+            modeState.multiagent = !!d.multiagent;
+            localStorage.setItem('ai_thinking', modeState.thinking ? '1' : '0');
+            localStorage.setItem('ai_multiagent', modeState.multiagent ? '1' : '0');
+            const syncBtn = (id, key, label) => {
+              const el = document.getElementById(id);
+              if (!el) return;
+              const on = !!modeState[key];
+              el.innerHTML = `<span>${label}</span><span style="font-size:11px;padding:2px 8px;border-radius:999px;background:${on ? 'var(--accent)' : 'var(--surface3)'};color:${on ? '#fff' : 'var(--text2)'}">${on ? 'ON' : 'OFF'}</span>`;
+            };
+            syncBtn('aiThinkBtn', 'thinking', 'Thinking');
+            syncBtn('aiMultiAgentBtn', 'multiagent', 'Multi-Agent');
+          })
+          .catch(() => {});
+      }
     }
   }
   $('aiChatModal').classList.add('open');
