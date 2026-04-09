@@ -3851,6 +3851,8 @@ function _aiAddTyping() {
 // Трекер созданных файлов в текущем ответе (для ZIP скачивания)
 let _aiLastCreatedFiles = [];
 const _aiShownFileIds = new Set(); // дедупликация карточек
+let _aiPendingCreatedFiles = [];
+let _aiDeferFileCards = false;
 
 function _aiAddFileCard(file) {
   if (_aiShownFileIds.has(file.id)) return;
@@ -3893,6 +3895,26 @@ function _aiAddFileCard(file) {
   msgs.appendChild(card);
   _aiUpdateFileCardsUi();
   _aiSmartScroll();
+}
+
+function _aiPushPendingFile(file) {
+  if (!file?.id) return;
+  if (_aiShownFileIds.has(file.id)) return;
+  if (_aiPendingCreatedFiles.some(f => f.id === file.id)) return;
+  _aiPendingCreatedFiles.push(file);
+}
+
+function _aiFlushPendingFiles() {
+  if (!_aiPendingCreatedFiles.length) return;
+  _aiPendingCreatedFiles.forEach(f => _aiAddFileCard(f));
+  _aiPendingCreatedFiles = [];
+  if (_aiFilePanelOpen) aiRenderFilePanel();
+  else aiRefreshFileBadge();
+}
+
+function _aiQueueOrAddFile(file) {
+  if (_aiDeferFileCards) _aiPushPendingFile(file);
+  else _aiAddFileCard(file);
 }
 
 function _aiUpdateFileCardsUi() {
@@ -4042,6 +4064,21 @@ let _aiQuestionQueue   = [];  // очередь вопросов
 let _aiQuestionAnswers = {};  // ответы на вопросы { index: value }
 let _aiQuestionIdx     = 0;   // текущий вопрос
 
+function _aiRestoreMainInputHandlers() {
+  const mainInput = $('aiInput');
+  const mainSend = $('aiSendBtn');
+  if (mainInput) {
+    mainInput.placeholder = 'Спросите что-нибудь…';
+    mainInput.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        aiSend();
+      }
+    };
+  }
+  if (mainSend) mainSend.onclick = () => aiSend();
+}
+
 function _aiShowQuestion(askData) {
   // Поддержка обоих форматов
   let questions = askData.questions;
@@ -4060,6 +4097,7 @@ function _aiRenderQuestionBar() {
 
   if (_aiQuestionIdx >= _aiQuestionQueue.length) {
     // Все вопросы отвечены — отправляем итог
+    _aiRestoreMainInputHandlers();
     _aiSubmitAnswers();
     return;
   }
@@ -4117,6 +4155,7 @@ function _aiRenderQuestionBar() {
           else                   { selected.add(opt);    setActive(true);  }
         } else {
           // Одиночный — сразу переходим
+          _aiRestoreMainInputHandlers();
           _aiQuestionAnswers[_aiQuestionIdx] = opt;
           _aiQuestionIdx++;
           _aiRenderQuestionBar();
@@ -4136,7 +4175,12 @@ function _aiRenderQuestionBar() {
       skipBtn.style.cssText = `padding:6px 14px;border-radius:10px;background:var(--surface3);
         border:1px solid var(--border);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;`;
       skipBtn.textContent = 'Пропустить';
-      skipBtn.onclick = () => { _aiQuestionAnswers[_aiQuestionIdx] = null; _aiQuestionIdx++; _aiRenderQuestionBar(); };
+      skipBtn.onclick = () => {
+        _aiRestoreMainInputHandlers();
+        _aiQuestionAnswers[_aiQuestionIdx] = null;
+        _aiQuestionIdx++;
+        _aiRenderQuestionBar();
+      };
       actWrap.appendChild(skipBtn);
     }
     const nextBtn = document.createElement('button');
@@ -4185,13 +4229,16 @@ function _aiRenderQuestionBar() {
       if (canSkip) {
         const skipLink = document.createElement('div');
         skipLink.style.cssText = 'text-align:right;margin-top:4px';
-        skipLink.innerHTML = `<button onclick="
-          $('aiInput').placeholder = 'Спросите что-нибудь…';
-          $('aiInput').onkeydown = (e) => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();aiSend();} };
-          $('aiSendBtn').onclick = () => aiSend();
-          _aiQuestionAnswers[_aiQuestionIdx] = null; _aiQuestionIdx++; _aiRenderQuestionBar();"
-          style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;font-family:inherit;padding:0">
-          Пропустить →</button>`;
+        const skipBtn = document.createElement('button');
+        skipBtn.style.cssText = 'background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;font-family:inherit;padding:0';
+        skipBtn.textContent = 'Пропустить →';
+        skipBtn.onclick = () => {
+          _aiRestoreMainInputHandlers();
+          _aiQuestionAnswers[_aiQuestionIdx] = null;
+          _aiQuestionIdx++;
+          _aiRenderQuestionBar();
+        };
+        skipLink.appendChild(skipBtn);
         bar.appendChild(skipLink);
       }
     }
@@ -4205,6 +4252,7 @@ function _aiRenderQuestionBar() {
 
 async function _aiSubmitAnswers() {
   document.getElementById('aiQuestionBar')?.remove();
+  _aiRestoreMainInputHandlers();
 
   // Собираем ответы — только значения, без повторения вопросов
   const answered = _aiQuestionQueue
@@ -4230,6 +4278,10 @@ async function _aiSubmitAnswers() {
   _aiLocked = true;
   if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '0.5'; }
   const typing = _aiAddTyping();
+  _aiConnectSse();
+  _aiStreamingStarted = false;
+  _aiDeferFileCards = true;
+  _aiPendingCreatedFiles = [];
 
   try {
     const aiModel = document.getElementById('aiModelSelect')?.value || 'mistral';
@@ -4243,11 +4295,9 @@ async function _aiSubmitAnswers() {
       if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
       if (d.toolsUsed?.length) _aiAddToolLog(d.toolsUsed);
       if (d.askUser) { _aiShowQuestion(d.askUser); return; }
-      if (d.reply) _aiAddMessage('assistant', d.reply);
+      if (d.reply && !_aiStreamingStarted) _aiAddMessage('assistant', d.reply);
       if (d.createdFiles?.length) {
-        d.createdFiles.forEach(f => _aiAddFileCard(f));
-        if (_aiFilePanelOpen) aiRenderFilePanel();
-        else aiRefreshFileBadge();
+        d.createdFiles.forEach(f => _aiQueueOrAddFile(f));
       }
     } else {
       _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка'));
@@ -4256,6 +4306,10 @@ async function _aiSubmitAnswers() {
     if (typing) typing.remove();
     _aiAddMessage('assistant', '⚠️ Нет соединения.');
   } finally {
+    if (!_aiStreamingStarted) {
+      _aiFlushPendingFiles();
+      _aiDeferFileCards = false;
+    }
     _aiLocked = false;
     if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = ''; }
     $('aiInput')?.focus();
@@ -4265,10 +4319,15 @@ async function _aiSubmitAnswers() {
 // Старая функция — теперь просто алиас
 async function _aiSendOption(text) {
   document.getElementById('aiQuestionBar')?.remove();
+  _aiRestoreMainInputHandlers();
   _aiAddMessage('user', text);
   const sendBtn = $('aiSendBtn');
   if (sendBtn) sendBtn.disabled = true;
   const typing = _aiAddTyping();
+  _aiConnectSse();
+  _aiStreamingStarted = false;
+  _aiDeferFileCards = true;
+  _aiPendingCreatedFiles = [];
   try {
     const r = await fetch('/api/ai-chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4280,8 +4339,8 @@ async function _aiSendOption(text) {
       if (d.debugMode !== undefined) _aiSetDebugMode(d.debugMode);
       if (d.toolsUsed?.length) _aiAddToolLog(d.toolsUsed);
       if (d.askUser) { _aiShowQuestion(d.askUser); return; }
-      if (d.reply) _aiAddMessage('assistant', d.reply);
-      if (d.createdFiles?.length) { d.createdFiles.forEach(f => _aiAddFileCard(f)); aiRefreshFileBadge(); }
+      if (d.reply && !_aiStreamingStarted) _aiAddMessage('assistant', d.reply);
+      if (d.createdFiles?.length) d.createdFiles.forEach(f => _aiQueueOrAddFile(f));
     } else {
       _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка'));
     }
@@ -4289,6 +4348,10 @@ async function _aiSendOption(text) {
     if (typing) typing.remove();
     _aiAddMessage('assistant', '⚠️ Нет соединения.');
   } finally {
+    if (!_aiStreamingStarted) {
+      _aiFlushPendingFiles();
+      _aiDeferFileCards = false;
+    }
     if (sendBtn) sendBtn.disabled = false;
     $('aiInput')?.focus();
   }
@@ -4416,14 +4479,11 @@ function _aiConnectSse() {
     } catch {}
   });
 
-  // Файлы приходят через SSE сразу при создании
+  // Файлы буферизуем и показываем только после полного ответа (done)
   _aiSse.addEventListener('file_created', (e) => {
     try {
       const f = JSON.parse(e.data);
-      if (!_aiShownFileIds.has(f.id)) {
-        _aiAddFileCard(f);
-        aiRefreshFileBadge();
-      }
+      _aiQueueOrAddFile(f);
     } catch {}
   });
 
@@ -4434,6 +4494,8 @@ function _aiConnectSse() {
       _aiStreamBubble = null;
       _aiStreamContent = '';
     }
+    _aiFlushPendingFiles();
+    _aiDeferFileCards = false;
     document.getElementById('aiTyping')?.remove();
   });
 
@@ -4785,6 +4847,8 @@ async function aiSend() {
   _aiStreamingStarted = false;
   _aiLastCreatedFiles = [];
   _aiShownFileIds.clear();
+  _aiPendingCreatedFiles = [];
+  _aiDeferFileCards = true;
   document.getElementById('aiZipBar')?.remove();
 
   const sendBtn = $('aiSendBtn');
@@ -4829,18 +4893,10 @@ async function aiSend() {
       }
       // Файлы
       if (d.createdFiles?.length) {
-        d.createdFiles.forEach(f => _aiAddFileCard(f));
-        if (_aiFilePanelOpen) aiRenderFilePanel();
-        else aiRefreshFileBadge();
+        d.createdFiles.forEach(f => _aiQueueOrAddFile(f));
       }
       // Лог инструментов (fallback если SSE не было)
       if (d.toolsUsed?.length && !_aiLiveLogWrap) _aiAddToolLog(d.toolsUsed);
-      // Показываем карточки созданных файлов
-      if (d.createdFiles?.length) {
-        d.createdFiles.forEach(f => _aiAddFileCard(f));
-        if (_aiFilePanelOpen) aiRenderFilePanel();
-        else aiRefreshFileBadge();
-      }
     } else {
       _aiAddMessage('assistant', '⚠️ ' + (d.error || 'Ошибка. Попробуй ещё раз.'));
     }
@@ -4848,6 +4904,10 @@ async function aiSend() {
     if (typing) typing.remove();
     _aiAddMessage('assistant', '⚠️ Нет соединения с сервером.');
   } finally {
+    if (!_aiStreamingStarted) {
+      _aiFlushPendingFiles();
+      _aiDeferFileCards = false;
+    }
     if (sendBtn) sendBtn.disabled = false;
     inp.focus();
   }
