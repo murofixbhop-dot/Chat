@@ -1214,7 +1214,12 @@ async function callOmniRouter(modelKey, messages, onChunk, customBaseUrl) {
     throw (lastErr || new Error('OmniRouter request failed'));
   }
 
-  let full = '', inThink = false, thinkBuf = '';
+  let rawFull = '', streamBuf = '', inThink = false, thinkAccum = '';
+  const flushThink = () => {
+    const t = thinkAccum.replace(/\s+/g, ' ').trim();
+    if (t) onChunk?.('__THINK__' + t.slice(-220));
+    thinkAccum = '';
+  };
   await new Promise((resolve, reject) => {
     let buf = '';
     resp.data.on('data', chunk => {
@@ -1227,30 +1232,44 @@ async function callOmniRouter(modelKey, messages, onChunk, customBaseUrl) {
         try {
           const delta = JSON.parse(raw).choices?.[0]?.delta?.content || '';
           if (!delta) continue;
-          full += delta;
-          // Парсим <think>...</think> — шлём как лог
-          for (const ch of delta) {
-            if (!inThink) {
-              thinkBuf += ch;
-              if (thinkBuf.endsWith('<think>')) { inThink = true; thinkBuf = ''; }
-              else if (thinkBuf.length > 7) { onChunk?.(thinkBuf[0]); thinkBuf = thinkBuf.slice(1); }
+          rawFull += delta;
+          streamBuf += delta;
+
+          while (streamBuf.length) {
+            if (inThink) {
+              const endIdx = streamBuf.toLowerCase().indexOf('</think>');
+              if (endIdx === -1) {
+                thinkAccum += streamBuf;
+                if (thinkAccum.length > 220 || /\n/.test(thinkAccum)) flushThink();
+                streamBuf = '';
+              } else {
+                thinkAccum += streamBuf.slice(0, endIdx);
+                flushThink();
+                streamBuf = streamBuf.slice(endIdx + 8);
+                inThink = false;
+              }
             } else {
-              thinkBuf += ch;
-              if (thinkBuf.endsWith('</think>')) {
-                onChunk?.('__THINK__' + thinkBuf.slice(0,-8).trim().slice(0,200));
-                inThink = false; thinkBuf = '';
+              const startIdx = streamBuf.toLowerCase().indexOf('<think>');
+              if (startIdx === -1) {
+                onChunk?.(streamBuf);
+                streamBuf = '';
+              } else {
+                const ans = streamBuf.slice(0, startIdx);
+                if (ans) onChunk?.(ans);
+                streamBuf = streamBuf.slice(startIdx + 7);
+                inThink = true;
               }
             }
           }
-          if (!inThink && thinkBuf.length === 0) onChunk?.(delta);
         } catch {}
       }
     });
     resp.data.on('end', resolve);
     resp.data.on('error', reject);
   });
+  if (thinkAccum.trim()) flushThink();
   // Убираем теги thinking из финального ответа
-  return full.replace(/<think>[\s\S]*?<\/think>/gi, '').trim() || 'Готово';
+  return aiDedupeRepeatedText(rawFull.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()) || 'Готово';
 }
 
 function isOmniRouteModuleError(err) {
@@ -2070,17 +2089,84 @@ function aiSaveFile(username, filename, content, description) {
 function aiBuildAskUserFromText(text) {
   const clean = String(text || '').trim();
   if (!clean) return null;
-  const looksQuestion = /\?[\s]*$/.test(clean) || /^уточни|^подскажи|^какой|^какая|^какие|^нужно уточнить/i.test(clean);
+  const src = clean.replace(/\r/g, '');
+  const hasAskIntent = /нужно уточнение|уточни|уточнение|вопрос\s*:|укажите|какой|какая|какие|что именно|выбери|выберите|\?/i.test(src);
+  if (!hasAskIntent) return null;
+
+  // 1) Вопрос + нумерованные варианты
+  const lines = src.split('\n').map(s => s.trim()).filter(Boolean);
+  let qLine = lines.find(l => /вопрос\s*:|что именно|какой|какая|какие|\?/i.test(l)) || '';
+  qLine = qLine.replace(/^вопрос\s*:\s*/i, '').trim();
+  if (!qLine) qLine = 'Уточни, пожалуйста, что именно нужно сделать?';
+
+  const optionMatches = [...src.matchAll(/(?:^|\n)\s*(\d{1,2})[\)\.\:\-]\s+([^\n]+)/g)];
+  const options = optionMatches
+    .map(m => (m[2] || '').replace(/^[*\-–]\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, 10);
+  const qLikeCount = options.filter(o => /\?\s*$/.test(o) || /что|какой|какая|какие|укажи|уточни/i.test(o)).length;
+  if (options.length >= 2 && options.length <= 10 && qLikeCount <= 1) {
+    return {
+      questions: [{
+        question: qLine,
+        options,
+        multi_select: false,
+        allow_custom: true,
+        required: true,
+      }]
+    };
+  }
+
+  // 2) Набор уточняющих пунктов (1..N) -> цепочка вопросов
+  const numberedQuestions = optionMatches
+    .map(m => (m[2] || '').trim())
+    .filter(Boolean)
+    .slice(0, 5)
+    .map(q => ({
+      question: q.endsWith('?') ? q : (q + '?'),
+      options: [],
+      multi_select: false,
+      allow_custom: true,
+      required: true,
+    }));
+  if (numberedQuestions.length >= 2) {
+    return { questions: numberedQuestions };
+  }
+
+  // 3) Фолбэк
+  const looksQuestion = /\?[\s]*$/.test(src) || /^уточни|^подскажи|^какой|^какая|^какие|^нужно уточнить/i.test(src);
   if (!looksQuestion) return null;
   return {
     questions: [{
-      question: `${clean}\n\nВыбери: 1 или 2`,
+      question: src,
       options: ['1', '2'],
       multi_select: false,
       allow_custom: true,
       required: true,
     }]
   };
+}
+
+function aiDedupeRepeatedText(text) {
+  const s = String(text || '').trim();
+  if (!s) return s;
+  const n = s.length;
+  const half = Math.floor(n / 2);
+  const a = s.slice(0, half).trim();
+  const b = s.slice(half).trim();
+  if (a.length > 80 && b.length > 80) {
+    const normA = a.replace(/\s+/g, ' ');
+    const normB = b.replace(/\s+/g, ' ');
+    if (normA === normB) return a;
+    if (normB.startsWith(normA.slice(0, Math.min(180, normA.length)))) return a;
+  }
+  const parts = s.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1].replace(/\s+/g, ' ');
+    const prev = parts[parts.length - 2].replace(/\s+/g, ' ');
+    if (last.length > 120 && last === prev) return parts.slice(0, -1).join('\n\n');
+  }
+  return s;
 }
 
 function aiExtractCodeBlocks(text) {
@@ -3721,10 +3807,15 @@ async function callMiniMax(messages, onChunk) {
       });
 
       console.log('[MiniMax] Streaming started, model:', ep.model);
-      let fullContent = '';
+      let rawFull = '';
+      let streamBuf = '';
       let inThink = false;
-      let thinkBuf = '';
-      let answerBuf = '';
+      let thinkAccum = '';
+      const flushThink = () => {
+        const t = thinkAccum.replace(/\s+/g, ' ').trim();
+        if (t) onChunk?.('__THINK__' + t.slice(-220));
+        thinkAccum = '';
+      };
 
       await new Promise((resolve, reject) => {
         resp.data.on('data', (chunk) => {
@@ -3737,39 +3828,33 @@ async function callMiniMax(messages, onChunk) {
               const j = JSON.parse(raw);
               const delta = j.choices?.[0]?.delta?.content || '';
               if (!delta) continue;
-              fullContent += delta;
+              rawFull += delta;
+              streamBuf += delta;
 
-              // Разбираем поток посимвольно: <think>...</think> → лог, остальное → bubble
-              for (const ch of delta) {
-                if (!inThink && thinkBuf === '' && ch === '<') {
-                  thinkBuf = '<';
-                } else if (thinkBuf && !inThink) {
-                  thinkBuf += ch;
-                  if (thinkBuf === '<think>') { inThink = true; thinkBuf = ''; }
-                  else if (!'<think>'.startsWith(thinkBuf)) {
-                    // Не тег — сбрасываем в ответ
-                    onChunk?.(thinkBuf);
-                    thinkBuf = '';
-                  }
-                } else if (inThink) {
-                  answerBuf += ch;
-                  // Отправляем мысль сразу когда строка закончена
-                  if (ch === '\n' && answerBuf.trim().length > 3) {
-                    const ln = answerBuf.trim();
-                    if (!ln.endsWith('</think>')) {
-                      onChunk?.('__THINK__' + ln.slice(0, 150));
-                    }
-                    answerBuf = '';
-                  }
-                  if (answerBuf.endsWith('</think>')) {
-                    // Финальная строка мыслей если нет переноса
-                    const thought = answerBuf.slice(0, -8).trim();
-                    if (thought.length > 3) onChunk?.('__THINK__' + thought.slice(0, 150));
+              while (streamBuf.length) {
+                if (inThink) {
+                  const endIdx = streamBuf.toLowerCase().indexOf('</think>');
+                  if (endIdx === -1) {
+                    thinkAccum += streamBuf;
+                    if (thinkAccum.length > 240 || /\n/.test(thinkAccum)) flushThink();
+                    streamBuf = '';
+                  } else {
+                    thinkAccum += streamBuf.slice(0, endIdx);
+                    flushThink();
+                    streamBuf = streamBuf.slice(endIdx + 8);
                     inThink = false;
-                    answerBuf = '';
                   }
                 } else {
-                  onChunk?.(ch);
+                  const startIdx = streamBuf.toLowerCase().indexOf('<think>');
+                  if (startIdx === -1) {
+                    onChunk?.(streamBuf);
+                    streamBuf = '';
+                  } else {
+                    const ans = streamBuf.slice(0, startIdx);
+                    if (ans) onChunk?.(ans);
+                    streamBuf = streamBuf.slice(startIdx + 7);
+                    inThink = true;
+                  }
                 }
               }
             } catch {}
@@ -3779,7 +3864,8 @@ async function callMiniMax(messages, onChunk) {
         resp.data.on('error', reject);
       });
 
-      const finalContent = fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      if (thinkAccum.trim()) flushThink();
+      const finalContent = aiDedupeRepeatedText(rawFull.replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
       if (!finalContent) { console.warn('[MiniMax] Only thought, no reply'); continue; }
       return finalContent;
       console.warn('[MiniMax] Empty content from', ep.model, 'вЂ” raw:', JSON.stringify(data).slice(0, 300));
@@ -3926,6 +4012,18 @@ app.post('/api/ai-chat', async (req, res) => {
         plannerStream.flush();
         emitAgentStatus('aura', 'ready', 'План готов');
 
+        const plannerAsk = aiBuildAskUserFromText(plannerOut);
+        if (plannerAsk) {
+          emitAgentLog('aura', '❓', 'Aura: запрос слишком общий, сначала запрашиваю уточнение через инструмент.', 'process');
+          emitAgentStatus('aura', 'ready', 'Жду уточнение от пользователя');
+          emitAgentStatus('coder', 'idle', 'Ожидаю уточнение');
+          emitAgentStatus('visual', 'idle', 'Ожидаю уточнение');
+          aiSseEmit(username, 'ask_user', plannerAsk);
+          aiSseEmit(username, 'done', {});
+          scheduleAiConvSave();
+          return res.json({ success: true, reply: '', toolsUsed: ['multiagent', 'ask_user'], createdFiles: [], askUser: plannerAsk });
+        }
+
         emitAgentLog('aura', '🧭', 'Aura выдала команды. Запускаю Coder и Visual параллельно.', 'process');
         emitAgentStatus('coder', 'working', 'Пишу код и тест-план');
         emitAgentStatus('visual', 'working', imageData ? 'Анализирую изображение' : 'Делаю QA/UX ревью');
@@ -3991,6 +4089,18 @@ app.post('/api/ai-chat', async (req, res) => {
 
         [coderOut, visualOut] = await Promise.all([coderPromise, visualPromise]);
 
+        const teamAsk = aiBuildAskUserFromText(`${coderOut}\n${visualOut}`);
+        if (teamAsk) {
+          emitAgentLog('aura', '❓', 'Команда запросила уточнение. Передаю вопрос пользователю через ask_user.', 'process');
+          emitAgentStatus('aura', 'ready', 'Жду уточнение');
+          emitAgentStatus('coder', 'idle', 'Жду уточнение');
+          emitAgentStatus('visual', 'idle', 'Жду уточнение');
+          aiSseEmit(username, 'ask_user', teamAsk);
+          aiSseEmit(username, 'done', {});
+          scheduleAiConvSave();
+          return res.json({ success: true, reply: '', toolsUsed: ['multiagent', 'ask_user'], createdFiles: [], askUser: teamAsk });
+        }
+
         emitAgentLog('aura', '✨', 'Aura: объединяю ответы команды и делаю финальную проверку...', 'process');
         emitAgentStatus('aura', 'working', 'Собираю финальный ответ');
         const finalStream = makeThoughtStreamer('aura', 'Мысли Aura (финал)');
@@ -4009,6 +4119,7 @@ app.post('/api/ai-chat', async (req, res) => {
       }
 
       if (!finalOut) finalOut = 'Готово';
+      finalOut = aiDedupeRepeatedText(finalOut).replace(/<\/?think>/gi, '').trim();
       const autoAskMa = aiBuildAskUserFromText(finalOut);
       if (autoAskMa) {
         aiSseEmit(username, 'ask_user', autoAskMa);
@@ -4100,6 +4211,14 @@ app.post('/api/ai-chat', async (req, res) => {
         }
       }
       if (!reply) reply = 'Готово';
+      reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
+      const autoAskOr = aiBuildAskUserFromText(reply);
+      if (autoAskOr) {
+        aiSseEmit(username, 'ask_user', autoAskOr);
+        aiSseEmit(username, 'done', {});
+        scheduleAiConvSave();
+        return res.json({ success: true, reply: '', toolsUsed: ['ask_user'], createdFiles: [], askUser: autoAskOr });
+      }
       history.push({ role: 'assistant', content: reply });
       scheduleAiConvSave();
       aiSseEmit(username, 'done', {});
@@ -4119,6 +4238,14 @@ app.post('/api/ai-chat', async (req, res) => {
         reply = '⚠️ Aura AI временно недоступна. Попробуй позже или выбери другую модель.';
       }
       if (!reply) reply = 'Готово';
+      reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
+      const autoAskAura = aiBuildAskUserFromText(reply);
+      if (autoAskAura) {
+        aiSseEmit(username, 'ask_user', autoAskAura);
+        aiSseEmit(username, 'done', {});
+        scheduleAiConvSave();
+        return res.json({ success: true, reply: '', toolsUsed: ['ask_user'], createdFiles: [], askUser: autoAskAura });
+      }
       history.push({ role: 'assistant', content: reply });
       scheduleAiConvSave();
       aiSseEmit(username, 'done', {});
@@ -4281,6 +4408,7 @@ app.post('/api/ai-chat', async (req, res) => {
         reply = r2.data.choices?.[0]?.message?.content || 'Готово';
       }
       if (!reply) reply = 'Готово';
+      reply = aiDedupeRepeatedText(String(reply || '').replace(/<\/?think>/gi, '').trim());
       const autoAsk = aiBuildAskUserFromText(reply);
       if (autoAsk) {
         aiSseEmit(username, 'ask_user', autoAsk);
@@ -4294,7 +4422,7 @@ app.post('/api/ai-chat', async (req, res) => {
       res.json({ success: true, reply, toolsUsed, createdFiles });
     } else {
       // Прямой ответ без инструментов
-      const reply = msg1?.content || 'Нет ответа';
+      const reply = aiDedupeRepeatedText(String(msg1?.content || 'Нет ответа').replace(/<\/?think>/gi, '').trim());
       const autoAsk = aiBuildAskUserFromText(reply);
       if (autoAsk) {
         aiSseEmit(username, 'ask_user', autoAsk);
