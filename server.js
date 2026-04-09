@@ -1117,7 +1117,7 @@ app.use(express.json());
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
 const OMNIROUTER_KEY  = process.env.OMNIROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
-const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || 'https://api.omnirouter.com/v1/chat/completions';
+const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || 'https://api.omnirouter.com/api/v1/chat/completions';
 // MiniMax (Aura AI)
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || '';
 const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions';
@@ -1137,22 +1137,41 @@ async function callOmniRouter(modelKey, messages, onChunk) {
   const mdl = OR_MODELS[modelKey];
   if (!mdl) throw new Error('Неизвестная модель: ' + modelKey);
 
-  const resp = await axios.post(OMNIROUTER_API_URL, {
-    model:       mdl.id,
-    messages,
-    max_tokens:  4000,
-    temperature: 0.7,
-    stream:      true,
-  }, {
-    headers: {
-      'Authorization': `Bearer ${OMNIROUTER_KEY}`,
-      'Content-Type':  'application/json',
-      'HTTP-Referer':  'https://aura.onrender.com',
-      'X-Title':       'Aura Messenger',
-    },
-    responseType: 'stream',
-    timeout: 120000,
-  });
+  const endpointCandidates = Array.from(new Set([
+    OMNIROUTER_API_URL,
+    OMNIROUTER_API_URL.replace('/api/v1/chat/completions', '/v1/chat/completions'),
+    OMNIROUTER_API_URL.replace('/v1/chat/completions', '/api/v1/chat/completions'),
+  ]));
+
+  let resp = null;
+  let lastErr = null;
+  for (const endpoint of endpointCandidates) {
+    try {
+      resp = await axios.post(endpoint, {
+        model:       mdl.id,
+        messages,
+        max_tokens:  4000,
+        temperature: 0.7,
+        stream:      true,
+      }, {
+        headers: {
+          'Authorization': `Bearer ${OMNIROUTER_KEY}`,
+          'Content-Type':  'application/json',
+          'HTTP-Referer':  'https://aura.onrender.com',
+          'X-Title':       'Aura Messenger',
+        },
+        responseType: 'stream',
+        timeout: 120000,
+      });
+      break;
+    } catch (e) {
+      lastErr = e;
+      const status = e?.response?.status;
+      const isPathIssue = status === 404 || status === 405 || /not found|cannot post/i.test(String(e?.response?.data || e?.message || ''));
+      if (!isPathIssue) break;
+    }
+  }
+  if (!resp) throw (lastErr || new Error('OmniRouter request failed'));
 
   let full = '', inThink = false, thinkBuf = '';
   await new Promise((resolve, reject) => {
@@ -1191,6 +1210,14 @@ async function callOmniRouter(modelKey, messages, onChunk) {
   });
   // Убираем теги thinking из финального ответа
   return full.replace(/<think>[\s\S]*?<\/think>/gi, '').trim() || 'Готово';
+}
+
+function isOmniRouteModuleError(err) {
+  const msg = String(err?.response?.data || err?.message || '');
+  return /zod-[a-f0-9]+\/v3/i.test(msg) ||
+         /ERR_MODULE_NOT_FOUND/i.test(msg) ||
+         /Failed to load external module/i.test(msg) ||
+         /omniroute/i.test(msg);
 }
 const aiConversations = new Map(); // username -> { history:[], msgCount:0 }
 const AI_CONV_FILE = 'ai_conversations.json';
@@ -3767,8 +3794,30 @@ app.post('/api/ai-chat', async (req, res) => {
           }
         );
       } catch(orErr) {
-        console.error('[OmniRouter] Ошибка:', orErr.message);
-        reply = `⚠️ Ошибка ${selectedModel}: ${orErr.message}`;
+        console.error('[OmniRouter] Ошибка:', orErr.response?.data || orErr.message);
+        if (isOmniRouteModuleError(orErr)) {
+          aiSseEmit(username, 'log', {
+            icon: '⚠️',
+            type: 'result',
+            text: 'OmniRoute упал из-за зависимости zod. Переключаюсь на резервную модель Mistral.'
+          });
+          try {
+            const fb = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+              model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
+              messages: [{ role: 'system', content: currentSystemPrompt }, ...history],
+              max_tokens: 2500,
+              temperature: 0.7,
+            }, {
+              headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+              timeout: 30000,
+            });
+            reply = fb.data.choices?.[0]?.message?.content || 'Готово';
+          } catch (fbErr) {
+            reply = '⚠️ OmniRoute упал (ошибка модуля zod), а резервный запрос тоже не прошёл. Проверь OmniRoute или временно выбери Mistral.';
+          }
+        } else {
+          reply = `⚠️ Ошибка ${selectedModel}: ${orErr.message}`;
+        }
       }
       if (!reply) reply = 'Готово';
       history.push({ role: 'assistant', content: reply });
