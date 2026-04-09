@@ -4430,12 +4430,18 @@ function _aiConnectSse() {
 
   _aiSse.addEventListener('chunk', (e) => {
     try {
-      const { text } = JSON.parse(e.data);
+      let { text } = JSON.parse(e.data);
+      text = String(text || '');
       // Мысли нейросети → в live log панель, не в bubble
       if (text && text.startsWith('__THINK__')) {
         // Мысли → только в live log, НЕ в bubble
         document.getElementById('aiTyping')?.remove(); // убираем анимацию пока думает
         _aiAddLiveLog({ icon: 'рџ’­', text: text.slice(9), type: 'think' });
+        return;
+      }
+      if (/<\/?think>/i.test(text)) {
+        const thinkOnly = text.replace(/<\/?think>/gi, '').trim();
+        if (thinkOnly) _aiAddLiveLog({ icon: '💭', text: thinkOnly, type: 'think' });
         return;
       }
       // Первый текстовый чанк = конец размышлений, начало ответа
