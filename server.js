@@ -1144,32 +1144,32 @@ async function callOmniRouter(modelKey, messages, onChunk) {
   const endpointCandidates = (() => {
     const list = [];
     const push = (u) => { if (u && !list.includes(u)) list.push(u); };
+    const pushLocalVariants = (u) => {
+      push(u);
+      if (u && u.includes('localhost')) push(u.replace('localhost', '127.0.0.1'));
+    };
 
     if (/\/(api\/)?v1\/chat\/completions$/i.test(noSlash)) {
-      push(noSlash);
-      push(noSlash.replace('/api/v1/chat/completions', '/v1/chat/completions'));
-      push(noSlash.replace('/v1/chat/completions', '/api/v1/chat/completions'));
+      pushLocalVariants(noSlash);
+      pushLocalVariants(noSlash.replace('/api/v1/chat/completions', '/v1/chat/completions'));
+      pushLocalVariants(noSlash.replace('/v1/chat/completions', '/api/v1/chat/completions'));
       return list;
     }
 
     if (/\/api\/v1$/i.test(noSlash)) {
-      push(noSlash + '/chat/completions');
-      push(noSlash.replace('/api/v1', '/v1') + '/chat/completions');
+      pushLocalVariants(noSlash + '/chat/completions');
+      pushLocalVariants(noSlash.replace('/api/v1', '/v1') + '/chat/completions');
       return list;
     }
 
     if (/\/v1$/i.test(noSlash)) {
-      push(noSlash + '/chat/completions');
-      push(noSlash.replace('/v1', '/api/v1') + '/chat/completions');
+      pushLocalVariants(noSlash + '/chat/completions');
+      pushLocalVariants(noSlash.replace('/v1', '/api/v1') + '/chat/completions');
       return list;
     }
 
-    push(noSlash + '/api/v1/chat/completions');
-    push(noSlash + '/v1/chat/completions');
-    if (noSlash.includes('localhost')) {
-      push((noSlash + '/api/v1/chat/completions').replace('localhost', '127.0.0.1'));
-      push((noSlash + '/v1/chat/completions').replace('localhost', '127.0.0.1'));
-    }
+    pushLocalVariants(noSlash + '/api/v1/chat/completions');
+    pushLocalVariants(noSlash + '/v1/chat/completions');
     return list;
   })();
   console.log('[OmniRouter] model=', modelKey, 'base=', noSlash, 'candidates=', endpointCandidates.join(' | '));
@@ -1207,7 +1207,12 @@ async function callOmniRouter(modelKey, messages, onChunk) {
       if (!isPathIssue && !isNetworkIssue) break;
     }
   }
-  if (!resp) throw (lastErr || new Error('OmniRouter request failed'));
+  if (!resp) {
+    if (lastErr?.code === 'ECONNREFUSED') {
+      throw new Error('Нет соединения с OmniRoute (ECONNREFUSED). Проверь, что OmniRoute запущен в той же сети/хосте, где работает server.js.');
+    }
+    throw (lastErr || new Error('OmniRouter request failed'));
+  }
 
   let full = '', inThink = false, thinkBuf = '';
   await new Promise((resolve, reject) => {
