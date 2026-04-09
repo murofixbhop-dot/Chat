@@ -2074,13 +2074,37 @@ function aiBuildAskUserFromText(text) {
   if (!looksQuestion) return null;
   return {
     questions: [{
-      question: clean,
-      options: ['Продолжай с лучшим вариантом', 'Покажи варианты', 'Отмена'],
+      question: `${clean}\n\nВыбери: 1 или 2`,
+      options: ['1', '2'],
       multi_select: false,
       allow_custom: true,
       required: true,
     }]
   };
+}
+
+function aiExtractCodeBlocks(text) {
+  const src = String(text || '');
+  const re = /```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const lang = (m[1] || '').toLowerCase();
+    const code = (m[2] || '').trim();
+    if (!code) continue;
+    let ext = 'txt';
+    if (lang === 'python' || lang === 'py') ext = 'py';
+    else if (lang === 'javascript' || lang === 'js') ext = 'js';
+    else if (lang === 'typescript' || lang === 'ts') ext = 'ts';
+    else if (lang === 'html') ext = 'html';
+    else if (lang === 'css') ext = 'css';
+    else if (lang === 'json') ext = 'json';
+    else if (lang === 'sql') ext = 'sql';
+    else if (lang === 'bash' || lang === 'sh') ext = 'sh';
+    else if (lang === 'batch' || lang === 'bat' || lang === 'cmd') ext = 'bat';
+    out.push({ lang, code, ext });
+  }
+  return out;
 }
 
 // в”Ђв”Ђ Р’С‹РїРѕР»РЅРµРЅРёРµ РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -3831,33 +3855,36 @@ app.post('/api/ai-chat', async (req, res) => {
       let finalOut = '';
 
       try {
-        aiSseEmit(username, 'log', { icon: '🧭', text: 'Multi-Agent: Aura планирует задачу...', type: 'process' });
+        aiSseEmit(username, 'log', { icon: '👑', text: 'Aura (главный агент): думаю и выдаю план агентам...', type: 'process' });
         plannerOut = await callMiniMax([
-          { role: 'system', content: 'Ты Aura Planner (MiniMax M2.7). Коротко разложи задачу на шаги: цель, план, критерии проверки, риски. Ответ на русском, структурировано.' },
+          { role: 'system', content: 'Ты Aura Planner (MiniMax M2.7), главный агент. Дай четкие указания подагентам: что делает кодер, что делает визуальный агент, как проверяем результат. Формат: ЗАДАЧА, ПЛАН, КОМАНДЫ АГЕНТАМ, КРИТЕРИИ ПРОВЕРКИ.' },
           { role: 'user', content: plainUserText }
         ]);
+        aiSseEmit(username, 'log', { icon: '👑', text: `Мысли Aura: ${plannerOut.slice(0, 220)}`, type: 'think' });
 
-        aiSseEmit(username, 'log', { icon: '🧑‍💻', text: 'Multi-Agent: Qwen Coder Plus готовит решение...', type: 'process' });
+        aiSseEmit(username, 'log', { icon: '🧑‍💻', text: 'Qwen Coder Plus: выполняю команду главного агента...', type: 'process' });
         coderOut = await callOmniRouter('qw/qwen3-coder-plus', [
-          { role: 'system', content: 'Ты Code Worker. Дай практичное решение по плану. ОБЯЗАТЕЛЬНО добавь раздел "ТЕСТ-ПЛАН" и "ПРОВЕРКА ОШИБОК" перед финалом. Нельзя отдавать готово без теста.' },
+          { role: 'system', content: 'Ты Code Worker. Всегда сначала выполняешь указания Aura. ОБЯЗАТЕЛЬНО: 1) ТЕСТ-ПЛАН, 2) ПРОВЕРКА ОШИБОК, 3) если даешь код — только в markdown-блоках. Не спрашивай в чате, уточнения только как явный блок "НУЖНО УТОЧНЕНИЕ".' },
           { role: 'user', content: `План координатора:\n${plannerOut}\n\nЗапрос пользователя:\n${plainUserText}` }
         ], null, omniBaseUrl);
+        aiSseEmit(username, 'log', { icon: '🧑‍💻', text: `Мысли Coder: ${coderOut.slice(0, 220)}`, type: 'think' });
 
         if (imageData) {
-          aiSseEmit(username, 'log', { icon: '🖼️', text: 'Multi-Agent: Vision анализирует изображение...', type: 'process' });
+          aiSseEmit(username, 'log', { icon: '🖼️', text: 'Vision агент: анализирую изображение...', type: 'process' });
           try {
             visualOut = await callOmniRouter('qw/vision-model', [
-              { role: 'system', content: 'Ты Vision Worker. Дай технический разбор изображения, полезный для решения задачи.' },
+              { role: 'system', content: 'Ты Vision Worker. Дай только полезные для решения наблюдения: ошибки, детали UI, визуальные риски, конкретные правки.' },
               { role: 'user', content: [
                 { type: 'text', text: plainUserText || 'Проанализируй изображение' },
                 { type: 'image_url', image_url: { url: `data:${imageType || 'image/jpeg'};base64,${imageData}` } }
               ] }
             ], null, omniBaseUrl);
+            aiSseEmit(username, 'log', { icon: '🖼️', text: `Мысли Vision: ${visualOut.slice(0, 220)}`, type: 'think' });
           } catch (visErr) {
             visualOut = `Vision недоступен: ${visErr.message}`;
           }
         } else {
-          aiSseEmit(username, 'log', { icon: '🔎', text: 'Multi-Agent: Visual-ревью от Mistral...', type: 'process' });
+          aiSseEmit(username, 'log', { icon: '🔎', text: 'Visual агент (Mistral): делаю ревью...', type: 'process' });
           const visResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
             model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
             messages: [
@@ -3871,11 +3898,12 @@ app.post('/api/ai-chat', async (req, res) => {
             timeout: 30000,
           });
           visualOut = visResp.data.choices?.[0]?.message?.content || '';
+          aiSseEmit(username, 'log', { icon: '🔎', text: `Мысли Visual: ${visualOut.slice(0, 220)}`, type: 'think' });
         }
 
-        aiSseEmit(username, 'log', { icon: '✨', text: 'Multi-Agent: Aura объединяет и проверяет на ошибки...', type: 'process' });
+        aiSseEmit(username, 'log', { icon: '✨', text: 'Aura (главный): объединяю ответы агентов и проверяю ошибки...', type: 'process' });
         finalOut = await callMiniMax([
-          { role: 'system', content: 'Ты Aura Coordinator (MiniMax M2.7). Объедини результаты агентов, проверь логические ошибки, исправь несостыковки, дай финальный ответ. Если есть код — явно укажи как протестировать.' },
+          { role: 'system', content: 'Ты Aura Coordinator (MiniMax M2.7), главный агент. Запрещено отправлять код сплошным текстом: код должен быть только в markdown-кодблоках (для сохранения в файлы сервером). Уточнения в чат не задавай — только как блок "НУЖНО УТОЧНЕНИЕ: вопрос". В финале: краткое резюме, что создано, как запустить, как протестировать.' },
           { role: 'user', content: `Запрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}\n\nQwen Coder Plus:\n${coderOut}\n\nVisual Reviewer:\n${visualOut}` }
         ], delta => aiSseEmit(username, 'chunk', { text: delta }));
       } catch (maErr) {
@@ -3883,10 +3911,31 @@ app.post('/api/ai-chat', async (req, res) => {
       }
 
       if (!finalOut) finalOut = 'Готово';
+      const autoAskMa = aiBuildAskUserFromText(finalOut);
+      if (autoAskMa) {
+        aiSseEmit(username, 'ask_user', autoAskMa);
+        aiSseEmit(username, 'done', {});
+        scheduleAiConvSave();
+        return res.json({ success: true, reply: '', toolsUsed: ['multiagent', 'ask_user'], createdFiles: [], askUser: autoAskMa });
+      }
+
+      const createdFiles = [];
+      const codeBlocks = aiExtractCodeBlocks(finalOut);
+      if (codeBlocks.length) {
+        codeBlocks.forEach((b, idx) => {
+          const fname = `agent_result_${idx + 1}.${b.ext}`;
+          const { fileId, safe } = aiSaveFile(username, fname, b.code, `Код от Multi-Agent (${b.lang || b.ext})`);
+          createdFiles.push({ id: fileId, name: safe, content: b.code, description: `Код от Multi-Agent (${b.lang || b.ext})` });
+          aiSseEmit(username, 'file_created', { id: fileId, name: safe, description: `Код от Multi-Agent (${b.lang || b.ext})`, content: b.code });
+        });
+        finalOut = finalOut.replace(/```[\s\S]*?```/g, '').trim();
+        if (!finalOut) finalOut = `Код сохранен файлами (${createdFiles.length} шт). Используй кнопки скачивания.`;
+      }
+
       history.push({ role: 'assistant', content: finalOut });
       scheduleAiConvSave();
       aiSseEmit(username, 'done', {});
-      return res.json({ success: true, reply: finalOut, toolsUsed: ['multiagent'], createdFiles: [] });
+      return res.json({ success: true, reply: finalOut, toolsUsed: ['multiagent'], createdFiles });
     }
 
     // ── OmniRouter модели ──────────────────────────────────────────────────────
@@ -4049,11 +4098,10 @@ app.post('/api/ai-chat', async (req, res) => {
 
       // Если есть pending вопрос — возвращаем его без второго запроса
       if (pendingAskUser) {
-        const askText = pendingAskUser?.question || pendingAskUser?.questions?.[0]?.question || 'Нужно уточнение';
-        history.push({ role: 'assistant', content: `Вопрос: ${askText}` });
         // Отправляем через SSE чтобы клиент успел обработать до HTTP ответа
         aiSseEmit(username, 'ask_user', pendingAskUser);
         aiSseEmit(username, 'done', {});
+        scheduleAiConvSave();
         return res.json({ success: true, reply: '', toolsUsed, createdFiles, askUser: pendingAskUser });
       }
 
@@ -4119,7 +4167,6 @@ app.post('/api/ai-chat', async (req, res) => {
       if (!reply) reply = 'Готово';
       const autoAsk = aiBuildAskUserFromText(reply);
       if (autoAsk) {
-        history.push({ role: 'assistant', content: `Вопрос: ${autoAsk.questions[0].question}` });
         aiSseEmit(username, 'ask_user', autoAsk);
         aiSseEmit(username, 'done', {});
         scheduleAiConvSave();
@@ -4134,7 +4181,6 @@ app.post('/api/ai-chat', async (req, res) => {
       const reply = msg1?.content || 'Нет ответа';
       const autoAsk = aiBuildAskUserFromText(reply);
       if (autoAsk) {
-        history.push({ role: 'assistant', content: `Вопрос: ${autoAsk.questions[0].question}` });
         aiSseEmit(username, 'ask_user', autoAsk);
         aiSseEmit(username, 'done', {});
         scheduleAiConvSave();
