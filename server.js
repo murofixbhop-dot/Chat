@@ -2102,9 +2102,39 @@ function aiExtractCodeBlocks(text) {
     else if (lang === 'sql') ext = 'sql';
     else if (lang === 'bash' || lang === 'sh') ext = 'sh';
     else if (lang === 'batch' || lang === 'bat' || lang === 'cmd') ext = 'bat';
-    out.push({ lang, code, ext });
+
+    // Пытаемся вытащить имя файла из ближайшего заголовка перед кодблоком
+    const prefix = src.slice(Math.max(0, m.index - 240), m.index);
+    let name = '';
+    const nameByLabel = prefix.match(/(?:Файл|File|Filename|Имя файла)\s*[:\-]\s*([A-Za-z0-9._-]+\.[A-Za-z0-9]+)\s*$/im);
+    const nameByHeading = prefix.match(/(?:^|\n)#{1,6}\s*([A-Za-z0-9._-]+\.[A-Za-z0-9]+)\s*$/m);
+    const nameByLine = prefix.match(/(?:^|\n)([A-Za-z0-9._-]+\.[A-Za-z0-9]+)\s*$/m);
+    if (nameByLabel?.[1]) name = nameByLabel[1];
+    else if (nameByHeading?.[1]) name = nameByHeading[1];
+    else if (nameByLine?.[1]) name = nameByLine[1];
+
+    out.push({ lang, code, ext, name });
   }
   return out;
+}
+
+function aiLooksLikeCodingTask(text) {
+  const t = String(text || '').toLowerCase();
+  return /(код|приложен|скрипт|script|python|javascript|typescript|html|css|sql|json|файл|батник|bash|api|frontend|backend)/.test(t);
+}
+
+function aiExtractLooseCode(text) {
+  const src = String(text || '');
+  if (!src.trim()) return null;
+  const lines = src.split(/\r?\n/);
+  const codey = lines.filter((ln) => /[{};<>]|^\s*(import|from|def |class |function |const |let |var |if |for |while |try:|except|return |#\!\/|@echo off|pip |python )/i.test(ln)).length;
+  if (lines.length < 6 || codey < Math.max(5, Math.floor(lines.length * 0.35))) return null;
+  let ext = 'txt';
+  if (/^\s*@echo off/im.test(src) || /\b(set |if errorlevel|chcp )/i.test(src)) ext = 'bat';
+  else if (/^\s*(import |from |def |class )/im.test(src)) ext = 'py';
+  else if (/<html|<!doctype html/i.test(src)) ext = 'html';
+  else if (/^\s*(const |let |var |function )/im.test(src)) ext = 'js';
+  return { lang: ext, code: src.trim(), ext, name: `agent_result_1.${ext}` };
 }
 
 // в”Ђв”Ђ Р’С‹РїРѕР»РЅРµРЅРёРµ РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -3853,43 +3883,94 @@ app.post('/api/ai-chat', async (req, res) => {
       let coderOut = '';
       let visualOut = '';
       let finalOut = '';
+      const emitAgentLog = (agent, icon, text, type = 'process') => {
+        aiSseEmit(username, 'log', { agent, icon, text, type });
+      };
+      const emitAgentStatus = (agent, status, text) => {
+        aiSseEmit(username, 'agent_status', { agent, status, text: text || '' });
+      };
+      const makeThoughtStreamer = (agent, label) => {
+        let buf = '';
+        let lastEmitAt = 0;
+        const flush = () => {
+          const t = buf.replace(/\s+/g, ' ').trim();
+          if (!t) return;
+          emitAgentLog(agent, '💭', `${label}: ${t.slice(-220)}`, 'think');
+          buf = '';
+          lastEmitAt = Date.now();
+        };
+        const onDelta = (delta) => {
+          if (!delta) return;
+          if (delta.startsWith('__THINK__')) {
+            const t = delta.slice(9).trim();
+            if (t) emitAgentLog(agent, '💭', `${label}: ${t.slice(0, 220)}`, 'think');
+            return;
+          }
+          buf += delta;
+          const now = Date.now();
+          if (buf.length >= 220 || (now - lastEmitAt) > 1200 || /[.!?]\s$/.test(buf)) flush();
+        };
+        return { onDelta, flush };
+      };
 
       try {
-        aiSseEmit(username, 'log', { icon: '👑', text: 'Aura (главный агент): думаю и выдаю план агентам...', type: 'process' });
+        emitAgentStatus('aura', 'thinking', 'Анализирую запрос');
+        emitAgentStatus('coder', 'idle', 'Ожидаю план');
+        emitAgentStatus('visual', 'idle', 'Ожидаю план');
+        emitAgentLog('aura', '👑', 'Aura (главный): анализирую запрос и готовлю план для команды...', 'process');
+        const plannerStream = makeThoughtStreamer('aura', 'Мысли Aura');
         plannerOut = await callMiniMax([
-          { role: 'system', content: 'Ты Aura Planner (MiniMax M2.7), главный агент. Дай четкие указания подагентам: что делает кодер, что делает визуальный агент, как проверяем результат. Формат: ЗАДАЧА, ПЛАН, КОМАНДЫ АГЕНТАМ, КРИТЕРИИ ПРОВЕРКИ.' },
+          { role: 'system', content: 'Ты Aura Planner (MiniMax M2.7), главный агент. Дай четкие указания подагентам: что делает кодер, что делает визуальный агент, как проверяем результат. Формат: ЗАДАЧА, ПЛАН, КОМАНДЫ АГЕНТАМ, КРИТЕРИИ ПРОВЕРКИ. Контракт инструментов: уточнения только через ask_user, код готовим к сохранению как файлы (create_file), перед финалом укажи проверку синтаксиса/запуска (check_code/run_code). Пиши кратко и структурно.' },
           { role: 'user', content: plainUserText }
-        ]);
-        aiSseEmit(username, 'log', { icon: '👑', text: `Мысли Aura: ${plannerOut.slice(0, 220)}`, type: 'think' });
+        ], plannerStream.onDelta);
+        plannerStream.flush();
+        emitAgentStatus('aura', 'ready', 'План готов');
 
-        aiSseEmit(username, 'log', { icon: '🧑‍💻', text: 'Qwen Coder Plus: выполняю команду главного агента...', type: 'process' });
-        coderOut = await callOmniRouter('qw/qwen3-coder-plus', [
-          { role: 'system', content: 'Ты Code Worker. Всегда сначала выполняешь указания Aura. ОБЯЗАТЕЛЬНО: 1) ТЕСТ-ПЛАН, 2) ПРОВЕРКА ОШИБОК, 3) если даешь код — только в markdown-блоках. Не спрашивай в чате, уточнения только как явный блок "НУЖНО УТОЧНЕНИЕ".' },
+        emitAgentLog('aura', '🧭', 'Aura выдала команды. Запускаю Coder и Visual параллельно.', 'process');
+        emitAgentStatus('coder', 'working', 'Пишу код и тест-план');
+        emitAgentStatus('visual', 'working', imageData ? 'Анализирую изображение' : 'Делаю QA/UX ревью');
+
+        const coderStream = makeThoughtStreamer('coder', 'Мысли Coder');
+        const coderPromise = callOmniRouter('qw/qwen3-coder-plus', [
+          { role: 'system', content: 'Ты Code Worker. Всегда сначала выполняешь указания Aura. ОБЯЗАТЕЛЬНО: 1) ТЕСТ-ПЛАН, 2) ПРОВЕРКА ОШИБОК/СИНТАКСИСА, 3) код возвращай ТОЛЬКО в markdown-блоках с указанием языка. Перед каждым кодблоком укажи строку "File: имя_файла.ext". Если нужны уточнения, используй только блок "НУЖНО УТОЧНЕНИЕ: ...". НИКОГДА не отправляй код обычным текстом. Считай что итог будет сохранен через create_file, поэтому именуй файлы корректно.' },
           { role: 'user', content: `План координатора:\n${plannerOut}\n\nЗапрос пользователя:\n${plainUserText}` }
-        ], null, omniBaseUrl);
-        aiSseEmit(username, 'log', { icon: '🧑‍💻', text: `Мысли Coder: ${coderOut.slice(0, 220)}`, type: 'think' });
+        ], coderStream.onDelta, omniBaseUrl)
+          .then((out) => {
+            coderStream.flush();
+            emitAgentLog('coder', '🧑‍💻', 'Coder: код и тест-план готовы.', 'result');
+            emitAgentStatus('coder', 'ready', 'Код готов');
+            return out;
+          })
+          .catch((e) => {
+            coderStream.flush();
+            emitAgentLog('coder', '⚠️', `Coder ошибка: ${e.message}`, 'result');
+            emitAgentStatus('coder', 'error', 'Ошибка кодера');
+            return `Coder недоступен: ${e.message}`;
+          });
 
-        if (imageData) {
-          aiSseEmit(username, 'log', { icon: '🖼️', text: 'Vision агент: анализирую изображение...', type: 'process' });
-          try {
-            visualOut = await callOmniRouter('qw/vision-model', [
+        const visualPromise = (async () => {
+          if (imageData) {
+            emitAgentLog('visual', '🖼️', 'Vision: анализирую изображение в реальном времени...', 'process');
+            const visualStream = makeThoughtStreamer('visual', 'Мысли Vision');
+            const out = await callOmniRouter('qw/vision-model', [
               { role: 'system', content: 'Ты Vision Worker. Дай только полезные для решения наблюдения: ошибки, детали UI, визуальные риски, конкретные правки.' },
               { role: 'user', content: [
                 { type: 'text', text: plainUserText || 'Проанализируй изображение' },
                 { type: 'image_url', image_url: { url: `data:${imageType || 'image/jpeg'};base64,${imageData}` } }
               ] }
-            ], null, omniBaseUrl);
-            aiSseEmit(username, 'log', { icon: '🖼️', text: `Мысли Vision: ${visualOut.slice(0, 220)}`, type: 'think' });
-          } catch (visErr) {
-            visualOut = `Vision недоступен: ${visErr.message}`;
+            ], visualStream.onDelta, omniBaseUrl);
+            visualStream.flush();
+            emitAgentLog('visual', '🖼️', 'Vision: анализ изображения готов.', 'result');
+            emitAgentStatus('visual', 'ready', 'Анализ готов');
+            return out;
           }
-        } else {
-          aiSseEmit(username, 'log', { icon: '🔎', text: 'Visual агент (Mistral): делаю ревью...', type: 'process' });
+
+          emitAgentLog('visual', '🔎', 'Visual (Mistral): делаю QA/UX ревью требований...', 'process');
           const visResp = await axios.post('https://api.mistral.ai/v1/chat/completions', {
             model: isDebug ? 'mistral-large-latest' : 'mistral-small-latest',
             messages: [
-              { role: 'system', content: 'Ты Visual/QA Reviewer. Проверь решение глазами ревьюера: UX, ясность, риски, недочёты.' },
-              { role: 'user', content: `Запрос:\n${plainUserText}\n\nРешение кодера:\n${coderOut}` }
+              { role: 'system', content: 'Ты Visual/QA Reviewer. Проверь запрос пользователя глазами ревьюера: UX, ясность, риски, недочёты и что нужно проверить в результате.' },
+              { role: 'user', content: `Запрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}` }
             ],
             max_tokens: 1200,
             temperature: 0.3,
@@ -3897,17 +3978,34 @@ app.post('/api/ai-chat', async (req, res) => {
             headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
             timeout: 30000,
           });
-          visualOut = visResp.data.choices?.[0]?.message?.content || '';
-          aiSseEmit(username, 'log', { icon: '🔎', text: `Мысли Visual: ${visualOut.slice(0, 220)}`, type: 'think' });
-        }
+          const out = visResp.data.choices?.[0]?.message?.content || '';
+          emitAgentLog('visual', '🔎', `Мысли Visual: ${out.slice(0, 220)}`, 'think');
+          emitAgentLog('visual', '✅', 'Visual: ревью готово.', 'result');
+          emitAgentStatus('visual', 'ready', 'Ревью готово');
+          return out;
+        })().catch((e) => {
+          emitAgentLog('visual', '⚠️', `Visual ошибка: ${e.message}`, 'result');
+          emitAgentStatus('visual', 'error', 'Ошибка visual');
+          return `Visual недоступен: ${e.message}`;
+        });
 
-        aiSseEmit(username, 'log', { icon: '✨', text: 'Aura (главный): объединяю ответы агентов и проверяю ошибки...', type: 'process' });
+        [coderOut, visualOut] = await Promise.all([coderPromise, visualPromise]);
+
+        emitAgentLog('aura', '✨', 'Aura: объединяю ответы команды и делаю финальную проверку...', 'process');
+        emitAgentStatus('aura', 'working', 'Собираю финальный ответ');
+        const finalStream = makeThoughtStreamer('aura', 'Мысли Aura (финал)');
         finalOut = await callMiniMax([
-          { role: 'system', content: 'Ты Aura Coordinator (MiniMax M2.7), главный агент. Запрещено отправлять код сплошным текстом: код должен быть только в markdown-кодблоках (для сохранения в файлы сервером). Уточнения в чат не задавай — только как блок "НУЖНО УТОЧНЕНИЕ: вопрос". В финале: краткое резюме, что создано, как запустить, как протестировать.' },
+          { role: 'system', content: 'Ты Aura Coordinator (MiniMax M2.7), главный агент. Ответ строго структурируй: 1) Краткий итог, 2) Инструкции запуска и проверки. Если есть код: ТОЛЬКО в markdown-кодблоках. Перед каждым кодблоком строка "File: имя_файла.ext". Нельзя отправлять код обычным текстом. Уточнения в чат не задавай — только как блок "НУЖНО УТОЧНЕНИЕ: вопрос".' },
           { role: 'user', content: `Запрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}\n\nQwen Coder Plus:\n${coderOut}\n\nVisual Reviewer:\n${visualOut}` }
-        ], delta => aiSseEmit(username, 'chunk', { text: delta }));
+        ], delta => {
+          finalStream.onDelta(delta);
+          if (!delta.startsWith('__THINK__')) aiSseEmit(username, 'chunk', { text: delta });
+        });
+        finalStream.flush();
+        emitAgentStatus('aura', 'ready', 'Финал готов');
       } catch (maErr) {
         finalOut = `⚠️ Multi-Agent ошибка: ${maErr.message}`;
+        emitAgentStatus('aura', 'error', 'Ошибка Aura');
       }
 
       if (!finalOut) finalOut = 'Готово';
@@ -3920,10 +4018,28 @@ app.post('/api/ai-chat', async (req, res) => {
       }
 
       const createdFiles = [];
-      const codeBlocks = aiExtractCodeBlocks(finalOut);
+      let codeBlocks = aiExtractCodeBlocks(finalOut);
+      if (!codeBlocks.length && aiLooksLikeCodingTask(plainUserText)) {
+        try {
+          // Попытка принудительно преобразовать текстовый код в file-блоки
+          const normalized = await callMiniMax([
+            { role: 'system', content: 'Преобразуй ответ в формат файлов. Верни ТОЛЬКО markdown-кодблоки. Перед каждым кодблоком строка "File: имя_файла.ext". Никакого лишнего текста.' },
+            { role: 'user', content: `Запрос пользователя:\n${plainUserText}\n\nОтвет, который нужно нормализовать:\n${finalOut}` }
+          ]);
+          const normalizedBlocks = aiExtractCodeBlocks(normalized);
+          if (normalizedBlocks.length) {
+            finalOut = normalized;
+            codeBlocks = normalizedBlocks;
+          }
+        } catch {}
+      }
+      if (!codeBlocks.length) {
+        const loose = aiExtractLooseCode(finalOut);
+        if (loose) codeBlocks = [loose];
+      }
       if (codeBlocks.length) {
         codeBlocks.forEach((b, idx) => {
-          const fname = `agent_result_${idx + 1}.${b.ext}`;
+          const fname = b.name || `agent_result_${idx + 1}.${b.ext}`;
           const { fileId, safe } = aiSaveFile(username, fname, b.code, `Код от Multi-Agent (${b.lang || b.ext})`);
           createdFiles.push({ id: fileId, name: safe, content: b.code, description: `Код от Multi-Agent (${b.lang || b.ext})` });
           aiSseEmit(username, 'file_created', { id: fileId, name: safe, description: `Код от Multi-Agent (${b.lang || b.ext})`, content: b.code });
