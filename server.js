@@ -1133,15 +1133,41 @@ const OR_MODELS = {
 
 // в”Ђв”Ђ Р’С‹Р·РѕРІ OmniRouter (OpenAI-СЃРѕРІРјРµСЃС‚РёРјС‹Р№) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function callOmniRouter(modelKey, messages, onChunk) {
-  if (!OMNIROUTER_KEY) throw new Error('OMNIROUTER_API_KEY не задан в env');
   const mdl = OR_MODELS[modelKey];
   if (!mdl) throw new Error('Неизвестная модель: ' + modelKey);
 
-  const endpointCandidates = Array.from(new Set([
-    OMNIROUTER_API_URL,
-    OMNIROUTER_API_URL.replace('/api/v1/chat/completions', '/v1/chat/completions'),
-    OMNIROUTER_API_URL.replace('/v1/chat/completions', '/api/v1/chat/completions'),
-  ]));
+  const raw = String(OMNIROUTER_API_URL || '').trim();
+  const noSlash = raw.replace(/\/+$/, '');
+  const isLocalOmni = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(noSlash);
+  if (!OMNIROUTER_KEY && !isLocalOmni) throw new Error('OMNIROUTER_API_KEY не задан в env');
+
+  const endpointCandidates = (() => {
+    const list = [];
+    const push = (u) => { if (u && !list.includes(u)) list.push(u); };
+
+    if (/\/(api\/)?v1\/chat\/completions$/i.test(noSlash)) {
+      push(noSlash);
+      push(noSlash.replace('/api/v1/chat/completions', '/v1/chat/completions'));
+      push(noSlash.replace('/v1/chat/completions', '/api/v1/chat/completions'));
+      return list;
+    }
+
+    if (/\/api\/v1$/i.test(noSlash)) {
+      push(noSlash + '/chat/completions');
+      push(noSlash.replace('/api/v1', '/v1') + '/chat/completions');
+      return list;
+    }
+
+    if (/\/v1$/i.test(noSlash)) {
+      push(noSlash + '/chat/completions');
+      push(noSlash.replace('/v1', '/api/v1') + '/chat/completions');
+      return list;
+    }
+
+    push(noSlash + '/api/v1/chat/completions');
+    push(noSlash + '/v1/chat/completions');
+    return list;
+  })();
 
   let resp = null;
   let lastErr = null;
@@ -1155,7 +1181,7 @@ async function callOmniRouter(modelKey, messages, onChunk) {
         stream:      true,
       }, {
         headers: {
-          'Authorization': `Bearer ${OMNIROUTER_KEY}`,
+          ...(OMNIROUTER_KEY ? { 'Authorization': `Bearer ${OMNIROUTER_KEY}` } : {}),
           'Content-Type':  'application/json',
           'HTTP-Referer':  'https://aura.onrender.com',
           'X-Title':       'Aura Messenger',
