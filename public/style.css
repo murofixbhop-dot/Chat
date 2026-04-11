@@ -2959,6 +2959,12 @@ video {
   border-radius: 16px;
 }
 
+/* Portrait video (mobile camera) — contain + dark bg so black bars don't look broken */
+.gp-tile[data-orientation="portrait"] .gp-vid {
+  object-fit: contain;
+  background: #111;
+}
+
 .gp-info {
   position: absolute;
   bottom: 0;
