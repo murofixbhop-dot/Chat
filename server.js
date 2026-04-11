@@ -28,7 +28,7 @@ const io = new Server(server);
 //    B2_ACCOUNT_ID, B2_APP_KEY, B2_BUCKET_NAME
 
 // Supabase
-const SB_URL    = (process.env.SUPABASE_URL || '').replace(/\/+$/, ''); // убираем trailing slash
+const SB_URL    = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, ''); // убираем trailing slash и пробелы
 const SB_KEY    = process.env.SUPABASE_KEY;
 const SB_BUCKET = process.env.SUPABASE_BUCKET || 'aura-files';
 const USE_SB    = !!(SB_URL && SB_KEY);
