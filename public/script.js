@@ -6161,19 +6161,39 @@ async function _initiateGroupPeer(member) {
   };
 
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'connected') {
+    const st = pc.connectionState;
+    if (st === 'connected') {
       // Первый участник принял — останавливаем гудок
       stopRing();
       playCallSound('connect');
-    } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+    } else if (st === 'closed') {
       groupPeers.delete(member);
       _updateGroupCallStatus();
     }
+    // 'failed' — не удаляем сразу, даём шанс ICE restart
   };
 
+  let _groupIceRestarts = 0;
   pc.oniceconnectionstatechange = () => {
-    if (pc.iceConnectionState === 'failed') {
-      pc.restartIce?.();
+    const st = pc.iceConnectionState;
+    if (st === 'disconnected') {
+      setTimeout(() => {
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          pc.restartIce?.();
+        }
+      }, 4000);
+    }
+    if (st === 'failed') {
+      _groupIceRestarts++;
+      if (_groupIceRestarts <= 2) {
+        pc.restartIce?.();
+      } else {
+        // Участник недостижим — убираем его плитку
+        groupPeers.delete(member);
+        document.querySelector(`[data-participant="${member}"]`)?.remove();
+        _updateGroupCallStatus();
+        if (groupPeers.size === 0 && _groupMembers.length === 0) endCall();
+      }
     }
   };
 
@@ -6964,25 +6984,48 @@ function _createPeer() {
   };
 
   // Connection state
+  let _iceRestartCount = 0;
   rtcPeer.onconnectionstatechange = () => {
     const st = rtcPeer?.connectionState;
     console.log('[RTC]', st);
-    if (st === 'failed' || st === 'closed') _cleanup();
+    if (st === 'connected') {
+      _iceRestartCount = 0; // сбрасываем счётчик при успешном соединении
+    }
+    // НЕ делаем cleanup сразу при failed — ICE restart может восстановить соединение
+    if (st === 'closed') _cleanup();
   };
 
   rtcPeer.oniceconnectionstatechange = () => {
     const st = rtcPeer?.iceConnectionState;
     console.log('[ICE]', st);
-    if (st === 'failed') {
-      console.warn('[ICE] Connection failed, attempting TURN fallback...');
-      rtcPeer.restartIce?.();
-      // If still failing after restart, try recreating peer with TURN-only config
+    if (st === 'disconnected') {
+      // Временный разрыв — ждём 4с, если не восстановится — пробуем restart
       setTimeout(() => {
-        if (rtcPeer?.iceConnectionState === 'failed' && _inCall && _callTarget) {
-          console.warn('[ICE] Restart failed, recreating peer connection with TURN priority...');
-          _recreatePeerWithTurnFallback();
+        if (!rtcPeer || !_inCall) return;
+        const cur = rtcPeer.iceConnectionState;
+        if (cur === 'disconnected' || cur === 'failed') {
+          console.warn('[ICE] Still disconnected, restarting ICE...');
+          rtcPeer.restartIce?.();
         }
-      }, 5000);
+      }, 4000);
+    }
+    if (st === 'failed') {
+      _iceRestartCount++;
+      console.warn('[ICE] failed, restart attempt', _iceRestartCount);
+      if (_iceRestartCount <= 2) {
+        // Первые 2 попытки — просто restartIce
+        rtcPeer.restartIce?.();
+        setTimeout(() => {
+          if (rtcPeer?.iceConnectionState === 'failed' && _inCall && _callTarget && _iceRestartCount <= 2) {
+            _recreatePeerWithTurnFallback();
+          }
+        }, 6000);
+      } else {
+        // Исчерпали попытки — завершаем
+        console.warn('[ICE] Exhausted restart attempts, ending call');
+        toast('Соединение не удалось — проверьте сеть', 'error', 4000);
+        _cleanup();
+      }
     }
   };
 }
@@ -7030,7 +7073,20 @@ async function _recreatePeerWithTurnFallback() {
   };
 
   rtcPeer.onconnectionstatechange = () => {
-    if (rtcPeer?.connectionState === 'failed' || rtcPeer?.connectionState === 'closed') _cleanup();
+    const st = rtcPeer?.connectionState;
+    if (st === 'closed') _cleanup();
+    if (st === 'failed') {
+      // Последняя попытка провалилась — завершаем
+      toast('Соединение не удалось', 'error', 4000);
+      _cleanup();
+    }
+  };
+  rtcPeer.oniceconnectionstatechange = () => {
+    const st = rtcPeer?.iceConnectionState;
+    console.log('[ICE-TURN]', st);
+    if (st === 'disconnected') {
+      setTimeout(() => { if (rtcPeer?.iceConnectionState === 'disconnected') rtcPeer.restartIce?.(); }, 4000);
+    }
   };
 
   try {
