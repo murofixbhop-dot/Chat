@@ -6392,105 +6392,92 @@ function toggleGroupCamera() {
 
 let _gcwFacingMode = 'user';
 async function flipGroupCamera() {
-  _gcwFacingMode = _gcwFacingMode === 'user' ? 'environment' : 'user';
   const btn = document.querySelector('.gcw-flip');
   if (btn) btn.disabled = true;
-  try {
-    // Останавливаем текущий видеотрек
-    const oldTracks = localStream?.getVideoTracks() || [];
-    oldTracks.forEach(t => t.stop());
+  const nextMode = _gcwFacingMode === 'user' ? 'environment' : 'user';
 
-    // Запрашиваем новый стрим с нужной камерой
-    // exact — гарантирует именно эту камеру, без exact браузер может игнорировать
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { exact: _gcwFacingMode } }
-    }).catch(() =>
-      // Фолбэк без exact (некоторые Android-браузеры не поддерживают exact)
-      navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: _gcwFacingMode } })
-    );
-
-    const newVid = newStream.getVideoTracks()[0];
-    if (!newVid) return;
-
-    // Заменяем трек в localStream
-    if (localStream) {
-      oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
-      localStream.addTrack(newVid);
-    }
-
-    // Заменяем трек во всех peer-соединениях
-    const replacePromises = [];
-    groupPeers.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) replacePromises.push(sender.replaceTrack(newVid).catch(() => {}));
-    });
-    await Promise.all(replacePromises);
-
-    // Обновляем превью своей плитки
-    const vid = document.getElementById('gp_vid_' + currentUser);
-    if (vid) {
-      vid.srcObject = null;
-      vid.srcObject = localStream;
-      vid.play().catch(() => {});
-    }
-  } catch(e) {
-    console.error('[flipGroupCamera]', e);
+  let newStream = await _tryGetCameraStream(nextMode);
+  if (!newStream) {
     toast('Не удалось переключить камеру', 'error', 2000);
-    // Откатываем facingMode обратно
-    _gcwFacingMode = _gcwFacingMode === 'user' ? 'environment' : 'user';
-  } finally {
     if (btn) btn.disabled = false;
+    return;
   }
+  _gcwFacingMode = nextMode;
+  const newVid = newStream.getVideoTracks()[0];
+  const oldTracks = localStream?.getVideoTracks() || [];
+  oldTracks.forEach(t => t.stop());
+  if (localStream) {
+    oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
+    localStream.addTrack(newVid);
+  }
+  const replacePromises = [];
+  groupPeers.forEach(pc => {
+    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) replacePromises.push(sender.replaceTrack(newVid).catch(() => {}));
+  });
+  await Promise.all(replacePromises);
+  const vid = document.getElementById('gp_vid_' + currentUser);
+  if (vid) { vid.srcObject = null; vid.srcObject = localStream; vid.play().catch(() => {}); }
+  if (btn) btn.disabled = false;
 }
 
 // ── Переворот камеры в приватном видеозвонке ──────────────────────────────
 let _cwFacingMode = 'user';
 async function flipPrivateCamera() {
-  _cwFacingMode = _cwFacingMode === 'user' ? 'environment' : 'user';
   const btn = document.getElementById('cwFlipBtn');
   if (btn) btn.disabled = true;
-  try {
-    // Останавливаем текущий видеотрек
-    const oldTracks = localStream?.getVideoTracks() || [];
-    oldTracks.forEach(t => t.stop());
+  const nextMode = _cwFacingMode === 'user' ? 'environment' : 'user';
 
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { exact: _cwFacingMode } }
-    }).catch(() =>
-      navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: _cwFacingMode } })
-    );
-
-    const newVid = newStream.getVideoTracks()[0];
-    if (!newVid) return;
-
-    // Заменяем трек в localStream
-    if (localStream) {
-      oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
-      localStream.addTrack(newVid);
-    }
-
-    // Заменяем трек в peer-соединении (приватный звонок — один rtcPeer)
-    if (rtcPeer) {
-      const sender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) await sender.replaceTrack(newVid).catch(() => {});
-    }
-
-    // Обновляем PIP превью себя
-    const lv = document.getElementById('activeCallWin')?.querySelector('#lv');
-    if (lv && lv.tagName === 'VIDEO') {
-      lv.srcObject = null;
-      lv.srcObject = localStream;
-      lv.play().catch(() => {});
-    }
-  } catch(e) {
-    console.error('[flipPrivateCamera]', e);
+  let newStream = await _tryGetCameraStream(nextMode);
+  if (!newStream) {
     toast('Не удалось переключить камеру', 'error', 2000);
-    _cwFacingMode = _cwFacingMode === 'user' ? 'environment' : 'user';
-  } finally {
     if (btn) btn.disabled = false;
+    return;
   }
+  _cwFacingMode = nextMode;
+  const newVid = newStream.getVideoTracks()[0];
+  const oldTracks = localStream?.getVideoTracks() || [];
+  oldTracks.forEach(t => t.stop());
+  if (localStream) {
+    oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
+    localStream.addTrack(newVid);
+  }
+  if (rtcPeer) {
+    const sender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) await sender.replaceTrack(newVid).catch(() => {});
+  }
+  const lv = document.getElementById('activeCallWin')?.querySelector('#lv');
+  if (lv && lv.tagName === 'VIDEO') { lv.srcObject = null; lv.srcObject = localStream; lv.play().catch(() => {}); }
+  if (btn) btn.disabled = false;
+}
+
+// ── Вспомогательная: получить поток нужной камеры с тремя фолбэками ──────
+async function _tryGetCameraStream(facingMode) {
+  // 1. exact facingMode (iOS Safari, современный Chrome)
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false, video: { facingMode: { exact: facingMode } }
+    });
+  } catch {}
+  // 2. Без exact (некоторые Android WebView)
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false, video: { facingMode }
+    });
+  } catch {}
+  // 3. По deviceId — перебираем список камер и берём не текущую
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === 'videoinput');
+    if (cams.length < 2) return null;
+    const curId = localStream?.getVideoTracks()[0]?.getSettings?.()?.deviceId;
+    const other = cams.find(d => d.deviceId && d.deviceId !== curId);
+    if (!other) return null;
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false, video: { deviceId: { exact: other.deviceId } }
+    });
+  } catch {}
+  return null;
 }
 
 
