@@ -6396,7 +6396,15 @@ async function flipGroupCamera() {
   if (btn) btn.disabled = true;
   const nextMode = _gcwFacingMode === 'user' ? 'environment' : 'user';
 
-  let newStream = await _tryGetCameraStream(nextMode);
+  // Останавливаем старый трек и ждём освобождения камеры
+  const oldTracks = localStream?.getVideoTracks() || [];
+  oldTracks.forEach(t => t.stop());
+  if (localStream) {
+    oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
+  }
+  await new Promise(r => setTimeout(r, 300));
+
+  const newStream = await _tryGetCameraStream(nextMode);
   if (!newStream) {
     toast('Не удалось переключить камеру', 'error', 2000);
     if (btn) btn.disabled = false;
@@ -6404,18 +6412,15 @@ async function flipGroupCamera() {
   }
   _gcwFacingMode = nextMode;
   const newVid = newStream.getVideoTracks()[0];
-  const oldTracks = localStream?.getVideoTracks() || [];
-  oldTracks.forEach(t => t.stop());
-  if (localStream) {
-    oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
-    localStream.addTrack(newVid);
-  }
+  if (localStream) localStream.addTrack(newVid);
+
   const replacePromises = [];
   groupPeers.forEach(pc => {
     const sender = pc.getSenders().find(s => s.track?.kind === 'video');
     if (sender) replacePromises.push(sender.replaceTrack(newVid).catch(() => {}));
   });
   await Promise.all(replacePromises);
+
   const vid = document.getElementById('gp_vid_' + currentUser);
   if (vid) { vid.srcObject = null; vid.srcObject = localStream; vid.play().catch(() => {}); }
   if (btn) btn.disabled = false;
@@ -6428,26 +6433,42 @@ async function flipPrivateCamera() {
   if (btn) btn.disabled = true;
   const nextMode = _cwFacingMode === 'user' ? 'environment' : 'user';
 
-  let newStream = await _tryGetCameraStream(nextMode);
+  // Останавливаем старый трек ПЕРВЫМ — iOS/Android освободят камеру
+  const oldTracks = localStream?.getVideoTracks() || [];
+  oldTracks.forEach(t => t.stop());
+  if (localStream) {
+    oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
+  }
+
+  // Пауза 300ms чтобы камера успела освободиться (критично на iOS)
+  await new Promise(r => setTimeout(r, 300));
+
+  const newStream = await _tryGetCameraStream(nextMode);
   if (!newStream) {
     toast('Не удалось переключить камеру', 'error', 2000);
     if (btn) btn.disabled = false;
     return;
   }
+
   _cwFacingMode = nextMode;
   const newVid = newStream.getVideoTracks()[0];
-  const oldTracks = localStream?.getVideoTracks() || [];
-  oldTracks.forEach(t => t.stop());
-  if (localStream) {
-    oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
-    localStream.addTrack(newVid);
-  }
+
+  if (localStream) localStream.addTrack(newVid);
+
+  // Заменяем трек в peer-соединении
   if (rtcPeer) {
     const sender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
     if (sender) await sender.replaceTrack(newVid).catch(() => {});
   }
+
+  // Обновляем PIP превью себя
   const lv = document.getElementById('activeCallWin')?.querySelector('#lv');
-  if (lv && lv.tagName === 'VIDEO') { lv.srcObject = null; lv.srcObject = localStream; lv.play().catch(() => {}); }
+  if (lv && lv.tagName === 'VIDEO') {
+    lv.srcObject = null;
+    lv.srcObject = localStream;
+    lv.play().catch(() => {});
+  }
+
   if (btn) btn.disabled = false;
 }
 
@@ -7240,14 +7261,16 @@ function _showCallWindow(remoteStream) {
     <button class="cw-btn cw-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>`;
 
   if (_callIsVid || _callNoCamera) {
-    // Если нет камеры — показываем аватарку в PIP вместо видео
-    const pipContent = _callNoCamera
-      ? `<div id="lv" style="position:absolute;bottom:58px;right:10px;width:90px;height:68px;border-radius:9px;border:2px solid rgba(255,255,255,.3);background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;z-index:3;font-size:24px;font-weight:700;color:#fff">${(currentUser||'?')[0].toUpperCase()}</div>`
-      : `<video id="lv" autoplay playsinline webkit-playsinline muted style="position:absolute;bottom:58px;right:10px;width:90px;height:68px;border-radius:9px;border:2px solid rgba(255,255,255,.2);object-fit:cover;z-index:3;"></video>`;
+    // Split-screen: оба видео одинакового размера
+    const lvContent = _callNoCamera
+      ? `<div id="lv" class="cw-vid-half cw-vid-self" style="background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff">${(currentUser||'?')[0].toUpperCase()}</div>`
+      : `<video id="lv" class="cw-vid-half cw-vid-self" autoplay playsinline webkit-playsinline muted></video>`;
     win.innerHTML = `
       <div class="cw-bg"></div>
-      <video id="rv" autoplay playsinline webkit-playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;z-index:1;"></video>
-      ${pipContent}
+      <div class="cw-split" id="cwSplit">
+        <video id="rv" class="cw-vid-half cw-vid-remote" autoplay playsinline webkit-playsinline></video>
+        ${lvContent}
+      </div>
       ${_callNoCamera ? '<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:3px 8px;border-radius:99px;z-index:5;backdrop-filter:blur(4px)">🎤 Только аудио</div>' : ''}
       <div class="cw-controls" style="z-index:4;">
         <span class="cw-timer" id="cwTimer">0:00</span>
@@ -7258,7 +7281,10 @@ function _showCallWindow(remoteStream) {
     rvEl.srcObject = remoteStream;
     rvEl.style.cursor = 'context-menu';
     rvEl.addEventListener('contextmenu', e => showUserVolumeMenu(e, _callTarget, userNicknames[_callTarget] || _callTarget));
-    if (localStream && !_callNoCamera) win.querySelector('#lv').srcObject = localStream;
+    if (localStream && !_callNoCamera) {
+      const lvEl = win.querySelector('#lv');
+      if (lvEl && lvEl.tagName === 'VIDEO') lvEl.srcObject = localStream;
+    }
   } else {
     win.innerHTML = `
       <div class="cw-bg"></div>
@@ -7759,27 +7785,26 @@ async function _applyScreenShare(capturedStream) {
     } catch(e) { console.error('[SS] renegotiation error:', e); return; }
   }
 
-  // Звонящий — показываем маленький превью своего экрана в PIP
-  // и большой экран СОБЕСЕДНИКА (rv) оставляем без изменений
+  // При демонстрации экрана: скрываем split, показываем полноэкранный rv
   const win = document.getElementById('activeCallWin');
+  const split = win?.querySelector('#cwSplit');
+  if (split) split.style.display = 'none';
+  // Добавляем или обновляем #rv поверх split для показа своего экрана
+  let ssPreview = win?.querySelector('#ssPreview');
+  if (!ssPreview && win) {
+    ssPreview = document.createElement('video');
+    ssPreview.id = 'ssPreview';
+    ssPreview.autoplay = true; ssPreview.playsinline = true; ssPreview.muted = true;
+    ssPreview.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1;';
+    win.insertBefore(ssPreview, win.querySelector('.cw-controls'));
+  }
+  if (ssPreview) { ssPreview.srcObject = screenStream; ssPreview.play().catch(() => {}); }
+  // Маленький PIP своей камеры в углу
   const lv = win?.querySelector('#lv');
-  if (lv) {
-    // Уже есть PIP — показываем превью своего экрана там (может быть display:none)
-    lv.srcObject = screenStream;
-    lv.style.display = 'block';
-    lv.style.width  = '180px';
-    lv.style.height = '100px';
-    lv.style.objectFit = 'contain';
-    lv.style.background = '#000';
+  if (lv && lv.tagName === 'VIDEO' && localStream) {
+    lv.srcObject = localStream;
+    lv.style.cssText = 'position:absolute;bottom:58px;right:10px;width:100px;height:75px;border-radius:8px;border:2px solid rgba(255,255,255,.25);object-fit:cover;z-index:3;display:block;';
     lv.play().catch(() => {});
-  } else if (win) {
-    // Добавляем маленький превью своего экрана в углу
-    const pip = document.createElement('video');
-    pip.id = 'lv'; pip.autoplay = true; pip.playsinline = true; pip.muted = true;
-    pip.style.cssText = 'position:absolute;bottom:58px;right:10px;width:160px;height:90px;border-radius:8px;border:2px solid rgba(255,255,255,.3);object-fit:contain;background:#000;z-index:3;';
-    pip.srcObject = screenStream;
-    win.appendChild(pip);
-    pip.play().catch(() => {});
   }
 
   _screenSharing = true;
@@ -7825,33 +7850,18 @@ async function switchToScreenShare() {
     // Восстанавливаем аватарку/имя у шарера
     const ac = document.getElementById('cwAudioContent');
     if (ac) { ac.style.display = ''; ac.style.pointerEvents = ''; }
-    // Убираем свой PIP превью экрана
-    const lv = document.getElementById('activeCallWin')?.querySelector('#lv');
-    if (lv) {
-      lv.srcObject = null;
-      lv.style.display = 'none'; // скрываем pip превью своей демки
-    }
-    // Если это был аудиозвонок — убираем видео элемент
+    // Убираем превью экрана и восстанавливаем split
     const win2 = document.getElementById('activeCallWin');
     if (win2) {
-      if (!_callIsVid && !_partnerSharing) {
-        // Убираем #rv только если партнёр ТОЖЕ не шарит
-        win2.querySelector('#rv')?.remove();
-        win2.style.height = '';
-      } else if (_partnerSharing) {
-        // Партнёр ещё шарит — показываем его экран снова (он мог быть скрыт)
-        const rvEl = document.querySelector('#rv');
-        if (rvEl) rvEl.style.display = 'block';
-        const cwA = document.getElementById('cwAudioContent');
-        if (cwA) cwA.style.display = 'none'; // всё ещё скрыт пока партнёр шарит
-      }
-      // Восстанавливаем камеру в lv если видеозвонок
-      if (_callIsVid && lv && localStream) {
+      win2.querySelector('#ssPreview')?.remove();
+      const split2 = win2.querySelector('#cwSplit');
+      if (split2) split2.style.display = '';
+      // Восстанавливаем камеру в lv
+      const lv = win2.querySelector('#lv');
+      if (lv && lv.tagName === 'VIDEO' && localStream) {
         lv.srcObject = localStream;
-        lv.style.width = '';
-        lv.style.height = '';
-        lv.style.objectFit = 'cover';
-        lv.style.background = '';
+        lv.style.cssText = ''; // сбрасываем inline стили — CSS класс управляет размером
+        lv.play().catch(() => {});
       }
     }
     toast('Демонстрация остановлена', 'info', 2000);
