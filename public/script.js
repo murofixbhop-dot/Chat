@@ -6373,20 +6373,104 @@ function toggleGroupCamera() {
 let _gcwFacingMode = 'user';
 async function flipGroupCamera() {
   _gcwFacingMode = _gcwFacingMode === 'user' ? 'environment' : 'user';
+  const btn = document.querySelector('.gcw-flip');
+  if (btn) btn.disabled = true;
   try {
-    const newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: _gcwFacingMode }, audio: false });
+    // Останавливаем текущий видеотрек
+    const oldTracks = localStream?.getVideoTracks() || [];
+    oldTracks.forEach(t => t.stop());
+
+    // Запрашиваем новый стрим с нужной камерой
+    // exact — гарантирует именно эту камеру, без exact браузер может игнорировать
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { exact: _gcwFacingMode } }
+    }).catch(() =>
+      // Фолбэк без exact (некоторые Android-браузеры не поддерживают exact)
+      navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: _gcwFacingMode } })
+    );
+
     const newVid = newStream.getVideoTracks()[0];
-    localStream?.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); });
-    localStream?.addTrack(newVid);
-    // Replace in all peers
+    if (!newVid) return;
+
+    // Заменяем трек в localStream
+    if (localStream) {
+      oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
+      localStream.addTrack(newVid);
+    }
+
+    // Заменяем трек во всех peer-соединениях
+    const replacePromises = [];
     groupPeers.forEach(pc => {
       const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) sender.replaceTrack(newVid);
+      if (sender) replacePromises.push(sender.replaceTrack(newVid).catch(() => {}));
     });
-    // Update local tile
+    await Promise.all(replacePromises);
+
+    // Обновляем превью своей плитки
     const vid = document.getElementById('gp_vid_' + currentUser);
-    if (vid) vid.srcObject = localStream;
-  } catch {}
+    if (vid) {
+      vid.srcObject = null;
+      vid.srcObject = localStream;
+      vid.play().catch(() => {});
+    }
+  } catch(e) {
+    console.error('[flipGroupCamera]', e);
+    toast('Не удалось переключить камеру', 'error', 2000);
+    // Откатываем facingMode обратно
+    _gcwFacingMode = _gcwFacingMode === 'user' ? 'environment' : 'user';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Переворот камеры в приватном видеозвонке ──────────────────────────────
+let _cwFacingMode = 'user';
+async function flipPrivateCamera() {
+  _cwFacingMode = _cwFacingMode === 'user' ? 'environment' : 'user';
+  const btn = document.getElementById('cwFlipBtn');
+  if (btn) btn.disabled = true;
+  try {
+    // Останавливаем текущий видеотрек
+    const oldTracks = localStream?.getVideoTracks() || [];
+    oldTracks.forEach(t => t.stop());
+
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { exact: _cwFacingMode } }
+    }).catch(() =>
+      navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: _cwFacingMode } })
+    );
+
+    const newVid = newStream.getVideoTracks()[0];
+    if (!newVid) return;
+
+    // Заменяем трек в localStream
+    if (localStream) {
+      oldTracks.forEach(t => { try { localStream.removeTrack(t); } catch {} });
+      localStream.addTrack(newVid);
+    }
+
+    // Заменяем трек в peer-соединении (приватный звонок — один rtcPeer)
+    if (rtcPeer) {
+      const sender = rtcPeer.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(newVid).catch(() => {});
+    }
+
+    // Обновляем PIP превью себя
+    const lv = document.getElementById('activeCallWin')?.querySelector('#lv');
+    if (lv && lv.tagName === 'VIDEO') {
+      lv.srcObject = null;
+      lv.srcObject = localStream;
+      lv.play().catch(() => {});
+    }
+  } catch(e) {
+    console.error('[flipPrivateCamera]', e);
+    toast('Не удалось переключить камеру', 'error', 2000);
+    _cwFacingMode = _cwFacingMode === 'user' ? 'environment' : 'user';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 
@@ -7105,8 +7189,10 @@ function _showCallWindow(remoteStream) {
   win.className = 'call-win-float';
   win.id = 'activeCallWin';
 
+  const _isMobileUA = /Android|iPad|iPhone|iPod/.test(navigator.userAgent);
   const btns = `
     <button class="cw-btn cw-mute" onclick="toggleMuteWin(this)" title="Микрофон"><i class="ti ti-microphone"></i></button>
+    ${_callIsVid && _isMobileUA ? `<button class="cw-btn cw-flip-cam" id="cwFlipBtn" onclick="flipPrivateCamera()" title="Перевернуть камеру"><i class="ti ti-rotate"></i></button>` : ''}
     <button class="cw-btn cw-screen ss-toggle" id="cwScreenBtn" title="Экран"><i class="ti ti-screen-share"></i></button>
     <button class="cw-btn cw-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>`;
 
@@ -7857,6 +7943,8 @@ function _cleanup() {
   _groupScreenSharing = false;
   _groupCall = false;
   _groupMembers = [];
+  _gcwFacingMode = 'user'; // сбрасываем на фронтальную камеру
+  _cwFacingMode  = 'user';
   document.querySelectorAll('.call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
   document.querySelectorAll('.group-call-win').forEach(w => w.remove());
   if (callModal) callModal.classList.remove('open');
