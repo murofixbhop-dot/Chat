@@ -6325,10 +6325,33 @@ function _addGroupParticipantTile(grid, member, stream, isLocal) {
     if (!isLocal) vid.volume = Math.min(1, _userVolumes.get(member) ?? 1.0);
     vid.play().catch(()=>{});
     // Показываем видео только если есть видеодорожка
-    const hasVideo = stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled;
+    const videoTracks = stream.getVideoTracks();
+    const hasVideo = videoTracks.length > 0 && videoTracks[0].enabled && videoTracks[0].readyState !== 'ended';
     const avaWrap = document.getElementById('gp_ava_wrap_' + member);
-    if (hasVideo) { vid.style.display = 'block'; if(avaWrap) avaWrap.style.display = 'none'; }
-    else          { vid.style.display = 'none';  if(avaWrap) avaWrap.style.display = 'flex'; }
+    // Сохраняем флаг наличия камеры на плитке (не демки!)
+    if (!tile._isScreenSharing) {
+      tile._hasCamera = hasVideo;
+    }
+    if (hasVideo) {
+      vid.style.display = 'block';
+      if (avaWrap) avaWrap.style.display = 'none';
+      // БАГ 5: определяем ориентацию когда метаданные загрузятся
+      const applyOrientation = () => {
+        if (vid.videoWidth && vid.videoHeight) {
+          const isPortrait = vid.videoHeight > vid.videoWidth;
+          vid.style.objectFit = isPortrait ? 'contain' : 'cover';
+          tile.dataset.orientation = isPortrait ? 'portrait' : 'landscape';
+        }
+      };
+      if (vid.readyState >= 1 && vid.videoWidth) {
+        applyOrientation();
+      } else {
+        vid.addEventListener('loadedmetadata', applyOrientation, { once: true });
+      }
+    } else {
+      vid.style.display = 'none';
+      if (avaWrap) avaWrap.style.display = 'flex';
+    }
   }
   return tile;
 }
@@ -7391,6 +7414,7 @@ async function toggleGroupScreenShare() {
   // Показываем свой экран в своей плитке
   const myTile = document.querySelector(`[data-participant="${currentUser}"]`);
   if (myTile) {
+    myTile._isScreenSharing = true;
     const myVid = myTile.querySelector('.gp-vid');
     const myAva = myTile.querySelector('.gp-ava-wrap');
     if (myVid) {
@@ -7421,6 +7445,7 @@ socket.on('group-screen-share-started', ({ from }) => {
   toast(`${nick} показывает экран`, 'info', 2000);
   const tile = document.querySelector(`[data-participant="${from}"]`);
   if (tile) {
+    tile._isScreenSharing = true;
     let badge = tile.querySelector('.gp-ss-badge');
     if (!badge) {
       badge = document.createElement('div');
@@ -7429,9 +7454,15 @@ socket.on('group-screen-share-started', ({ from }) => {
       badge.style.cssText = 'position:absolute;top:7px;left:7px;background:rgba(99,102,241,.85);color:#fff;border-radius:8px;padding:3px 8px;font-size:11px;display:flex;align-items:center;gap:4px;z-index:5;';
       tile.appendChild(badge);
     }
-    // Переключаем на contain чтобы не обрезало демку
+    // Переключаем на contain чтобы не обрезало демку, показываем видео
     const vid = tile.querySelector('.gp-vid');
-    if (vid) { vid.style.objectFit = 'contain'; vid.style.background = '#000'; }
+    const avaWrap = tile.querySelector('.gp-ava-wrap');
+    if (vid) {
+      vid.style.objectFit = 'contain';
+      vid.style.background = '#000';
+      vid.style.display = 'block';
+    }
+    if (avaWrap) avaWrap.style.display = 'none';
     // Автоматически открываем на весь экран
     _toggleTileFullscreen(tile);
   }
@@ -7443,6 +7474,7 @@ socket.on('group-screen-share-stopped', ({ from }) => {
   const tile = document.querySelector(`[data-participant="${from}"]`);
   if (tile) {
     tile.querySelector('.gp-ss-badge')?.remove();
+    tile._isScreenSharing = false;
     // Убираем fullscreen если плитка была развёрнута
     if (_fullscreenTile === tile) _toggleTileFullscreen(tile);
 
@@ -7451,33 +7483,43 @@ socket.on('group-screen-share-stopped', ({ from }) => {
 
     // Получаем текущий remoteStream этого участника из peer connection
     const pc = groupPeers.get(from);
+    let restored = false;
     if (pc && vid) {
       const receivers = pc.getReceivers();
       const videoReceiver = receivers.find(r => r.track?.kind === 'video');
-      if (videoReceiver && videoReceiver.track.readyState === 'live') {
-        // Есть живая видеодорожка (камера партнёра) — показываем её
+      // Живая камера — восстанавливаем видео
+      if (videoReceiver?.track && videoReceiver.track.readyState === 'live' && videoReceiver.track.enabled) {
         const newStream = new MediaStream([videoReceiver.track]);
         vid.srcObject = newStream;
-        vid.style.objectFit = 'cover';  // возвращаем cover для камеры
         vid.style.background = '';
         vid.style.display = 'block';
         if (avaWrap) avaWrap.style.display = 'none';
         vid.play().catch(() => {});
-      } else {
-        // Нет активной камеры — показываем аватарку
+        // Восстанавливаем ориентацию по реальному размеру кадра
+        const applyOri = () => {
+          if (vid.videoWidth && vid.videoHeight) {
+            const isPortrait = vid.videoHeight > vid.videoWidth;
+            vid.style.objectFit = isPortrait ? 'contain' : 'cover';
+          } else {
+            vid.style.objectFit = 'cover';
+          }
+        };
+        if (vid.readyState >= 1 && vid.videoWidth) applyOri();
+        else vid.addEventListener('loadedmetadata', applyOri, { once: true });
+        tile._hasCamera = true;
+        restored = true;
+      }
+    }
+    // Нет живой камеры или нет peer — показываем аватарку
+    if (!restored) {
+      if (vid) {
         vid.srcObject = null;
         vid.style.objectFit = '';
         vid.style.background = '';
         vid.style.display = 'none';
-        if (avaWrap) avaWrap.style.display = 'flex';
       }
-    } else if (vid) {
-      // Нет peer connection — показываем аватарку
-      vid.srcObject = null;
-      vid.style.objectFit = '';
-      vid.style.background = '';
-      vid.style.display = 'none';
       if (avaWrap) avaWrap.style.display = 'flex';
+      tile._hasCamera = false;
     }
   }
   toast(`${userNicknames[from] || from} остановил демонстрацию`, 'info', 1500);
@@ -7521,9 +7563,10 @@ document.addEventListener('keydown', e => {
 
 function toggleGroupMute() {
   _muted = !_muted;
-  // Отключаем/включаем аудиотреки в localStream
+  // Отключаем/включаем аудиотреки в localStream (для локального отображения и новых peer'ов)
   localStream?.getAudioTracks().forEach(t => { t.enabled = !_muted; });
-  // Также обновляем сендеры во всех peer-соединениях (на случай если трек был заменён)
+  // Надёжный способ для уже установленных peer-соединений:
+  // меняем enabled на треке сендера (это работает в отличие от track напрямую)
   groupPeers.forEach(pc => {
     pc.getSenders().forEach(sender => {
       if (sender.track?.kind === 'audio') {
@@ -7531,9 +7574,16 @@ function toggleGroupMute() {
       }
     });
   });
+  // Обновляем иконку микрофона в своей плитке
+  const micIco = document.getElementById('gp_mic_' + currentUser);
+  if (micIco) {
+    micIco.querySelector('i').className = _muted ? 'ti ti-microphone-off' : 'ti ti-microphone';
+    micIco.style.color = _muted ? 'var(--danger)' : '';
+  }
   const btn = document.getElementById('gcwMuteBtn');
   if (btn) {
     btn.querySelector('i').className = _muted ? 'ti ti-microphone-off' : 'ti ti-microphone';
+    btn.style.background = _muted ? 'var(--danger)' : '';
     btn.classList.toggle('muted', _muted);
   }
 }
