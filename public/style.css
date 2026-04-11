@@ -1680,6 +1680,38 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
 .cw-flip-cam  { background: rgba(255,255,255,.15); }
 .cw-flip-cam:disabled { opacity: .5; pointer-events: none; }
 .cw-end       { background: #ef4444; box-shadow: 0 2px 12px rgba(239,68,68,.5); }
+
+/* Split-screen: два видео одинакового размера рядом */
+.cw-split {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: row;
+  z-index: 1;
+}
+.cw-vid-half {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cw-vid-remote {
+  border-right: 1px solid rgba(255,255,255,.12);
+  cursor: context-menu;
+}
+.cw-vid-self {
+  /* Зеркало для своей камеры */
+  transform: scaleX(-1);
+}
+/* Развёрнутый режим — оба видео тоже split */
+.call-win-float.cw-expanded .cw-split {
+  flex-direction: row;
+}
+.call-win-float.cw-expanded .cw-vid-half {
+  object-fit: contain;
+  background: #000;
+}
 /* Audio call content */
 .cw-audio-content {
   position: relative; z-index: 2;
@@ -1821,14 +1853,7 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
   z-index: 9500;
   cursor: default;
 }
-.call-win-float.cw-expanded #rv {
-  border-radius: 0 !important;
-  object-fit: contain !important;
-}
-.call-win-float.cw-expanded #lv {
-  width: 160px !important; height: 110px !important;
-  bottom: 90px !important; right: 20px !important;
-}
+/* rv/lv теперь внутри .cw-split — управляется через .cw-vid-half */
 .cw-expand { background: rgba(255,255,255,.15); }
 /* Long press hint */
 .call-win-float::after {
