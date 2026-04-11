@@ -2342,21 +2342,30 @@ function audioConstraints() {
 
 // в”Ђв”Ђ Desktop: hold to record, right-click for circle в”Ђв”Ђ
 if (!isMobile) {
-  let holdT = null, didRecord = false;
+  let holdT = null, didHold = false;
 
   sendBtn.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
     if (msgInput.value.trim() || selectedFiles.length) return;
-    didRecord = false;
-    holdT = setTimeout(() => {
-      didRecord = true;
-      startVoice();
-    }, 300);
+    if (isRecording) return; // клик во время записи обработаем в mouseup
+    didHold = false;
+    holdT = setTimeout(() => { didHold = true; }, 300);
   });
-  sendBtn.addEventListener('mouseup', () => {
+
+  sendBtn.addEventListener('mouseup', e => {
+    if (e.button !== 0) return;
     clearTimeout(holdT);
-    if (didRecord && isRecording) stopVoice();
-    didRecord = false;
+    if (msgInput.value.trim() || selectedFiles.length) return;
+    if (isRecording) {
+      // Повторный клик — остановить и отправить
+      stopVoice();
+      return;
+    }
+    // Одиночный клик или hold — начать запись
+    startVoice();
+    didHold = false;
   });
+
   sendBtn.addEventListener('contextmenu', e => {
     if (!msgInput.value.trim() && !selectedFiles.length) {
       e.preventDefault();
@@ -2371,6 +2380,8 @@ if (isMobile) {
   let ty0 = 0, holdT = null, mode = null;
   sendBtn.addEventListener('touchstart', e => {
     if (msgInput.value.trim() || selectedFiles.length) return;
+    // Если уже идёт запись — следующий тап остановит в touchend
+    if (isRecording) return;
     ty0 = e.touches[0].clientY; mode = null;
     holdT = setTimeout(() => { mode = 'voice'; startVoice(); }, 300);
   }, { passive: true });
@@ -2385,7 +2396,15 @@ if (isMobile) {
   }, { passive: true });
   sendBtn.addEventListener('touchend', () => {
     clearTimeout(holdT);
-    if (mode === 'voice' && isRecording) stopVoice();
+    if (isRecording) {
+      // Повторный тап — останавливаем запись и отправляем
+      stopVoice();
+      return;
+    }
+    if (!mode) {
+      // Быстрый тап без hold — начинаем запись (toggle)
+      startVoice();
+    }
   });
   sendBtn.addEventListener('touchcancel', () => {
     clearTimeout(holdT);
@@ -6725,19 +6744,21 @@ socket.on('screen-share-started', ({ from }) => {
 // Caller stopped screen share
 socket.on('screen-share-stopped', ({ from }) => {
   _partnerSharing = false; // партнёр остановил шаринг
-  // Убираем видео партнёра
-  const rv = document.querySelector('#rv');
-  if (rv) {
-    rv.remove();
-    document.querySelector('#screenReceiveOverlay')?.remove();
-    const win = document.getElementById('activeCallWin');
-    if (win) win.style.height = '';
-  }
-  // Восстанавливаем cwAudioContent только если МЫ ТОЖЕ не шарим
+  // Убираем видео партнёра только если МЫ ТОЖЕ не шарим
+  // (если мы шарим — #rv показывает наш экран, трогать не надо)
   if (!_screenSharing) {
+    const rv = document.querySelector('#rv');
+    if (rv) {
+      rv.remove();
+      document.querySelector('#screenReceiveOverlay')?.remove();
+      const win = document.getElementById('activeCallWin');
+      if (win) win.style.height = '';
+    }
+    // Восстанавливаем cwAudioContent только если мы тоже не шарим
     const cwAudio = document.getElementById('cwAudioContent');
     if (cwAudio) cwAudio.style.display = '';
   }
+  // Если мы шарим — ничего не трогаем, наша демонстрация продолжается
 });
 
 // Offline target
@@ -7298,7 +7319,19 @@ async function toggleGroupScreenShare() {
     if (myTile) {
       const vid = myTile.querySelector('.gp-vid');
       const avaWrap = myTile.querySelector('.gp-ava-wrap');
-      if (vid) { vid.srcObject = _callIsVid && localStream ? localStream : null; vid.style.display = _callIsVid ? 'block' : 'none'; }
+      if (vid) {
+        if (_callIsVid && localStream) {
+          vid.srcObject = localStream;
+          vid.style.objectFit = 'cover';
+          vid.style.background = '';
+          vid.style.display = 'block';
+        } else {
+          vid.srcObject = null;
+          vid.style.objectFit = '';
+          vid.style.background = '';
+          vid.style.display = 'none';
+        }
+      }
       if (avaWrap) avaWrap.style.display = _callIsVid ? 'none' : 'flex';
     }
 
@@ -7410,32 +7443,39 @@ socket.on('group-screen-share-stopped', ({ from }) => {
   const tile = document.querySelector(`[data-participant="${from}"]`);
   if (tile) {
     tile.querySelector('.gp-ss-badge')?.remove();
-    // Возвращаем cover и убираем fullscreen
-    const vid2 = tile.querySelector('.gp-vid');
-    if (vid2) { vid2.style.objectFit = ''; vid2.style.background = ''; }
+    // Убираем fullscreen если плитка была развёрнута
     if (_fullscreenTile === tile) _toggleTileFullscreen(tile);
-    // Сбрасываем video: если у участника нет камеры — скрываем, показываем аватарку
+
     const vid = tile.querySelector('.gp-vid');
     const avaWrap = tile.querySelector('.gp-ava-wrap');
+
     // Получаем текущий remoteStream этого участника из peer connection
     const pc = groupPeers.get(from);
     if (pc && vid) {
       const receivers = pc.getReceivers();
       const videoReceiver = receivers.find(r => r.track?.kind === 'video');
       if (videoReceiver && videoReceiver.track.readyState === 'live') {
-        // Есть живая видеодорожка (камера партнёра)
+        // Есть живая видеодорожка (камера партнёра) — показываем её
         const newStream = new MediaStream([videoReceiver.track]);
         vid.srcObject = newStream;
+        vid.style.objectFit = 'cover';  // возвращаем cover для камеры
+        vid.style.background = '';
         vid.style.display = 'block';
         if (avaWrap) avaWrap.style.display = 'none';
+        vid.play().catch(() => {});
       } else {
-        // Нет видео — показываем аватарку
+        // Нет активной камеры — показываем аватарку
         vid.srcObject = null;
+        vid.style.objectFit = '';
+        vid.style.background = '';
         vid.style.display = 'none';
         if (avaWrap) avaWrap.style.display = 'flex';
       }
     } else if (vid) {
+      // Нет peer connection — показываем аватарку
       vid.srcObject = null;
+      vid.style.objectFit = '';
+      vid.style.background = '';
       vid.style.display = 'none';
       if (avaWrap) avaWrap.style.display = 'flex';
     }
@@ -7481,7 +7521,16 @@ document.addEventListener('keydown', e => {
 
 function toggleGroupMute() {
   _muted = !_muted;
-  localStream?.getAudioTracks().forEach(t => t.enabled = !_muted);
+  // Отключаем/включаем аудиотреки в localStream
+  localStream?.getAudioTracks().forEach(t => { t.enabled = !_muted; });
+  // Также обновляем сендеры во всех peer-соединениях (на случай если трек был заменён)
+  groupPeers.forEach(pc => {
+    pc.getSenders().forEach(sender => {
+      if (sender.track?.kind === 'audio') {
+        sender.track.enabled = !_muted;
+      }
+    });
+  });
   const btn = document.getElementById('gcwMuteBtn');
   if (btn) {
     btn.querySelector('i').className = _muted ? 'ti ti-microphone-off' : 'ti ti-microphone';
