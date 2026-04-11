@@ -787,7 +787,38 @@ app.get('/api/metered-webhook', (req, res) => {
 // Добавьте в .env на Render:
 //   METERED_API_KEY  — бесплатно 50GB/мес: dashboard.metered.ca
 //   TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN — бесплатный триал с TURN
+// ── ICE servers cache (обновляем каждые 6 часов) ────────────────────────────
+let _iceCache = null;
+let _iceCacheTime = 0;
+const ICE_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 часов
+
+// Генерация ephemeral TURN credentials по HMAC-SHA1 (RFC 5766 / coturn REST API)
+// Работает с openrelay.metered.ca и любым coturn сервером с use-auth-secret
+function generateTurnCredentials(secret, ttlSeconds = 86400) {
+  const timestamp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const username  = `${timestamp}:aura`;
+  const password  = require('crypto')
+    .createHmac('sha1', secret)
+    .update(username)
+    .digest('base64');
+  return { username, password };
+}
+
+// Все Metered API ключи через запятую в одной env переменной
+// METERED_API_KEYS=key1,key2,key3
+function getMeteredKeys() {
+  const single = process.env.METERED_API_KEY;
+  const multi  = process.env.METERED_API_KEYS;
+  const raw    = multi || single || '';
+  return raw.split(',').map(k => k.trim()).filter(Boolean);
+}
+
 app.get('/api/ice-servers', async (req, res) => {
+  // Отдаём из кэша если свежий
+  if (_iceCache && (Date.now() - _iceCacheTime) < ICE_CACHE_TTL) {
+    return res.json(_iceCache);
+  }
+
   const METERED_KEY = process.env.METERED_API_KEY;
   const TWILIO_SID  = process.env.TWILIO_ACCOUNT_SID;
   const TWILIO_AUTH = process.env.TWILIO_AUTH_TOKEN;
@@ -803,7 +834,8 @@ app.get('/api/ice-servers', async (req, res) => {
       );
       if (r.data?.ice_servers?.length) {
         console.log('[ICE] Twilio TURN серверы получены:', r.data.ice_servers.length);
-        return res.json(r.data.ice_servers);
+        _iceCache = r.data.ice_servers; _iceCacheTime = Date.now();
+        return res.json(_iceCache);
       }
     } catch(e) { console.log('[ICE] Twilio недоступен:', e.message); }
   }
@@ -817,294 +849,100 @@ app.get('/api/ice-servers', async (req, res) => {
       );
       if (Array.isArray(r.data) && r.data.length) {
         console.log('[ICE] Metered TURN серверы получены:', r.data.length);
-        return res.json(r.data);
+        _iceCache = r.data; _iceCacheTime = Date.now();
+        return res.json(_iceCache);
       }
     } catch(e) { console.log('[ICE] Metered недоступен:', e.message); }
   }
 
-  // Fallback: максимально расширенный список серверов (UDP + TCP + TLS)
+  // Попытка 3: ротация по нескольким Metered API ключам
+  const meteredKeys = getMeteredKeys();
+  for (const key of meteredKeys) {
+    try {
+      const r = await axios.get(
+        `https://aura.metered.live/api/v1/turn/credentials?apiKey=${key}`,
+        { timeout: 5000 }
+      );
+      if (Array.isArray(r.data) && r.data.length) {
+        console.log('[ICE] Metered TURN (ротация) получены:', r.data.length);
+        _iceCache = r.data; _iceCacheTime = Date.now();
+        return res.json(_iceCache);
+      }
+    } catch(e) { /* пробуем следующий ключ */ }
+  }
+
+  // Попытка 4: ExpressTURN (бесплатно 1TB/мес — нужен свой ключ)
+  const EXPRESSTURN_KEY  = process.env.EXPRESSTURN_API_KEY;   // username из дашборда
+  const EXPRESSTURN_CRED = process.env.EXPRESSTURN_CREDENTIAL; // credential
+  if (EXPRESSTURN_KEY && EXPRESSTURN_CRED) {
+    const etServers = [
+      { urls: 'turn:relay1.expressturn.com:3478',             username: EXPRESSTURN_KEY, credential: EXPRESSTURN_CRED },
+      { urls: 'turn:relay1.expressturn.com:3478?transport=tcp', username: EXPRESSTURN_KEY, credential: EXPRESSTURN_CRED },
+      { urls: 'turn:relay1.expressturn.com:3480',             username: EXPRESSTURN_KEY, credential: EXPRESSTURN_CRED },
+      { urls: 'turns:relay1.expressturn.com:5349',            username: EXPRESSTURN_KEY, credential: EXPRESSTURN_CRED },
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+    ];
+    _iceCache = etServers; _iceCacheTime = Date.now();
+    return res.json(_iceCache);
+  }
+
+  // Fallback: проверенные серверы — только реально живые в 2026
   res.json([
-    // в”Ђв”Ђ STUN в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // ── STUN: Google (надёжнее всего) ────────────────────────────────────
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:stun.relay.metered.ca:80' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    // в”Ђв”Ђ openrelay (РІСЃРµ РїРѕСЂС‚С‹ Рё С‚СЂР°РЅСЃРїРѕСЂС‚С‹) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'turn:openrelay.metered.ca:80',                username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:3478',              username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turns:openrelay.metered.ca:443',              username: 'openrelayproject', credential: 'openrelayproject' },
-    // в”Ђв”Ђ freeturn (UDP + TCP + TLS) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'turn:freeturn.net:3478',                      username: 'free', credential: 'free' },
-    { urls: 'turn:freeturn.net:5349?transport=tcp',        username: 'free', credential: 'free' },
-    { urls: 'turns:freeturn.tel:5349',                     username: 'free', credential: 'free' },
-    // в”Ђв”Ђ numb.viagenie.ca в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'turn:numb.viagenie.ca',                       username: 'webrtc@live.com', credential: 'muazkh' },
-    { urls: 'turn:numb.viagenie.ca?transport=tcp',         username: 'webrtc@live.com', credential: 'muazkh' },
-    // в”Ђв”Ђ expressrturn (Р±РµСЃРїР»Р°С‚РЅС‹Р№, РЅР°РґС‘Р¶РЅС‹Р№) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'turn:turn.anyfirewall.com:443?transport=tcp', username: 'webrtc', credential: 'webrtc' },
-    // в”Ђв”Ђ icetest.info в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:stun.stunprotocol.org:3478' },
-    { urls: 'stun:stun.sipgate.net:3478' },
-    { urls: 'stun:stun.nextcloud.com:443' },
-    { urls: 'stun:stun.sip.us' },
-    { urls: 'stun:stun.voip.blackberry.com:3478' },
-    { urls: 'stun:stun.antisip.com:3478' },
-    { urls: 'stun:stun.bluesip.net:3478' },
-    { urls: 'stun:stun.dus.net:3478' },
-    { urls: 'stun:stun.epygi.com:3478' },
-    { urls: 'stun:stun.sip2sip.info:3478' },
-    // ── cloudflare TURN (очень надёжный) ─────────────────────────────────
-    { urls: 'turn:turn.cloudflare.com:3478',               username: 'cloudflare',  credential: 'cloudflare2024' },
-    { urls: 'turn:turn.cloudflare.com:443?transport=tcp',  username: 'cloudflare',  credential: 'cloudflare2024' },
-    // в”Ђв”Ђ xirsys lite (Р±РµСЃРїР»Р°С‚РЅС‹Р№ tier) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:ss-turn1.xirsys.com' },
-    { urls: 'turn:ss-turn1.xirsys.com:80',                 username: 'aura',        credential: 'aura2024' },
-    { urls: 'turn:ss-turn1.xirsys.com:3478',               username: 'aura',        credential: 'aura2024' },
-    { urls: 'turn:ss-turn2.xirsys.com:443?transport=tcp',  username: 'aura',        credential: 'aura2024' },
-    // в”Ђв”Ђ stunserver.stunprotocol.org в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:stunserver.stunprotocol.org:3478' },
-    // в”Ђв”Ђ iphone-stun (Apple) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:stun.1und1.de:3478' },
-    { urls: 'stun:stun.freeswitch.org:3478' },
-    { urls: 'stun:stun.voipgate.com:3478' },
-    { urls: 'stun:stun.counterpath.net:3478' },
-    // в”Ђв”Ђ Metered public в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'turn:a.relay.metered.ca:80',                  username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
-    { urls: 'turn:a.relay.metered.ca:80?transport=tcp',    username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
-    { urls: 'turn:a.relay.metered.ca:443',                 username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
-    { urls: 'turns:a.relay.metered.ca:443?transport=tcp',  username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
-
-    // в”Ђв”Ђ Xirsys global network в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:ss-turn1.xirsys.com' },
-    { urls: 'stun:ss-turn2.xirsys.com' },
-    { urls: 'turn:ss-turn1.xirsys.com:80',                  username: 'aura', credential: 'aura2024' },
-    { urls: 'turn:ss-turn1.xirsys.com:3478',                username: 'aura', credential: 'aura2024' },
-    { urls: 'turn:ss-turn1.xirsys.com:443?transport=tcp',   username: 'aura', credential: 'aura2024' },
-    { urls: 'turns:ss-turn1.xirsys.com:443',                username: 'aura', credential: 'aura2024' },
-    { urls: 'turn:ss-turn2.xirsys.com:80',                  username: 'aura', credential: 'aura2024' },
-    { urls: 'turn:ss-turn2.xirsys.com:3478',                username: 'aura', credential: 'aura2024' },
-    { urls: 'turn:ss-turn2.xirsys.com:443?transport=tcp',   username: 'aura', credential: 'aura2024' },
-    { urls: 'turns:ss-turn2.xirsys.com:443',                username: 'aura', credential: 'aura2024' },
-
-    // в”Ђв”Ђ expressturn (free TURN) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'turn:relay1.expressturn.com:3478',             username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
-    { urls: 'turn:relay1.expressturn.com:3480',             username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
-
-    // в”Ђв”Ђ twilio global edge (public stun) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    { urls: 'stun:regional.stun.twilio.com:3478' },
-
-    // в”Ђв”Ђ coturn public в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:turn.matrix.org' },
-    { urls: 'turn:turn.matrix.org',                         username: 'aura', credential: 'aura' },
-
-    // в”Ђв”Ђ Mozilla public STUN в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:stun.services.mozilla.com:3478' },
-
-    // в”Ђв”Ђ openrelay extra ports в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'turn:openrelay.metered.ca:80?transport=tcp',   username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-
-    // в”Ђв”Ђ icetest & misc в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:stun.3cx.com:3478' },
-    { urls: 'stun:stun.acrobits.cz:3478' },
-    { urls: 'stun:stun.altar.com.pl:3478' },
-    { urls: 'stun:stun.avigora.fr:3478' },
-    { urls: 'stun:stun.b2b2c.ca:3478' },
-    { urls: 'stun:stun.cablenet-as.net:3478' },
-    { urls: 'stun:stun.callromania.ro:3478' },
-    { urls: 'stun:stun.callwithus.com:3478' },
-    { urls: 'stun:stun.cheapvoip.com:3478' },
-    { urls: 'stun:stun.cloopen.com:3478' },
-    { urls: 'stun:stun.commpeak.com:3478' },
-    { urls: 'stun:stun.cope.es:3478' },
-    { urls: 'stun:stun.cu-tme.net:3478' },
-    { urls: 'stun:stun.dcalling.de:3478' },
-    { urls: 'stun:stun.demos.ru:3478' },
-    { urls: 'stun:stun.develz.org:3478' },
-    { urls: 'stun:stun.dialog.lk:3478' },
-    { urls: 'stun:stun.doublerobotics.com:3478' },
-    { urls: 'stun:stun.drogon.net:3478' },
-    { urls: 'stun:stun.easybell.de:3478' },
-    { urls: 'stun:stun.easter-eggs.com:3478' },
-    { urls: 'stun:stun.ekiga.net:3478' },
-    { urls: 'stun:stun.futurasp.es:3478' },
-    { urls: 'stun:stun.gmx.de:3478' },
-    { urls: 'stun:stun.halonet.pl:3478' },
-    { urls: 'stun:stun.hicare.net:3478' },
-    { urls: 'stun:stun.hosteurope.de:3478' },
-    { urls: 'stun:stun.internetcalls.com:3478' },
-    { urls: 'stun:stun.ipfire.org:3478' },
-    { urls: 'stun:stun.ippi.fr:3478' },
-    { urls: 'stun:stun.ipshka.com:3478' },
-    { urls: 'stun:stun.it1.hr:3478' },
-    { urls: 'stun:stun.ivao.aero:3478' },
-    { urls: 'stun:stun.jumblo.com:3478' },
-    { urls: 'stun:stun.justvoip.com:3478' },
     { urls: 'stun:stun.l.google.com:5349' },
     { urls: 'stun:stun1.l.google.com:5349' },
-    { urls: 'stun:stun2.l.google.com:5349' },
-    { urls: 'stun:stun3.l.google.com:5349' },
-    { urls: 'stun:stun4.l.google.com:5349' },
-
-    // в”Ђв”Ђ Global public STUN pool в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'stun:stun.linphone.org' },
-    { urls: 'stun:stun.linphone.org:3479' },
-    { urls: 'stun:stun.sip.us:3478' },
-    { urls: 'stun:stun.12connect.com:3478' },
-    { urls: 'stun:stun.12voip.com:3478' },
-    { urls: 'stun:stun.1cbit.ru:3478' },
-    { urls: 'stun:stun.1und1.de:3478' },
-    { urls: 'stun:stun.2talk.co.nz:3478' },
-    { urls: 'stun:stun.3cx.com:3478' },
-    { urls: 'stun:stun.aa.net.uk:3478' },
-    { urls: 'stun:stun.acrobits.cz:3478' },
-    { urls: 'stun:stun.actionvoip.com:3478' },
-    { urls: 'stun:stun.advfn.com:3478' },
-    { urls: 'stun:stun.aeta-audio.com:3478' },
-    { urls: 'stun:stun.aeta.fr:3478' },
-    { urls: 'stun:stun.alltel.com.au:3478' },
-    { urls: 'stun:stun.altar.com.pl:3478' },
-    { urls: 'stun:stun.annatel.net:3478' },
-    { urls: 'stun:stun.antisip.com:3478' },
-    { urls: 'stun:stun.avigora.fr:3478' },
-    { urls: 'stun:stun.axeos.nl:3478' },
-    { urls: 'stun:stun.b2b2c.ca:3478' },
-    { urls: 'stun:stun.bitburger.de:3478' },
-    { urls: 'stun:stun.bluesip.net:3478' },
-    { urls: 'stun:stun.bridewell.com:3478' },
-    { urls: 'stun:stun.budgetphone.nl:3478' },
-    { urls: 'stun:stun.cablenet-as.net:3478' },
-    { urls: 'stun:stun.callromania.ro:3478' },
-    { urls: 'stun:stun.callwithus.com:3478' },
-    { urls: 'stun:stun.cbsys.net:3478' },
-    { urls: 'stun:stun.chathelp.ru:3478' },
-    { urls: 'stun:stun.cheapvoip.com:3478' },
-    { urls: 'stun:stun.ciktel.com:3478' },
-    { urls: 'stun:stun.cloopen.com:3478' },
-    { urls: 'stun:stun.colocall.net:3478' },
-    { urls: 'stun:stun.commpeak.com:3478' },
-    { urls: 'stun:stun.cope.es:3478' },
-    { urls: 'stun:stun.counterpath.com:3478' },
-    { urls: 'stun:stun.counterpath.net:3478' },
-    { urls: 'stun:stun.dcalling.de:3478' },
-    { urls: 'stun:stun.demos.ru:3478' },
-    { urls: 'stun:stun.develz.org:3478' },
-    { urls: 'stun:stun.dialog.lk:3478' },
-    { urls: 'stun:stun.doublerobotics.com:3478' },
-    { urls: 'stun:stun.drogon.net:3478' },
-    { urls: 'stun:stun.dus.net:3478' },
-    { urls: 'stun:stun.easybell.de:3478' },
-    { urls: 'stun:stun.easter-eggs.com:3478' },
-    { urls: 'stun:stun.ekiga.net:3478' },
-    { urls: 'stun:stun.epygi.com:3478' },
-    { urls: 'stun:stun.fabertel.fr:3478' },
-    { urls: 'stun:stun.freecall.com:3478' },
-    { urls: 'stun:stun.freeswitch.org:3478' },
-    { urls: 'stun:stun.freevoipdeal.com:3478' },
-    { urls: 'stun:stun.futurasp.es:3478' },
-    { urls: 'stun:stun.gmx.de:3478' },
-    { urls: 'stun:stun.gradwell.com:3478' },
-    { urls: 'stun:stun.halonet.pl:3478' },
-    { urls: 'stun:stun.hoiio.com:3478' },
-    { urls: 'stun:stun.hosteurope.de:3478' },
-    { urls: 'stun:stun.infra.net:3478' },
-    { urls: 'stun:stun.internetcalls.com:3478' },
-    { urls: 'stun:stun.intervoip.com:3478' },
-    { urls: 'stun:stun.ipfire.org:3478' },
-    { urls: 'stun:stun.ippi.fr:3478' },
-    { urls: 'stun:stun.ipshka.com:3478' },
-    { urls: 'stun:stun.it1.hr:3478' },
-    { urls: 'stun:stun.ivao.aero:3478' },
-    { urls: 'stun:stun.jumblo.com:3478' },
-    { urls: 'stun:stun.justvoip.com:3478' },
-    { urls: 'stun:stun.kanet.ru:3478' },
-    { urls: 'stun:stun.linuxtrent.it:3478' },
-    { urls: 'stun:stun.liveo.fr:3478' },
-    { urls: 'stun:stun.lowratevoip.com:3478' },
-    { urls: 'stun:stun.lugosoft.com:3478' },
-    { urls: 'stun:stun.lundimatin.fr:3478' },
-    { urls: 'stun:stun.magnet.ie:3478' },
-    { urls: 'stun:stun.manle.com:3478' },
-    { urls: 'stun:stun.mgn.ru:3478' },
-    { urls: 'stun:stun.modulus.gr:3478' },
-    { urls: 'stun:stun.myvoiptraffic.com:3478' },
-    { urls: 'stun:stun.nattel.com:3478' },
-    { urls: 'stun:stun.nfon.net:3478' },
-    { urls: 'stun:stun.nonoh.net:3478' },
-    { urls: 'stun:stun.nottingham.ac.uk:3478' },
-    { urls: 'stun:stun.nottingham.ac.uk:3479' },
-    { urls: 'stun:stun.oiltelecom.ru:3478' },
-    { urls: 'stun:stun.ippi.fr:3478' },
-    { urls: 'stun:stun.ozekiphone.com:3478' },
-    { urls: 'stun:stun.peeters.com:3478' },
-    { urls: 'stun:stun.phoneserve.com:3478' },
-    { urls: 'stun:stun.powervoip.com:3478' },
-    { urls: 'stun:stun.qq.com:3478' },
-    { urls: 'stun:stun.rockenstein.de:3478' },
-    { urls: 'stun:stun.rolmail.net:3478' },
-    { urls: 'stun:stun.rynga.com:3478' },
-    { urls: 'stun:stun.schmieder.at:3478' },
-    { urls: 'stun:stun.sip2sip.info:3478' },
-    { urls: 'stun:stun.sipdiscount.com:3478' },
-    { urls: 'stun:stun.sipgate.net:3478' },
-    { urls: 'stun:stun.sipgate.net:10000' },
-    { urls: 'stun:stun.siplogin.de:3478' },
-    { urls: 'stun:stun.sipnet.net:3478' },
-    { urls: 'stun:stun.sipnet.ru:3478' },
-    { urls: 'stun:stun.sippeer.dk:3478' },
-    { urls: 'stun:stun.siprelay.com:3478' },
-    { urls: 'stun:stun.sipthor.net:3478' },
-    { urls: 'stun:stun.solnet.ch:3478' },
-    { urls: 'stun:stun.stadtwerke-eutin.de:3478' },
-    { urls: 'stun:stun.stunprotocol.org:3478' },
-    { urls: 'stun:stun.symposium.pl:3478' },
-    { urls: 'stun:stun.t-online.de:3478' },
-    { urls: 'stun:stun.tele2.com:3478' },
-    { urls: 'stun:stun.telefacil.com:3478' },
-    { urls: 'stun:stun.teliasonera.com:3478' },
-    { urls: 'stun:stun.tng.de:3478' },
-    { urls: 'stun:stun.twilio.com:3478' },
-    { urls: 'stun:stun.ucallweekly.com:3478' },
-    { urls: 'stun:stun.usfamilynet.net:3478' },
-    { urls: 'stun:stun.vault.team:3478' },
-    { urls: 'stun:stun.vo.lu:3478' },
-    { urls: 'stun:stun.voip.blackberry.com:3478' },
-    { urls: 'stun:stun.voip.eutelia.it:3478' },
-    { urls: 'stun:stun.voipbuster.com:3478' },
-    { urls: 'stun:stun.voipbusterpro.com:3478' },
-    { urls: 'stun:stun.voipcheap.com:3478' },
-    { urls: 'stun:stun.voipcheap.co.uk:3478' },
-    { urls: 'stun:stun.voipgain.com:3478' },
-    { urls: 'stun:stun.voipgate.com:3478' },
-    { urls: 'stun:stun.voipinfocenter.com:3478' },
-    { urls: 'stun:stun.voipio.com:3478' },
-    { urls: 'stun:stun.voipraider.com:3478' },
-    { urls: 'stun:stun.voipstunt.com:3478' },
-    { urls: 'stun:stun.voipwise.com:3478' },
-    { urls: 'stun:stun.voipzoom.com:3478' },
-    { urls: 'stun:stun.voys.nl:3478' },
-    { urls: 'stun:stun.voxbone.com:3478' },
-    { urls: 'stun:stun.wifirst.net:3478' },
-    { urls: 'stun:stun.xlite.com:3478' },
-    { urls: 'stun:stun.zadarma.com:3478' },
-    { urls: 'stun:stun.zmginc.com:3478' },
-    { urls: 'stun:stun.solcon.nl:3478' },
+    // ── STUN: Cloudflare ──────────────────────────────────────────────────
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:stun.cloudflare.com:53' },
+    // ── STUN: Twilio ──────────────────────────────────────────────────────
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:regional.stun.twilio.com:3478' },
+    // ── STUN: Metered ─────────────────────────────────────────────────────
+    { urls: 'stun:stun.relay.metered.ca:80' },
+    { urls: 'stun:stun.relay.metered.ca:443' },
+    // ── STUN: прочие надёжные ─────────────────────────────────────────────
     { urls: 'stun:stun.nextcloud.com:443' },
-    { urls: 'stun:stun.nextcloud.com:3478' },
-
-    // в”Ђв”Ђ Extra TURN via open credentials (no traffic limit) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    { urls: 'turn:relay.backups.cz',                        username: 'webrtc', credential: 'webrtc' },
+    { urls: 'stun:stun.sipgate.net:3478' },
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+    { urls: 'stun:stun.services.mozilla.com:3478' },
+    { urls: 'stun:stun.voip.blackberry.com:3478' },
+    { urls: 'stun:stun.ekiga.net:3478' },
+    { urls: 'stun:stun.ideasip.com' },
+    { urls: 'stun:stun.schlund.de' },
+    { urls: 'stun:stun.xten.com' },
+    // ── TURN: openrelay (все порты + транспорты) ──────────────────────────
+    { urls: 'turn:openrelay.metered.ca:80',                 username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443',                username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp',  username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:3478',               username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:3478?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+    // ── TURN: Metered public (хардкод credentials — живут долго) ─────────
+    { urls: 'turn:a.relay.metered.ca:80',                   username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
+    { urls: 'turn:a.relay.metered.ca:80?transport=tcp',     username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
+    { urls: 'turn:a.relay.metered.ca:443',                  username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
+    { urls: 'turns:a.relay.metered.ca:443?transport=tcp',   username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
+    // ── TURN: freeturn.net (проверен, работает) ───────────────────────────
+    { urls: 'turn:freeturn.net:3478',                       username: 'free', credential: 'free' },
+    { urls: 'turn:freeturn.net:5349',                       username: 'free', credential: 'free' },
+    { urls: 'turn:freeturn.net:3478?transport=tcp',         username: 'free', credential: 'free' },
+    { urls: 'turn:freeturn.net:5349?transport=tcp',         username: 'free', credential: 'free' },
+    { urls: 'turns:freeturn.tel:5349',                      username: 'free', credential: 'free' },
+    // ── TURN: expressturn (бесплатный tier, 500MB/мес) ────────────────────
+    { urls: 'turn:relay1.expressturn.com:3478',             username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
+    { urls: 'turn:relay1.expressturn.com:3478?transport=tcp', username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
+    { urls: 'turn:relay1.expressturn.com:3480',             username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
+    // ── TURN: relay.backups.cz ────────────────────────────────────────────
+    { urls: 'turn:relay.backups.cz:3478',                   username: 'webrtc', credential: 'webrtc' },
     { urls: 'turn:relay.backups.cz:443?transport=tcp',      username: 'webrtc', credential: 'webrtc' },
-    { urls: 'turn:turn.bistri.com:80',                      username: 'homeo',  credential: 'homeo' },
-    { urls: 'turn:turn.bistri.com:443',                     username: 'homeo',  credential: 'homeo' },
-    { urls: 'turn:webrtc.cheap:3478',                       username: 'free',   credential: 'free' },
+    { urls: 'turns:relay.backups.cz:443',                   username: 'webrtc', credential: 'webrtc' },
   ]);
 });
 
