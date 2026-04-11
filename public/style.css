@@ -1675,9 +1675,11 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
 }
 .cw-btn:hover  { transform: scale(1.1); filter: brightness(1.2); }
 .cw-btn:active { transform: scale(.9); }
-.cw-mute   { background: rgba(255,255,255,.2); }
-.cw-screen { background: rgba(255,255,255,.15); }
-.cw-end    { background: #ef4444; box-shadow: 0 2px 12px rgba(239,68,68,.5); }
+.cw-mute      { background: rgba(255,255,255,.2); }
+.cw-screen    { background: rgba(255,255,255,.15); }
+.cw-flip-cam  { background: rgba(255,255,255,.15); }
+.cw-flip-cam:disabled { opacity: .5; pointer-events: none; }
+.cw-end       { background: #ef4444; box-shadow: 0 2px 12px rgba(239,68,68,.5); }
 /* Audio call content */
 .cw-audio-content {
   position: relative; z-index: 2;
