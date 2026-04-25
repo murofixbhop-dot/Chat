@@ -2893,6 +2893,17 @@ video {
   overflow: hidden;
   user-select: none;
 }
+.group-call-win.gcw-compact {
+  inset: auto 16px 16px auto;
+  width: min(440px, calc(100vw - 24px));
+  height: min(72dvh, 620px);
+  border-radius: 22px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.45);
+  border: 1px solid rgba(255,255,255,.08);
+}
+.group-call-win.gcw-compact .gcw-bg {
+  border-radius: 22px;
+}
 
 /* Background blur overlay */
 .gcw-bg {
@@ -3118,6 +3129,8 @@ video {
 .gcw-screen { background: rgba(255,255,255,.15); }
 .gcw-screen:hover { background: rgba(255,255,255,.22); }
 .gcw-screen.active { background: var(--accent); }
+.gcw-compact { background: rgba(255,255,255,.1); }
+.gcw-compact:hover { background: rgba(255,255,255,.18); }
 
 /* ── Group tile fullscreen ──────────────────────────────── */
 .gcw-grid.has-fullscreen {
