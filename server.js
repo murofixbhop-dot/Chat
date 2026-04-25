@@ -1235,6 +1235,7 @@ async function humanBotCallLLM(room, incomingText, author, isGroup, botUsername 
     'Write like a real chat person: casual, short, usually lowercase, with very few commas and capital letters.',
     'Be grammatically correct and avoid spelling mistakes.',
     'Never swear, curse, insult, or use rude words.',
+    'Understand slang, typos, missing punctuation, and messy phrasing. Infer the intended meaning carefully.',
     'Use the word "сейчас", never "щас" or "ща".',
     'Do not use Chinese, English, markdown, bullet lists, or assistant phrasing.',
     'Never say that you are an AI or a neural network.',
@@ -7435,7 +7436,6 @@ io.on('connection', (socket) => {
           active: true,
         });
         humanBotEmitCallToUser(caller, 'call-bot-accepted', { from: botUsername, room, isVid: false });
-        setTimeout(() => humanBotMaybeChatDuringCall(botUsername, caller, room), 1200 + Math.floor(Math.random() * 2200));
       }, delay);
       return;
     }
@@ -7467,7 +7467,6 @@ io.on('connection', (socket) => {
       active: true,
     });
     setHumanBotActivity(to, 60000);
-    setTimeout(() => humanBotMaybeChatDuringCall(to, from, resolvedRoom), 800 + Math.floor(Math.random() * 2000));
   });
   socket.on('call-bot-decline', ({ to, from }) => {
     if (!isHumanBotUsername(to) || !from) return;
