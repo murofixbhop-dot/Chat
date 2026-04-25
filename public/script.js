@@ -6404,6 +6404,27 @@ function _groupCallHasTargets() {
   return groupPeers.size > 0 || _groupMembers.length > 0 || _groupBotMembers.size > 0 || _groupBotTargets.length > 0;
 }
 
+function _closeGroupParticipant(from, ended = false) {
+  if (!from) return;
+  const pc = groupPeers.get(from);
+  if (pc) {
+    try { pc.close(); } catch {}
+    groupPeers.delete(from);
+  }
+  document.querySelector(`[data-participant="${from}"]`)?.remove();
+  _groupBotMembers.delete(from);
+  _groupBotTargets = _groupBotTargets.filter(m => m !== from);
+  _groupMembers = _groupMembers.filter(m => m !== from);
+  if (_callTarget === from) _callTarget = null;
+  if (ended && _groupCall && !_groupCallHasTargets()) {
+    _cleanup();
+    return;
+  }
+  const grid = document.getElementById('gcwGrid');
+  if (grid) _updateGcwGrid(grid.querySelectorAll('.gp-tile').length);
+  _updateGroupCallStatus();
+}
+
 function _normalizeBotSpeechTranscript(text) {
   return String(text || '')
     .replace(/[^\S\r\n]+/g, ' ')
@@ -6509,9 +6530,13 @@ function _showGroupCallUI(groupName, members) {
   win.innerHTML = `
     <div class="gcw-bg" id="gcwBg"></div>
     <div class="gcw-top">
-      <div class="gcw-group-name">${esc(groupName)}</div>
-      <div class="gcw-timer" id="gcwTimer">00:00</div>
-      <div class="gcw-status" id="gcStatus">Соединение…</div>
+      <div class="gcw-headline">
+        <div class="gcw-group-name">${esc(groupName)}</div>
+        <div class="gcw-meta">
+          <div class="gcw-timer" id="gcwTimer">00:00</div>
+          <div class="gcw-status" id="gcStatus">Соединение…</div>
+        </div>
+      </div>
     </div>
     <div class="gcw-grid gp-grid" id="gcwGrid"></div>
     <div class="gcw-bottom">
@@ -6554,6 +6579,7 @@ function _showGroupCallUI(groupName, members) {
   }, 1000);
   win._timer = _gcwTimer;
   makeDraggable(win);
+  _setupGroupWinLongPress(win);
 }
 
 function _updateGcwGrid(count) {
@@ -6569,9 +6595,71 @@ function _updateGcwGrid(count) {
 function toggleGroupCallCompact() {
   const win = document.getElementById('groupCallWin');
   if (!win) return;
+  if (win.classList.contains('gcw-expanded')) win.classList.remove('gcw-expanded');
   const compact = win.classList.toggle('gcw-compact');
   const btn = win.querySelector('.gcw-compact i');
   if (btn) btn.className = compact ? 'ti ti-arrows-maximize' : 'ti ti-arrows-minimize';
+}
+
+function toggleGroupCallExpand() {
+  const win = document.getElementById('groupCallWin');
+  if (!win) return;
+  const expanded = win.classList.contains('gcw-expanded');
+  if (expanded) {
+    win.classList.remove('gcw-expanded');
+    if (win._savedPos) {
+      win.style.left = win._savedPos.left;
+      win.style.top = win._savedPos.top;
+      win.style.right = win._savedPos.right;
+      win.style.bottom = win._savedPos.bottom;
+    }
+    return;
+  }
+  win._savedPos = {
+    left: win.style.left,
+    top: win.style.top,
+    right: win.style.right,
+    bottom: win.style.bottom,
+  };
+  win.classList.remove('gcw-compact');
+  const btn = win.querySelector('.gcw-compact i');
+  if (btn) btn.className = 'ti ti-arrows-minimize';
+  win.classList.add('gcw-expanded');
+}
+
+function _setupGroupWinLongPress(win) {
+  let timer = null;
+  let moved = false;
+  let startX = 0;
+  let startY = 0;
+  win.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button, video')) return;
+    moved = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    win.classList.add('pressing');
+    timer = setTimeout(() => {
+      if (!moved) {
+        win.classList.remove('pressing');
+        toggleGroupCallExpand();
+      }
+    }, 500);
+  });
+  win.addEventListener('pointermove', (e) => {
+    if (Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8) {
+      moved = true;
+      win.classList.remove('pressing');
+      clearTimeout(timer);
+      timer = null;
+    }
+  });
+  const cancel = () => {
+    win.classList.remove('pressing');
+    clearTimeout(timer);
+    timer = null;
+  };
+  win.addEventListener('pointerup', cancel);
+  win.addEventListener('pointerleave', cancel);
 }
 
 function _addGroupParticipantTile(grid, member, stream, isLocal) {
@@ -6997,10 +7085,12 @@ socket.on('call-bot-ended', ({ from }) => {
 socket.on('call-bot-group-joined', ({ room, username }) => {
   if (!_groupCall || !_inCall || currentRoom !== room) return;
   if (_groupBotMembers.has(username)) return;
+  stopRing();
   _groupBotTargets = _groupBotTargets.filter(x => x !== username);
   _groupBotMembers.add(username);
   const grid = document.getElementById('gcwGrid');
   if (grid) _addGroupParticipantTile(grid, username, null, false);
+  if (grid) _updateGcwGrid(grid.querySelectorAll('.gp-tile').length);
   _updateGroupCallStatus();
   startBotSpeechRecognition();
   toast(`${userNicknames[username] || username} зашёл в звонок без микрофона`, 'info', 1800);
@@ -7008,10 +7098,7 @@ socket.on('call-bot-group-joined', ({ room, username }) => {
 
 socket.on('call-bot-group-left', ({ room, username }) => {
   if (currentRoom !== room) return;
-  _groupBotMembers.delete(username);
-  _groupBotTargets = _groupBotTargets.filter(x => x !== username);
-  document.querySelector(`[data-participant="${username}"]`)?.remove();
-  _updateGroupCallStatus();
+  _closeGroupParticipant(username, false);
   if (!_hasBotCallContext()) stopBotSpeechRecognition();
 });
 
@@ -7040,13 +7127,8 @@ socket.on('call-busy', ({ from }) => {
     // В групповом звонке — участник занят, пропускаем его
     const nick = userNicknames[from] || from;
     toast(`${nick} занят`, 'info', 1500);
-    const pc = groupPeers.get(from);
-    if (pc) { pc.close(); groupPeers.delete(from); }
-    document.querySelector(`[data-participant="${from}"]`)?.remove();
-    if (isHumanBotUser(from)) _groupBotTargets = _groupBotTargets.filter(m => m !== from);
-    else _groupMembers = _groupMembers.filter(m => m !== from);
-    _updateGroupCallStatus();
-    if (!_groupCallHasTargets()) endCall();
+    stopRing();
+    _closeGroupParticipant(from, true);
     return;
   }
   // Личный звонок
@@ -7120,18 +7202,12 @@ socket.on('call-decline', ({ from, groupId } = {}) => {
     // Групповой звонок — один участник отклонил, продолжаем для остальных
     toast(`${nick} отклонил звонок`, 'info', 2000);
     // Закрываем пир-соединение с этим участником
-    const pc = groupPeers.get(from);
-    if (pc) { pc.close(); groupPeers.delete(from); }
-    // Убираем плитку этого участника из UI
-    document.querySelector(`[data-participant="${from}"]`)?.remove();
-    // Обновляем счётчик участников
-    if (isHumanBotUser(from)) _groupBotTargets = _groupBotTargets.filter(m => m !== from);
-    else _groupMembers = _groupMembers.filter(m => m !== from);
-    _updateGroupCallStatus();
+    stopRing();
+    _closeGroupParticipant(from, false);
     // Если больше никого нет — завершаем
     if (!_groupCallHasTargets()) {
       toast('Все участники отклонили звонок', 'info', 2500);
-      endCall();
+      _cleanup();
     }
     return;
   }
@@ -7164,6 +7240,7 @@ socket.on('call-answer-ready', async ({ from }) => {
 socket.on('call-offer', async ({ from, sdp }) => {
   // Route to group peer if this is a group call
   if (groupPeers.has(from)) {
+    stopRing();
     const pc = groupPeers.get(from);
     try {
       if (pc.signalingState === 'have-local-offer') {
@@ -7193,6 +7270,7 @@ socket.on('call-offer', async ({ from, sdp }) => {
 socket.on('call-answer', async ({ from, sdp }) => {
   // Route to group peer if this is a group call
   if (groupPeers.has(from)) {
+    stopRing();
     const pc = groupPeers.get(from);
     try {
       if (pc.signalingState === 'have-local-offer') {
@@ -7227,14 +7305,10 @@ socket.on('call-end', ({ from, groupId } = {}) => {
     // Один участник группового звонка завершил — убираем только его
     const nick = userNicknames[from] || from;
     toast(`${nick} покинул звонок`, 'info', 1500);
-    const pc = groupPeers.get(from);
-    if (pc) { pc.close(); groupPeers.delete(from); }
-    document.querySelector(`[data-participant="${from}"]`)?.remove();
-    if (isHumanBotUser(from)) _groupBotMembers.delete(from);
-    else _groupMembers = _groupMembers.filter(m => m !== from);
-    _updateGroupCallStatus();
+    stopRing();
+    _closeGroupParticipant(from, false);
     if (!_groupCallHasTargets()) {
-      endCall();
+      _cleanup();
     }
     return;
   }
@@ -7830,6 +7904,7 @@ function makeDraggable(el) {
   // Position from CSS (top-right) вЂ” let CSS handle initial position
 
   const onDown = (e) => {
+    if (el.classList.contains('cw-expanded') || el.classList.contains('gcw-expanded')) return;
     if (e.target.closest('button, video')) return;
     e.preventDefault();
     const isTouch = e.type === 'touchstart';
@@ -8373,17 +8448,22 @@ function showScreenQualityPicker(cb) {
 }
 
 // в”Ђв”Ђ END / CLEANUP в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-function endCall() {
+function endCall(notifyPeers = true) {
   stopRing();
-  if (_groupCall) {
+  if (notifyPeers && _groupCall) {
     // Групповой звонок — шлём завершение всем участникам с groupId
     const gid = currentRoom?.replace('group:','') || _callRoom?.replace('group:','') || '';
-    const targets = [...groupPeers.keys()];
+    const targets = [...new Set([
+      ...groupPeers.keys(),
+      ..._groupMembers,
+      ...Array.from(_groupBotMembers),
+      ..._groupBotTargets,
+    ])];
     if (_callTarget && !targets.includes(_callTarget)) targets.push(_callTarget);
     targets.forEach(member => {
       socket.emit('call-end', { to: member, from: currentUser, groupId: gid });
     });
-  } else if (_callTarget) {
+  } else if (notifyPeers && _callTarget) {
     socket.emit('call-end', { to: _callTarget, from: currentUser });
   }
   _cleanup();
