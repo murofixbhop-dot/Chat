@@ -705,6 +705,27 @@ function humanBotExtractNicknameRequest(text) {
   return '';
 }
 
+async function humanBotPersistExternalImage(url, botUsername, prefix = 'avatars') {
+  const src = String(url || '').trim();
+  if (!src) return null;
+  if (src.startsWith('/api/dl/') || src.startsWith('data:image/')) return src;
+  try {
+    const r = await axios.get(src, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*' }
+    });
+    const ct = r.headers['content-type'] || 'image/jpeg';
+    if (!ct.startsWith('image/') || !r.data || r.data.byteLength < 1500) return null;
+    const ext = ct.includes('png') ? 'png' : (ct.includes('webp') ? 'webp' : 'jpg');
+    const fileName = `${prefix}/${Date.now()}-${botUsername}.${ext}`;
+    await storageUpload(fileName, Buffer.from(r.data), ct);
+    return `/api/dl/${encodeURIComponent(fileName)}`;
+  } catch {
+    return null;
+  }
+}
+
 async function humanBotFindAvatarOnWeb(query, botUsername) {
   const q = String(query || '').trim();
   if (!q) return null;
@@ -735,7 +756,7 @@ async function humanBotFindAvatarOnWeb(query, botUsername) {
       const pick = pages
         .map(p => p?.imageinfo?.[0]?.thumburl || p?.imageinfo?.[0]?.url || '')
         .find(url => /^https?:\/\//i.test(url));
-      if (pick) return pick;
+      if (pick) return (await humanBotPersistExternalImage(pick, botUsername, 'avatars')) || pick;
     } catch {}
   }
   return null;
@@ -1060,16 +1081,113 @@ async function humanBotVisionContext(msg, incomingText, botUsername = HUMAN_BOT_
   }
 }
 
+function humanBotWeatherCodeRu(code) {
+  const map = {
+    0: 'ясно',
+    1: 'в основном ясно',
+    2: 'переменная облачность',
+    3: 'пасмурно',
+    45: 'туман',
+    48: 'туман',
+    51: 'морось',
+    53: 'морось',
+    55: 'морось',
+    61: 'небольшой дождь',
+    63: 'дождь',
+    65: 'сильный дождь',
+    71: 'небольшой снег',
+    73: 'снег',
+    75: 'сильный снег',
+    80: 'кратковременный дождь',
+    81: 'дождь',
+    82: 'ливень',
+    95: 'гроза'
+  };
+  return map[Number(code)] || 'обычная погода';
+}
+
+function humanBotExtractWeatherLocation(text) {
+  const src = String(text || '').trim();
+  const m = src.match(/(?:погода|weather)(?:\s+сейчас|\s+сегодня|\s+там)?(?:\s+в|\s+во|\s+на)?\s+([a-zа-яё0-9 .\-]{2,60})/i);
+  if (!m?.[1]) return '';
+  return m[1].replace(/[?!.,]+$/g, '').trim();
+}
+
+async function humanBotFetchWeatherContext(location) {
+  const place = String(location || '').trim();
+  if (!place) return '';
+  try {
+    const geo = await axios.get('https://geocoding-api.open-meteo.com/v1/search', {
+      timeout: 10000,
+      params: { name: place, count: 1, language: 'ru', format: 'json' },
+      headers: { 'User-Agent': 'Mozilla/5.0 AuraBot/1.0' }
+    });
+    const hit = geo.data?.results?.[0];
+    if (!hit) return '';
+    const forecast = await axios.get('https://api.open-meteo.com/v1/forecast', {
+      timeout: 10000,
+      params: {
+        latitude: hit.latitude,
+        longitude: hit.longitude,
+        current: 'temperature_2m,apparent_temperature,weather_code,wind_speed_10m',
+        timezone: 'auto'
+      },
+      headers: { 'User-Agent': 'Mozilla/5.0 AuraBot/1.0' }
+    });
+    const cur = forecast.data?.current;
+    if (!cur) return '';
+    const label = [hit.name, hit.country].filter(Boolean).join(', ');
+    return `Погода в ${label}: ${Math.round(Number(cur.temperature_2m))}°C, ощущается как ${Math.round(Number(cur.apparent_temperature))}°C, ${humanBotWeatherCodeRu(cur.weather_code)}, ветер ${Math.round(Number(cur.wind_speed_10m))} м/с.`;
+  } catch {
+    return '';
+  }
+}
+
+async function humanBotFetchUsdContext(text) {
+  if (!/(курс|доллар|usd|eur|евро)/i.test(String(text || ''))) return '';
+  try {
+    const r = await axios.get('https://www.cbr-xml-daily.ru/daily_json.js', {
+      timeout: 10000,
+      headers: { 'User-Agent': 'Mozilla/5.0 AuraBot/1.0' }
+    });
+    const usd = r.data?.Valute?.USD?.Value;
+    const eur = r.data?.Valute?.EUR?.Value;
+    if (!usd && !eur) return '';
+    const bits = [];
+    if (usd) bits.push(`USD ${Number(usd).toFixed(2)} RUB`);
+    if (eur) bits.push(`EUR ${Number(eur).toFixed(2)} RUB`);
+    return `Курс валют по ЦБ: ${bits.join(', ')}.`;
+  } catch {
+    return '';
+  }
+}
+
 async function humanBotMaybeWebContext(text, botUsername = HUMAN_BOT_USERNAME) {
   const profile = getHumanBotProfile(botUsername);
-  if (!/(сегодня|сейчас|новост|интернет|найди|поищи|курс|погода|что там|актуальн)/i.test(String(text || ''))) return '';
+  if (!/(сегодня|сейчас|новост|интернет|найди|поищи|курс|погода|что там|актуальн|доллар|usd|eur|евро|weather)/i.test(String(text || ''))) return '';
   try {
     let q = String(text || '');
     for (const a of profile.aliases) q = q.replace(new RegExp(a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), '');
     q = q.trim().slice(0, 160);
     if (!q) return '';
-    const found = await aiQuickWebSearch(q);
-    return found ? `\n\nКонтекст из поиска:\n${String(found).slice(0, 1600)}` : '';
+    const parts = [];
+    const pause = 3500 + Math.floor(Math.random() * 6500);
+    await new Promise(resolve => setTimeout(resolve, pause));
+
+    const weatherLoc = humanBotExtractWeatherLocation(q);
+    const weather = await humanBotFetchWeatherContext(weatherLoc);
+    if (weather) parts.push(weather);
+
+    const usd = await humanBotFetchUsdContext(q);
+    if (usd) parts.push(usd);
+
+    const shouldSearch = !parts.length || /(новост|интернет|найди|поищи|что там|актуальн)/i.test(q);
+    if (shouldSearch) {
+      const found = await aiQuickWebSearch(q);
+      if (found) parts.push(`Контекст из поиска: ${String(found).slice(0, 1200)}`);
+    }
+
+    return parts.length ? `\n\nКонтекст из интернета:\n${parts.join('\n')}` : '';
   } catch {
     return '';
   }
@@ -1481,7 +1599,6 @@ function humanBotMaybeRefreshProfile(botUsername, force = false) {
   const mood = profile.moods[Math.floor(Math.random() * profile.moods.length)];
   const nick = profile.nicknamePool[Math.floor(Math.random() * profile.nicknamePool.length)];
   user.nickname = nick;
-  user.avatar = humanBotDefaultAvatar(botUsername, Math.floor(Math.random() * 8));
   user.botMemory = user.botMemory || { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
   user.botMemory.currentMood = mood;
   users.set(botUsername, user);
