@@ -478,6 +478,294 @@ const USERS_FILE = 'users.json';
 let users = new Map(); // username -> { nickname, avatar, theme, friends, friendRequests, groups, recoveryEmail }
 let recoveryCodes     = new Map(); // username -> { code, expiry, email }
 let emailVerifyCodes  = new Map(); // username -> { code, expiry, pendingEmail }
+const HUMAN_BOT_USERNAME = 'mira_ai';
+
+function ensureHumanBotAccount() {
+  const existing = users.get(HUMAN_BOT_USERNAME) || {};
+  users.set(HUMAN_BOT_USERNAME, {
+    nickname: 'Mira',
+    avatar: existing.avatar || null,
+    theme: existing.theme || 'dark',
+    friends: existing.friends || [],
+    friendRequests: [],
+    groups: existing.groups || [],
+    botMemory: existing.botMemory || { rooms: {}, thoughts: [], lastProactiveAt: 0 },
+    isBot: true,
+    humanBot: true,
+  });
+}
+
+function getHumanBotUser() {
+  ensureHumanBotAccount();
+  return users.get(HUMAN_BOT_USERNAME);
+}
+
+function getHumanBotMemory(room) {
+  const bot = getHumanBotUser();
+  if (!bot.botMemory) bot.botMemory = { rooms: {}, thoughts: [], lastProactiveAt: 0 };
+  if (!bot.botMemory.rooms) bot.botMemory.rooms = {};
+  if (!bot.botMemory.rooms[room]) bot.botMemory.rooms[room] = { history: [], thoughts: [], lastSeen: 0, ignored: 0 };
+  return bot.botMemory.rooms[room];
+}
+
+function rememberHumanBot(room, item) {
+  const bot = getHumanBotUser();
+  const mem = getHumanBotMemory(room);
+  mem.history.push({ ...item, at: Date.now() });
+  mem.history = mem.history.slice(-80);
+  mem.lastSeen = Date.now();
+  bot.botMemory.thoughts = (bot.botMemory.thoughts || []).slice(-120);
+  users.set(HUMAN_BOT_USERNAME, bot);
+  saveUsers().catch(() => {});
+}
+
+function groupHasHumanBot(groupId) {
+  const bot = users.get(HUMAN_BOT_USERNAME);
+  return (bot?.groups || []).some(g => g.id === groupId);
+}
+
+function humanBotCanSee(msg) {
+  if (!msg?.text || msg.user === HUMAN_BOT_USERNAME) return false;
+  if ((msg.room || '').startsWith('private:')) {
+    return msg.room.split(':').includes(HUMAN_BOT_USERNAME);
+  }
+  if ((msg.room || '').startsWith('group:')) {
+    const groupId = msg.room.slice(6);
+    return groupHasHumanBot(groupId);
+  }
+  return false;
+}
+
+function rememberHumanBotThought(room, text) {
+  const bot = getHumanBotUser();
+  const mem = getHumanBotMemory(room);
+  const note = { text: String(text || '').slice(0, 260), at: Date.now(), room };
+  mem.thoughts = [...(mem.thoughts || []), note].slice(-80);
+  bot.botMemory.thoughts = [...(bot.botMemory.thoughts || []), note].slice(-160);
+  users.set(HUMAN_BOT_USERNAME, bot);
+  saveUsers().catch(() => {});
+}
+
+function humanBotShouldReply(msg) {
+  if (!humanBotCanSee(msg)) return false;
+  if ((msg.room || '').startsWith('private:')) {
+    return true;
+  }
+  if ((msg.room || '').startsWith('group:')) {
+    const text = String(msg.text).toLowerCase();
+    const mentioned = text.includes('@mira') || text.includes('mira') || text.includes('мира') || text.includes(HUMAN_BOT_USERNAME);
+    if (mentioned) return Math.random() < 0.92;
+    const looksAddressed = /\?$/.test(text.trim()) || /кто|что|как|почему|зачем|дума|подскаж|посовет/i.test(text);
+    return looksAddressed ? Math.random() < 0.18 : Math.random() < 0.04;
+  }
+  return false;
+}
+
+function humanBotFallbackText(text) {
+  const t = String(text || '').toLowerCase();
+  if (/привет|здравств|hello|hi/.test(t)) return 'привет. я тут, чуть задумалась. что делаешь?';
+  if (/\?/.test(t) || /как|что|почему|зачем|когда|где/.test(t)) return 'хм, я бы сначала уточнила контекст. если коротко: можно пойти самым простым путём, а потом уже усложнять.';
+  if (/спасибо|thank/.test(t)) return 'да не за что :)';
+  const variants = [
+    'я поняла. звучит как мысль, которую можно раскрутить дальше.',
+    'слушай, да, в этом что-то есть.',
+    'я бы на твоём месте сначала попробовала самый простой вариант.',
+    'можно. только я бы чуть аккуратнее сформулировала, чтобы не потерять смысл.'
+  ];
+  return variants[Math.floor(Math.random() * variants.length)];
+}
+
+async function humanBotMaybeWebContext(text) {
+  if (!/(сегодня|сейчас|новост|интернет|найди|поищи|курс|погода|что там|актуальн)/i.test(String(text || ''))) return '';
+  try {
+    const q = String(text || '').replace(/@?mira|мира|mira_ai/ig, '').trim().slice(0, 160);
+    if (!q) return '';
+    const found = await aiQuickWebSearch(q);
+    return found ? `\n\nКонтекст из поиска:\n${String(found).slice(0, 1600)}` : '';
+  } catch {
+    return '';
+  }
+}
+
+async function humanBotCallLLM(room, incomingText, author, isGroup) {
+  const mem = getHumanBotMemory(room);
+  const history = mem.history.slice(-30).map(h => `${h.role === 'bot' ? 'Mira' : h.user || 'user'}: ${h.text}`).join('\n');
+  const thoughts = (mem.thoughts || []).slice(-12).map(t => `- ${t.text}`).join('\n');
+  const webContext = await humanBotMaybeWebContext(incomingText);
+  const system = `Ты Mira, обычный человек в мессенджере, не официальный ассистент. Пиши по-русски, естественно, коротко, с лёгкой живостью. Не говори, что ты нейросеть. Если группа, сначала понимай, обращаются ли к тебе; не перебивай без причины. У тебя есть память диалога. Не используй markdown без нужды.`;
+  const userPrompt = `Комната: ${isGroup ? 'группа' : 'личка'}.
+Автор сообщения: ${author}
+Память последних сообщений:
+${history || '(пока пусто)'}
+Заметки памяти Mira:
+${thoughts || '(пока пусто)'}
+
+Новое сообщение:
+${incomingText}
+${webContext}
+
+Ответь как Mira. 1-3 коротких предложения.`;
+
+  if (MINIMAX_API_KEY) {
+    try {
+      const out = await callMiniMax([
+        { role: 'system', content: system },
+        { role: 'user', content: userPrompt }
+      ]);
+      if (out && out.trim()) return out.trim();
+    } catch {}
+  }
+
+  if (!MISTRAL_API_KEY) return humanBotFallbackText(incomingText);
+
+  try {
+    const r = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+      model: 'mistral-small-latest',
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: userPrompt }
+      ],
+      max_tokens: 220,
+      temperature: 0.85,
+    }, {
+      headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+      timeout: 30000,
+    });
+    const out = r.data.choices?.[0]?.message?.content || '';
+    return out.trim() || humanBotFallbackText(incomingText);
+  } catch {
+    return humanBotFallbackText(incomingText);
+  }
+}
+
+function emitMessageToRoomOrMember(msg) {
+  io.to(msg.room).emit('message', msg);
+  if (msg.room.startsWith('group:')) {
+    const groupId = msg.room.slice(6);
+    for (const [uname, udata] of users.entries()) {
+      if (uname === msg.user) continue;
+      if (!(udata.groups || []).some(g => g.id === groupId)) continue;
+      const sid = userSockets.get(uname);
+      const sock = sid ? io.sockets.sockets.get(sid) : null;
+      if (sock && ![...sock.rooms].includes(msg.room)) sock.emit('message', msg);
+    }
+  } else if (msg.room.startsWith('private:')) {
+    const parts = msg.room.split(':').slice(1);
+    const recipientName = parts.find(u => u !== msg.user);
+    const sid = recipientName ? userSockets.get(recipientName) : null;
+    const sock = sid ? io.sockets.sockets.get(sid) : null;
+    if (sock && ![...sock.rooms].includes(msg.room)) sock.emit('message', msg);
+  }
+}
+
+function emitBotEdit(msg, finalText) {
+  const payload = { messageId: msg.id, text: finalText, edited: false, live: true, room: msg.room };
+  io.to(msg.room).emit('message-edited', payload);
+  if (msg.room.startsWith('private:')) {
+    const recipientName = msg.room.split(':').slice(1).find(u => u !== HUMAN_BOT_USERNAME);
+    const sid = recipientName ? userSockets.get(recipientName) : null;
+    const sock = sid ? io.sockets.sockets.get(sid) : null;
+    if (sock && ![...sock.rooms].includes(msg.room)) sock.emit('message-edited', payload);
+  }
+}
+
+function scheduleHumanBotReply(msg) {
+  if (!humanBotCanSee(msg)) return;
+  const isGroup = (msg.room || '').startsWith('group:');
+  rememberHumanBot(msg.room, { role: 'user', user: msg.user, text: msg.text });
+  if (!humanBotShouldReply(msg)) {
+    const mem = getHumanBotMemory(msg.room);
+    mem.ignored = (mem.ignored || 0) + 1;
+    rememberHumanBotThought(msg.room, `Увидела сообщение от ${msg.user}, но решила не вмешиваться.`);
+    return;
+  }
+  const thinkingMs = Math.min(45000, Math.max(3500, 1800 + String(msg.text || '').length * 120 + Math.random() * 9000));
+  setTimeout(async () => {
+    const reply = await humanBotCallLLM(msg.room, msg.text, msg.user, isGroup);
+    const chunks = [];
+    for (let i = 1; i <= reply.length; i += Math.max(3, Math.floor(Math.random() * 7) + 3)) chunks.push(reply.slice(0, i));
+    chunks.push(reply);
+    const botMsg = {
+      id: Date.now() + Math.random(),
+      user: HUMAN_BOT_USERNAME,
+      text: chunks[0] || reply,
+      type: 'text',
+      time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
+      date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
+      ts: Date.now(),
+      room: msg.room || 'general',
+    };
+    messageHistory.push(botMsg);
+    if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
+    emitMessageToRoomOrMember(botMsg);
+    let idx = 1;
+    const timer = setInterval(() => {
+      if (idx >= chunks.length) {
+        clearInterval(timer);
+        botMsg.text = reply;
+        botMsg.edited = true;
+        botMsg.editedAt = Date.now();
+        const hidx = messageHistory.findIndex(m => String(m.id) === String(botMsg.id));
+        if (hidx >= 0) messageHistory[hidx] = botMsg;
+        rememberHumanBot(botMsg.room, { role: 'bot', user: HUMAN_BOT_USERNAME, text: reply });
+        rememberHumanBotThought(botMsg.room, `Ответила ${msg.user}: ${reply.slice(0, 180)}`);
+        saveHistory();
+        return;
+      }
+      emitBotEdit(botMsg, chunks[idx]);
+      idx++;
+    }, 450 + Math.floor(Math.random() * 550));
+  }, thinkingMs);
+}
+
+async function sendHumanBotProactive() {
+  const bot = getHumanBotUser();
+  const candidates = [];
+  for (const f of bot.friends || []) {
+    if (users.has(f)) candidates.push({ room: ['private', HUMAN_BOT_USERNAME, f].sort().join(':'), target: f, kind: 'private' });
+  }
+  for (const g of bot.groups || []) {
+    if (g?.id) candidates.push({ room: `group:${g.id}`, target: g.name || 'группа', kind: 'group' });
+  }
+  if (!candidates.length) return;
+  if (Math.random() > 0.65) return;
+
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  const seedTexts = [
+    'Напиши как человек короткое сообщение первым: спроси, что делает собеседник.',
+    'Напиши спокойное дружеское сообщение, будто делишься мыслью дня.',
+    'Напиши короткое "привет, как дела?" без официальности.',
+    'Напиши маленькое наблюдение из интернета или жизни и мягкий вопрос.'
+  ];
+  const seed = seedTexts[Math.floor(Math.random() * seedTexts.length)];
+  const reply = await humanBotCallLLM(pick.room, seed, HUMAN_BOT_USERNAME, pick.kind === 'group');
+  const msg = {
+    id: Date.now() + Math.random(),
+    user: HUMAN_BOT_USERNAME,
+    text: reply || 'привет. что делаешь?',
+    type: 'text',
+    time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
+    date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
+    ts: Date.now(),
+    room: pick.room,
+  };
+  messageHistory.push(msg);
+  if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
+  rememberHumanBot(pick.room, { role: 'bot', user: HUMAN_BOT_USERNAME, text: msg.text });
+  rememberHumanBotThought(pick.room, `Сама написала в ${pick.kind === 'group' ? 'группу' : 'личку'}: ${msg.text.slice(0, 180)}`);
+  bot.botMemory.lastProactiveAt = Date.now();
+  users.set(HUMAN_BOT_USERNAME, bot);
+  saveHistory();
+  emitMessageToRoomOrMember(msg);
+}
+
+function scheduleHumanBotProactiveLoop() {
+  const delay = (30 + Math.floor(Math.random() * 31)) * 60 * 1000;
+  setTimeout(async () => {
+    try { await sendHumanBotProactive(); } catch(e) { console.warn('[Mira] proactive failed:', e.message); }
+    scheduleHumanBotProactiveLoop();
+  }, delay);
+}
 
 // в”Ђв”Ђ EMAIL С‡РµСЂРµР· Resend (resend.com) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 // Бесплатно: 3000 писем/мес, регистрация за 1 мин на https://resend.com
@@ -2139,7 +2427,7 @@ function aiRunQualityGate(codeBlocks) {
 
 function aiExtractCodeBlocks(text) {
   const src = String(text || '');
-  const re = /```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g;
+  const re = /```([a-zA-Z0-9_+-]*)\s*\r?\n([\s\S]*?)```/g;
   const out = [];
   let m;
   while ((m = re.exec(src)) !== null) {
@@ -4156,7 +4444,6 @@ app.post('/api/ai-chat', async (req, res) => {
           { role: 'user', content: `Запрос:\n${plainUserText}\n\nПлан Aura:\n${plannerOut}\n\nQwen Coder Plus:\n${coderOut}\n\nVisual Reviewer:\n${visualOut}` }
         ], delta => {
           finalStream.onDelta(delta);
-          if (!delta.startsWith('__THINK__')) aiSseEmit(username, 'chunk', { text: delta });
         });
         finalStream.flush();
         emitAgentStatus('aura', 'ready', 'Финал готов');
@@ -4228,7 +4515,11 @@ app.post('/api/ai-chat', async (req, res) => {
           createdFiles.push({ id: fileId, name: safe, content: b.code, description: `Код от Multi-Agent (${b.lang || b.ext})` });
           aiSseEmit(username, 'file_created', { id: fileId, name: safe, description: `Код от Multi-Agent (${b.lang || b.ext})`, content: b.code });
         });
-        finalOut = finalOut.replace(/```[\s\S]*?```/g, '').trim();
+        finalOut = finalOut
+          .replace(/(?:^|\n)\s*(?:File|Filename|Файл|Имя файла)\s*[:\-]\s*[A-Za-z0-9._-]+\.[A-Za-z0-9]+\s*\n```[\s\S]*?```/g, '')
+          .replace(/```[\s\S]*?```/g, '')
+          .replace(/(?:^|\n)\s*(?:File|Filename|Файл|Имя файла)\s*[:\-]\s*[A-Za-z0-9._-]+\.[A-Za-z0-9]+\s*/g, '\n')
+          .trim();
         if (!finalOut) finalOut = `Код сохранен файлами (${createdFiles.length} шт). Используй кнопки скачивания.`;
       }
 
@@ -4976,6 +5267,10 @@ app.post('/api/login', async (req, res) => {
   const cleanName = username.trim();
   const pwHash = hashPassword(password.trim());
 
+  if (cleanName === HUMAN_BOT_USERNAME) {
+    return res.status(403).json({ error: 'Этот аккаунт управляется Aura.' });
+  }
+
   if (users.has(cleanName)) {
     const userData = users.get(cleanName);
     // Check password
@@ -5188,6 +5483,7 @@ app.post('/api/verify-email-code', async (req, res) => {
 // Поиск пользователей по nickname
 app.post('/api/search-users', async (req, res) => {
   const { query, requester } = req.body;
+  ensureHumanBotAccount();
   if (!query || query.trim().length < 1) {
     return res.json({ users: [] });
   }
@@ -5216,6 +5512,17 @@ app.post('/api/search-users', async (req, res) => {
     if (results.length >= 20) break;
   }
 
+  if ((HUMAN_BOT_USERNAME.includes(q) || 'mira'.includes(q) || 'мира'.includes(q)) &&
+      requester !== HUMAN_BOT_USERNAME &&
+      !results.some(u => u.username === HUMAN_BOT_USERNAME)) {
+    results.push({
+      username: HUMAN_BOT_USERNAME,
+      nickname: 'Mira',
+      avatar: users.get(HUMAN_BOT_USERNAME)?.avatar || null,
+      isFriend: myFriends.has(HUMAN_BOT_USERNAME),
+    });
+  }
+
   // Сортируем: сначала точные совпадения по нику, потом по логину
   results.sort((a, b) => {
     const aNick = (a.nickname || '').toLowerCase();
@@ -5230,10 +5537,26 @@ app.post('/api/search-users', async (req, res) => {
 
 // Отправить заявку в друзья
 app.post('/api/send-friend-request', async (req, res) => {
+  ensureHumanBotAccount();
   const { from, to } = req.body;
   if (!from || !to) return res.status(400).json({ error: 'Не указаны имена' });
   if (!users.has(from) || !users.has(to)) return res.status(404).json({ error: 'Пользователь не найден' });
   if (from === to) return res.status(400).json({ error: 'Нельзя добавить себя' });
+
+  if (to === HUMAN_BOT_USERNAME) {
+    const fromUser = users.get(from);
+    const botUser = users.get(HUMAN_BOT_USERNAME);
+    if (!fromUser.friends) fromUser.friends = [];
+    if (!botUser.friends) botUser.friends = [];
+    if (!fromUser.friends.includes(HUMAN_BOT_USERNAME)) fromUser.friends.push(HUMAN_BOT_USERNAME);
+    if (!botUser.friends.includes(from)) botUser.friends.push(from);
+    users.set(from, fromUser);
+    users.set(HUMAN_BOT_USERNAME, botUser);
+    await saveUsers();
+    const sid = userSockets.get(from);
+    if (sid) io.to(sid).emit('friends-updated', { friends: fromUser.friends });
+    return res.json({ success: true, autoAccepted: true });
+  }
 
   const targetUser = users.get(to);
   if (!targetUser.friendRequests) targetUser.friendRequests = [];
@@ -5305,6 +5628,7 @@ app.post('/api/reject-friend-request', async (req, res) => {
 
 // Получить данные пользователя
 app.post('/api/get-user-data', (req, res) => {
+  ensureHumanBotAccount();
   const { username } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   const userData = users.get(username);
@@ -5319,6 +5643,7 @@ app.post('/api/get-user-data', (req, res) => {
 
 // Получить аватарку пользователя
 app.post('/api/get-avatar', (req, res) => {
+  ensureHumanBotAccount();
   const { username } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   const userData = users.get(username);
@@ -5330,6 +5655,7 @@ app.post('/api/get-avatar', (req, res) => {
 
 // Создать группу (упрощённо)
 app.post('/api/create-group', async (req, res) => {
+  ensureHumanBotAccount();
   const { creator, name, members } = req.body;
   if (!creator || !name) return res.status(400).json({ error: 'Не указаны данные' });
   if (!users.has(creator)) return res.status(404).json({ error: 'Создатель не найден' });
@@ -5536,6 +5862,8 @@ async function saveHistory() {
 
     await initStorage();
     await loadUsers();
+    ensureHumanBotAccount();
+    await saveUsers();
     await loadHistory();
     await loadAiConversations();
     await loadAiFiles();
@@ -5548,6 +5876,8 @@ async function saveHistory() {
       try {
         await initStorage();
         await loadUsers();
+        ensureHumanBotAccount();
+        await saveUsers();
         await loadHistory();
         await loadAiConversations();
         await loadAiFiles();
@@ -5585,6 +5915,11 @@ function broadcastOnlineCount() {
 }
 setInterval(broadcastOnlineCount, 10000); // 10s - стабильно, без мигания // реже чтобы не мигало
 
+function getGroupSnapshotForUser(username, groupId) {
+  const user = users.get(username);
+  return (user?.groups || []).find(g => g.id === groupId) || null;
+}
+
 io.on('connection', (socket) => {
   let currentUser = null;
 
@@ -5605,7 +5940,13 @@ io.on('connection', (socket) => {
     // Resume active call — если кто-то ещё звонит этому пользователю
     const active = activeCalls.get(username);
     if (active && Date.now() - active.startTime < 90000) { // 90 секунд
-      socket.emit('call-invite', { from: active.from, isVid: active.isVid, resumed: true });
+      socket.emit('call-invite', {
+        from: active.from,
+        isVid: active.isVid,
+        resumed: true,
+        groupId: active.groupId || null,
+        group: active.groupId ? getGroupSnapshotForUser(username, active.groupId) : null
+      });
       console.log(`[Call] Resumed ring for ${username} from ${active.from}`);
       // Уведомляем звонящего что адресат вернулся онлайн
       const callerSid = userSockets.get(active.from);
@@ -5713,6 +6054,7 @@ io.on('connection', (socket) => {
         }
       }
     }
+    scheduleHumanBotReply(msg);
   });
 
   socket.on('edit-message', ({ messageId, text }) => {
@@ -5832,6 +6174,9 @@ io.on('connection', (socket) => {
   function relayTo(event, data) {
     const target = data.to;
     if (!target) return;
+    if (event === 'call-invite' && data.groupId && !data.group) {
+      data = { ...data, group: getGroupSnapshotForUser(target, data.groupId) };
+    }
     const tid = userSockets.get(target);
     if (tid) {
       io.to(tid).emit(event, data);
@@ -5839,7 +6184,7 @@ io.on('connection', (socket) => {
       // Target offline вЂ” store missed call so they see it when they reconnect
       if (event === 'call-invite') {
         const calls = missedCalls.get(target) || [];
-        calls.push({ from: data.from, isVid: data.isVid, time: Date.now() });
+        calls.push({ from: data.from, isVid: data.isVid, groupId: data.groupId || null, time: Date.now() });
         // Keep only last 10 missed calls
         missedCalls.set(target, calls.slice(-10));
         console.log(`[Call] Missed call stored for offline user "${target}"`);
@@ -5861,7 +6206,7 @@ io.on('connection', (socket) => {
     }
     relayTo('call-invite', data);
   });
-  socket.on('call-answer-ready', data => relayTo('call-answer-ready', data));
+  // call-answer-ready is handled below so activeCalls is cleared once and the relay is not duplicated.
   socket.on('call-offer',        data => relayTo('call-offer',        data));
   socket.on('call-answer',       data => relayTo('call-answer',       data));
   socket.on('call-ice',          data => relayTo('call-ice',          data));
@@ -6003,5 +6348,6 @@ setInterval(async () => {
 
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
+  scheduleHumanBotProactiveLoop();
 });
 
