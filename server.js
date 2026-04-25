@@ -488,7 +488,7 @@ const HUMAN_BOTS = {
     persona: 'любит кофейни, торговые центры, уличные прогулки и разговоры по настроению; пишет естественно и не торопится',
     selfImage: 'young woman, dark shoulder-length hair, casual streetwear, natural makeup, realistic smartphone selfie',
     sceneStyle: 'realistic phone photo, candid, everyday life, slight motion blur, imperfect framing, natural light',
-    proactiveChance: 0.32,
+    proactiveChance: 0.4,
     nicknamePool: ['Mira', 'мира', 'miri'],
     moods: ['спокойная', 'сонная', 'в хорошем настроении', 'чуть задумчивая'],
     fallback: {
@@ -510,7 +510,7 @@ const HUMAN_BOTS = {
     persona: 'любит тц, технику, кофе навынос и просто шляться по городу; отвечает проще и прямее',
     selfImage: 'young man, short dark hair, hoodie or bomber jacket, realistic smartphone selfie, casual urban style',
     sceneStyle: 'realistic phone camera shot, urban casual mood, candid composition, imperfect framing, natural colors',
-    proactiveChance: 0.28,
+    proactiveChance: 0.36,
     nicknamePool: ['Max', 'макс', 'max'],
     moods: ['спокойный', 'сонный', 'на бодряке', 'слегка уставший'],
     fallback: {
@@ -648,6 +648,169 @@ function detectAddressedHumanBots(msg) {
   return sorted.length ? [sorted[0].bot] : mentioned.slice(0, 1);
 }
 
+function detectHumanBotIntent(msg) {
+  const text = String(msg?.text || '').toLowerCase();
+  const explicitTargets = detectAddressedHumanBots(msg);
+  const room = String(msg?.room || '');
+  if (!room.startsWith('group:')) return { targets: explicitTargets, crossBotQuestion: null };
+
+  const askedBot = explicitTargets[0] || null;
+  let mentionedOther = null;
+  for (const botUsername of HUMAN_BOT_USERNAMES) {
+    if (botUsername === askedBot) continue;
+    if (humanBotMentions(text, botUsername)) {
+      mentionedOther = botUsername;
+      break;
+    }
+  }
+
+  const hasAskVerb = /\b(спроси|узнай|передай|напиши|скажи)\b/i.test(text);
+  if (askedBot && mentionedOther && hasAskVerb) {
+    return { targets: [askedBot], crossBotQuestion: { from: askedBot, to: mentionedOther } };
+  }
+
+  return { targets: explicitTargets, crossBotQuestion: null };
+}
+
+function humanBotDetectProfileAction(text) {
+  const lower = String(text || '').toLowerCase();
+  if (!lower) return null;
+  const wantsChange = /(смени|сменить|сменишь|поменяй|поменять|обнови|обновить|измени|изменить|поставь|поставить)/.test(lower);
+  if (wantsChange && /(аватар|аватарк|аву|ава|фото проф|фотку проф)/.test(lower)) return 'avatar';
+  if (wantsChange && /(имя|ник|никнейм|nickname)/.test(lower)) return 'nickname';
+  return null;
+}
+
+function humanBotExtractAvatarQuery(text, botUsername) {
+  const profile = getHumanBotProfile(botUsername);
+  const source = String(text || '').trim();
+  const stripped = source
+    .replace(/^(эй|слушай|кстати|пожалуйста|pls|please)\s+/i, '')
+    .replace(/\b(смени|сменить|сменишь|поменяй|поменять|обнови|обновить|измени|изменить|поставь|поставить)\b/gi, '')
+    .replace(/\b(аватар|аватарку|аватарка|аву|ава|фото профиля|фотку профиля|на аватарку|на аву)\b/gi, '')
+    .replace(/\b(мне|тебе|себе|пожалуйста|кстати)\b/gi, '')
+    .replace(/[.,!?]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (stripped.length >= 3) return stripped;
+  return `${profile.nickname} profile avatar portrait ${profile.selfImage}`;
+}
+
+function humanBotExtractNicknameRequest(text) {
+  const source = String(text || '');
+  const q = source.match(/["'«](.{2,24})["'»]/);
+  if (q?.[1]) return q[1].trim();
+  const m = source.match(/(?:имя|ник|никнейм)\s+(?:на|в)\s+([a-zа-яё0-9 _-]{2,24})/i);
+  if (m?.[1]) return m[1].trim();
+  return '';
+}
+
+async function humanBotFindAvatarOnWeb(query, botUsername) {
+  const q = String(query || '').trim();
+  if (!q) return null;
+  const attempts = [
+    `${q} portrait avatar`,
+    `${q} person portrait`,
+    q,
+  ];
+  for (const attempt of attempts) {
+    try {
+      const r = await axios.get('https://commons.wikimedia.org/w/api.php', {
+        timeout: 10000,
+        params: {
+          action: 'query',
+          format: 'json',
+          origin: '*',
+          generator: 'search',
+          gsrsearch: attempt,
+          gsrnamespace: 6,
+          gsrlimit: 8,
+          prop: 'imageinfo',
+          iiprop: 'url',
+          iiurlwidth: 512,
+        },
+        headers: { 'User-Agent': 'Mozilla/5.0 AuraBot/1.0' }
+      });
+      const pages = Object.values(r.data?.query?.pages || {});
+      const pick = pages
+        .map(p => p?.imageinfo?.[0]?.thumburl || p?.imageinfo?.[0]?.url || '')
+        .find(url => /^https?:\/\//i.test(url));
+      if (pick) return pick;
+    } catch {}
+  }
+  return null;
+}
+
+async function humanBotGenerateAvatarByPrompt(botUsername, query) {
+  const profile = getHumanBotProfile(botUsername);
+  const prompt = `${query}, realistic profile avatar, portrait, face visible, natural light, social messenger profile picture, square crop, ${profile.sceneStyle}`;
+  const urls = [
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&nologo=true&model=flux&seed=${Math.floor(Math.random() * 999999)}`,
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${Math.floor(Math.random() * 999999)}`
+  ];
+  for (const url of urls) {
+    try {
+      const r = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 60000,
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*' }
+      });
+      const ct = r.headers['content-type'] || 'image/jpeg';
+      if (!ct.startsWith('image/') || !r.data || r.data.byteLength < 3000) continue;
+      const ext = ct.includes('png') ? 'png' : 'jpg';
+      const fileName = `avatars/${Date.now()}-${botUsername}.${ext}`;
+      await storageUpload(fileName, Buffer.from(r.data), ct);
+      return `/api/dl/${encodeURIComponent(fileName)}`;
+    } catch {}
+  }
+  return null;
+}
+
+async function humanBotPickAvatar(botUsername, avatarRequestText = '') {
+  const query = humanBotExtractAvatarQuery(avatarRequestText, botUsername);
+  return (await humanBotFindAvatarOnWeb(query, botUsername))
+    || (await humanBotGenerateAvatarByPrompt(botUsername, query))
+    || humanBotDefaultAvatar(botUsername, Math.floor(Math.random() * 24));
+}
+
+async function humanBotApplyProfileAction(botUsername, action, sourceText = '') {
+  const user = getHumanBotUser(botUsername);
+  const profile = getHumanBotProfile(botUsername);
+  user.botMemory = user.botMemory || { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
+  if (action === 'avatar') {
+    user.avatar = await humanBotPickAvatar(botUsername, sourceText);
+  } else if (action === 'nickname') {
+    const requested = humanBotExtractNicknameRequest(sourceText);
+    if (requested) user.nickname = requested;
+    else {
+      const pool = (profile.nicknamePool || []).filter(Boolean);
+      const current = String(user.nickname || profile.nickname || '').trim();
+      const options = pool.filter(n => n !== current);
+      user.nickname = options[Math.floor(Math.random() * options.length)] || pool[0] || profile.nickname;
+    }
+  }
+  users.set(botUsername, user);
+  saveUsers().catch(() => {});
+  broadcastHumanBotProfile(botUsername);
+  return user;
+}
+
+function humanBotProfileActionReply(action, botUsername) {
+  if (action === 'avatar') return botUsername === HUMAN_BOT_MALE_USERNAME ? 'поменял аватарку, глянь' : 'поменяла аватарку, глянь';
+  if (action === 'nickname') {
+    const user = getHumanBotUser(botUsername);
+    return `смени${botUsername === HUMAN_BOT_MALE_USERNAME ? 'л' : 'ла'} имя, теперь я ${user.nickname || getHumanBotProfile(botUsername).nickname}`;
+  }
+  return '';
+}
+
+function humanBotBuildRelayText(msg, fromBot, toBot) {
+  const fromName = getHumanBotUser(fromBot).nickname || getHumanBotProfile(fromBot).nickname;
+  const toName = getHumanBotUser(toBot).nickname || getHumanBotProfile(toBot).nickname;
+  const original = String(msg?.text || '').trim().slice(0, 320);
+  return `${toName}, пользователь ${msg.user} попросил через ${fromName} передать вопрос. ответь ему по сути. исходное сообщение: ${original}`;
+}
+
 function humanBotMediaCooldownPassed(room, botUsername, minMs = 45 * 60 * 1000) {
   const mem = getHumanBotMemory(room, botUsername);
   const last = Number(mem.lastMediaAt || 0);
@@ -670,6 +833,14 @@ function getHumanBotPersonMemory(botUsername, personUsername) {
     bot.botMemory.people[personUsername] = { diary: [], facts: [], aliases: [], lastSeenAt: 0, lastTopic: '' };
   }
   return bot.botMemory.people[personUsername];
+}
+
+function getHumanBotRoomContext(room, botUsername) {
+  const bot = getHumanBotUser(botUsername);
+  if (!bot.botMemory) bot.botMemory = { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
+  if (!bot.botMemory.roomContext) bot.botMemory.roomContext = {};
+  if (!bot.botMemory.roomContext[room]) bot.botMemory.roomContext[room] = { activeTarget: null, lastHandledAt: 0 };
+  return bot.botMemory.roomContext[room];
 }
 
 function humanBotRememberPersonFact(botUsername, personUsername, text) {
@@ -722,7 +893,7 @@ function groupHasHumanBot(groupId, botUsername = HUMAN_BOT_USERNAME) {
 
 function humanBotCanSee(msg, botUsername = HUMAN_BOT_USERNAME) {
   if (!msg || msg.user === botUsername) return false;
-  if (isHumanBotUsername(msg.user)) return false;
+  if (isHumanBotUsername(msg.user) && !msg.allowBotConversation) return false;
   if (!msg.text && !['image', 'video', 'file'].includes(msg.type || '')) return false;
   if ((msg.room || '').startsWith('private:')) {
     return msg.room.split(':').includes(botUsername);
@@ -753,7 +924,11 @@ function humanBotShouldReply(msg, botUsername = HUMAN_BOT_USERNAME) {
   }
   if ((msg.room || '').startsWith('group:')) {
     const text = String(msg.text || '').toLowerCase();
-    const explicitTargets = detectAddressedHumanBots(msg);
+    const explicitTargets = detectHumanBotIntent(msg).targets;
+    const roomCtx = getHumanBotRoomContext(msg.room, botUsername);
+    if (!explicitTargets.length && roomCtx.activeTarget === botUsername && (Date.now() - Number(roomCtx.lastHandledAt || 0)) < 4 * 60 * 1000) {
+      return Math.random() < 0.82;
+    }
     if (explicitTargets.length) return explicitTargets.includes(botUsername) && Math.random() < 0.9;
     if (msg.type === 'image') return Math.random() < 0.1;
     const looksAddressed = /\?$/.test(text.trim()) || /кто|что|как|почему|зачем|дума|подскаж|посовет/i.test(text);
@@ -773,7 +948,7 @@ function humanBotShouldLateReply(msg, botUsername = HUMAN_BOT_USERNAME) {
     return Math.random() < (/\?|ты тут|ответь|как думаешь|посмотри/.test(text) ? 0.45 : 0.22);
   }
   if (room.startsWith('group:')) {
-    const explicitTargets = detectAddressedHumanBots(msg);
+    const explicitTargets = detectHumanBotIntent(msg).targets;
     if (explicitTargets.length) return explicitTargets.includes(botUsername) && Math.random() < (recentActive ? 0.08 : 0.22);
     return false;
   }
@@ -788,6 +963,18 @@ function humanBotFallbackText(text, botUsername = HUMAN_BOT_USERNAME) {
   if (/спасибо|thank/.test(t)) return fb.thanks;
   const variants = fb.variants;
   return variants[Math.floor(Math.random() * variants.length)];
+}
+
+function humanBotNaturalizeText(text) {
+  return String(text || '')
+    .replace(/\bщас\b/gi, 'сейчас')
+    .replace(/\bща\b/gi, 'сейчас')
+    .replace(/\bчё\b/gi, 'что')
+    .replace(/\bкривеньк\w*\b/gi, 'нормальная')
+    .replace(/\)\)+/g, ')')
+    .replace(/\(\(+/g, '(')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function humanBotPickStyle(text, botUsername = HUMAN_BOT_USERNAME) {
@@ -816,6 +1003,9 @@ function humanBotToolNotes(text, botUsername = HUMAN_BOT_USERNAME) {
 
 function humanBotComposeIncomingText(msg, botUsername = HUMAN_BOT_USERNAME) {
   if (!msg) return '';
+  if (msg.humanBotRelay?.requester) {
+    return `через ${msg.humanBotRelay.fromNickname || msg.user} тебе передали вопрос от ${msg.humanBotRelay.requester}: ${String(msg.text || '').trim()}`.trim();
+  }
   const base = String(msg.text || '').trim();
   if (msg.type === 'image') return `${base ? base + '\n' : ''}[Пользователь отправил изображение]`;
   if (msg.type === 'video') return `${base ? base + '\n' : ''}[Пользователь отправил видео]`;
@@ -894,22 +1084,33 @@ async function humanBotCallLLM(room, incomingText, author, isGroup, botUsername 
   const personContext = humanBotPersonContext(botUsername, author);
   const webContext = await humanBotMaybeWebContext(incomingText, botUsername);
   const toolNotes = humanBotToolNotes(incomingText, botUsername);
-  const system = `Ты ${user.nickname || profile.nickname}, обычный человек в мессенджере, не официальный ассистент. Образ: ${profile.vibe}. О личности: ${profile.persona}. Текущее настроение: ${user.botMemory?.currentMood || 'обычное'}. Пиши только по-русски. Стиль живой и обычный, чаще с маленькой буквы, без лишних запятых и без слишком правильной книжной речи. Иногда можно короткие фразы вроде "ну да", "щас", "не знаю пока". Не используй китайский, английский и markdown. Не говори, что ты нейросеть. Если группа, сначала понимай, обращаются ли к тебе; не перебивай без причины. У тебя есть память диалога и внутренние инструменты: память, поиск, эмпатия, выбор стиля, короткий совет, зрение по фото и редкая отправка фото.`;
-  const userPrompt = `Комната: ${isGroup ? 'группа' : 'личка'}.
-Автор сообщения: ${author}
-Память последних сообщений:
-${history || '(пока пусто)'}
-Заметки памяти ${profile.nickname}:
-${thoughts || '(пока пусто)'}
+  const system = [
+    `You are ${user.nickname || profile.nickname}, a normal person chatting in a messenger, not an assistant.`,
+    `Vibe: ${profile.vibe}. Persona: ${profile.persona}. Current mood: ${user.botMemory?.currentMood || 'neutral'}.`,
+    'Reply only in Russian.',
+    'Write like a real chat person: casual, short, usually lowercase, with very few commas and capital letters.',
+    'Be grammatically correct and avoid spelling mistakes.',
+    'Use the word "сейчас", never "щас" or "ща".',
+    'Do not use Chinese, English, markdown, bullet lists, or assistant phrasing.',
+    'Never say that you are an AI or a neural network.',
+    isGroup ? 'In a group, reply only if the message is really for you or the current dialog is already with you.' : 'In private chat, reply naturally and warmly.',
+    'You can rely on memory, empathy, advice, search context, and photo understanding.'
+  ].join(' ');
+  const userPrompt = `chat: ${isGroup ? 'group' : 'private'}
+author: ${author}
+recent history:
+${history || '(empty)'}
+bot notes:
+${thoughts || '(empty)'}
 ${personContext}
-Внутренние инструменты/режим:
+tools and hints:
 ${toolNotes}
 
-Новое сообщение:
+new message:
 ${incomingText}
 ${webContext}
 
-Ответь как ${profile.nickname}. Только русский язык. 1-3 коротких предложения. Без официоза.`;
+Reply as ${profile.nickname}. Russian only. 1-3 short sentences. No official tone.`;
 
   if (MISTRAL_API_KEY) {
     try {
@@ -920,7 +1121,7 @@ ${webContext}
           { role: 'user', content: userPrompt }
         ],
         max_tokens: 220,
-        temperature: 0.85,
+        temperature: 0.72,
       }, {
         headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
         timeout: 30000,
@@ -991,13 +1192,13 @@ function markHumanBotRead(msg, botUsername = HUMAN_BOT_USERNAME) {
 }
 
 function cleanHumanBotText(text, botUsername = HUMAN_BOT_USERNAME) {
-  let out = String(text || '')
+  let out = humanBotNaturalizeText(String(text || ''))
     .replace(/[\u3400-\u9fff\uf900-\ufaff]/g, '')
     .replace(/\s+([?.!,;:])/g, '$1')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  if (!out || !/[а-яa-z0-9]/i.test(out)) out = humanBotFallbackText('', botUsername);
+  if (!out || !/[а-яёa-z0-9]/i.test(out)) out = humanBotFallbackText('', botUsername);
   return out.slice(0, 900);
 }
 
@@ -1043,6 +1244,7 @@ async function humanBotGenerateImage(botUsername, prompt, sceneTag = 'photo') {
 async function humanBotMaybeGenerateImage(msg, reply, botUsername = HUMAN_BOT_USERNAME) {
   const room = msg?.room || '';
   if (!room || !humanBotMediaCooldownPassed(room, botUsername)) return null;
+  if (humanBotDetectProfileAction(msg?.text || '')) return null;
   const text = `${String(msg?.text || '')} ${String(reply || '')}`.toLowerCase();
   const explicitAsk = /фото|фотку|селфи|покажи|скинь|как там|где ты|что видишь|выглядишь/.test(text);
   if (!explicitAsk) return null;
@@ -1256,6 +1458,22 @@ function broadcastHumanBotProfile(botUsername) {
   });
 }
 
+async function humanBotMaybeRefreshIdentity(botUsername, reasonText = '', force = false) {
+  const profile = getHumanBotProfile(botUsername);
+  const user = getHumanBotUser(botUsername);
+  if (!force && Math.random() > 0.16) return false;
+  const mood = profile.moods[Math.floor(Math.random() * profile.moods.length)];
+  const nick = profile.nicknamePool[Math.floor(Math.random() * profile.nicknamePool.length)];
+  user.nickname = nick;
+  user.avatar = await humanBotPickAvatar(botUsername, reasonText || `${profile.nickname} ${mood} avatar`);
+  user.botMemory = user.botMemory || { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
+  user.botMemory.currentMood = mood;
+  users.set(botUsername, user);
+  saveUsers().catch(() => {});
+  broadcastHumanBotProfile(botUsername);
+  return true;
+}
+
 function humanBotMaybeRefreshProfile(botUsername, force = false) {
   const profile = getHumanBotProfile(botUsername);
   const user = getHumanBotUser(botUsername);
@@ -1272,20 +1490,27 @@ function humanBotMaybeRefreshProfile(botUsername, force = false) {
 }
 
 function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
-  if (!humanBotCanSee(msg, botUsername)) return;
+  if (!humanBotCanSee(msg, botUsername) && !msg?.forceHumanBotReply) return;
   const profile = getHumanBotProfile(botUsername);
   const isGroup = (msg.room || '').startsWith('group:');
+  const intent = msg.humanBotIntent || detectHumanBotIntent(msg);
+  const crossBot = intent.crossBotQuestion && intent.crossBotQuestion.from === botUsername ? intent.crossBotQuestion : null;
+  const profileAction = humanBotDetectProfileAction(msg.text || '');
   const incomingText = humanBotComposeIncomingText(msg, botUsername);
   rememberHumanBot(msg.room, { role: 'user', user: msg.user, text: incomingText }, botUsername);
   humanBotRememberPersonFact(botUsername, msg.user, incomingText);
   const mem = getHumanBotMemory(msg.room, botUsername);
   const recentActive = Number(mem.lastHumanReplyAt || 0) > Date.now() - (10 * 60 * 1000);
-  const seenDelay = recentActive ? (1500 + Math.floor(Math.random() * 5000)) : (5000 + Math.floor(Math.random() * 18000));
-  setTimeout(() => {
-    markHumanBotRead(msg, botUsername);
-    setHumanBotActivity(botUsername, 7000 + Math.floor(Math.random() * 6000));
-  }, seenDelay);
-  if (!humanBotShouldReply(msg, botUsername)) {
+  const seenDelay = msg.forceHumanBotReply
+    ? (1800 + Math.floor(Math.random() * 2600))
+    : (recentActive ? (1800 + Math.floor(Math.random() * 5200)) : (5000 + Math.floor(Math.random() * 18000)));
+  if (!(msg.forceHumanBotReply && isHumanBotUsername(msg.user))) {
+    setTimeout(() => {
+      markHumanBotRead(msg, botUsername);
+      setHumanBotActivity(botUsername, 7000 + Math.floor(Math.random() * 6000));
+    }, seenDelay);
+  }
+  if (!msg.forceHumanBotReply && !profileAction && !crossBot && !humanBotShouldReply(msg, botUsername)) {
     mem.ignored = (mem.ignored || 0) + 1;
     rememberHumanBotThought(msg.room, `Увидел(а) сообщение от ${msg.user}, но решил(а) не вмешиваться.`, botUsername);
     if (!msg.delayedHumanReply && humanBotShouldLateReply(msg, botUsername)) {
@@ -1301,34 +1526,81 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
     }
     return;
   }
-  const thinkingMs = humanBotThinkingDelay(msg, incomingText);
-  setHumanBotActivity(botUsername, thinkingMs + 45000);
+  const thinkingMs = profileAction
+    ? (2600 + Math.floor(Math.random() * 2600))
+    : crossBot
+      ? (3200 + Math.floor(Math.random() * 3800))
+      : humanBotThinkingDelay(msg, incomingText);
+  setTimeout(() => setHumanBotActivity(botUsername, thinkingMs + 45000), Math.max(1200, seenDelay));
   setTimeout(async () => {
-    humanBotMaybeRefreshProfile(botUsername);
-    const visionContext = await humanBotVisionContext(msg, incomingText, botUsername);
-    const reply = cleanHumanBotText(await humanBotCallLLM(msg.room, `${incomingText}${visionContext}`, msg.user, isGroup, botUsername), botUsername);
+    if (!profileAction && !crossBot) {
+      await humanBotMaybeRefreshIdentity(botUsername, incomingText);
+      humanBotMaybeRefreshProfile(botUsername);
+    }
+    let reply = '';
+    if (profileAction) {
+      await humanBotApplyProfileAction(botUsername, profileAction, msg.text || '');
+      reply = humanBotProfileActionReply(profileAction, botUsername);
+    } else if (crossBot) {
+      const targetName = getHumanBotUser(crossBot.to).nickname || getHumanBotProfile(crossBot.to).nickname;
+      reply = `ок, спрошу у ${targetName}`;
+    } else {
+      const visionContext = await humanBotVisionContext(msg, incomingText, botUsername);
+      reply = cleanHumanBotText(await humanBotCallLLM(msg.room, `${incomingText}${visionContext}`, msg.user, isGroup, botUsername), botUsername);
+    }
     const parts = humanBotSplitReply(reply);
+    const replyRef = msg.relayReplyTo || makeReplyRef(msg);
     let combined = '';
     for (let i = 0; i < parts.length; i++) {
       if (i > 0) await new Promise(resolve => setTimeout(resolve, 900 + Math.floor(Math.random() * 2200)));
-      const botMsg = emitHumanBotMessage(msg.room, botUsername, parts[i], 'text', { replyTo: makeReplyRef(msg) });
+      const botMsg = emitHumanBotMessage(msg.room, botUsername, parts[i], 'text', { replyTo: replyRef });
       combined = `${combined}${combined ? '\n' : ''}${parts[i]}`;
       rememberHumanBot(botMsg.room, { role: 'bot', user: botUsername, text: parts[i] }, botUsername);
     }
-    const voice = await humanBotMaybeGenerateVoice(msg, combined || reply, botUsername);
-    if (voice) {
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.floor(Math.random() * 2200)));
-      emitHumanBotMessage(msg.room, botUsername, '', 'audio', { url: voice.url, fileName: voice.fileName, replyTo: makeReplyRef(msg) });
-      rememberHumanBot(msg.room, { role: 'bot', user: botUsername, text: '[отправил голосовое]' }, botUsername);
+    if (!profileAction && !crossBot) {
+      const voice = await humanBotMaybeGenerateVoice(msg, combined || reply, botUsername);
+      if (voice) {
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.floor(Math.random() * 2200)));
+        emitHumanBotMessage(msg.room, botUsername, '', 'audio', { url: voice.url, fileName: voice.fileName, replyTo: replyRef });
+        rememberHumanBot(msg.room, { role: 'bot', user: botUsername, text: '[отправил голосовое]' }, botUsername);
+      }
     }
-    const media = await humanBotMaybeGenerateImage(msg, combined || reply, botUsername);
-    if (media) {
-      await new Promise(resolve => setTimeout(resolve, 1200 + Math.floor(Math.random() * 2600)));
-      emitHumanBotMessage(msg.room, botUsername, '', 'image', { url: media.url, fileName: media.fileName, replyTo: makeReplyRef(msg) });
-      rememberHumanBot(msg.room, { role: 'bot', user: botUsername, text: '[отправил фото]' }, botUsername);
+    if (!profileAction && !crossBot) {
+      const media = await humanBotMaybeGenerateImage(msg, combined || reply, botUsername);
+      if (media) {
+        await new Promise(resolve => setTimeout(resolve, 1200 + Math.floor(Math.random() * 2600)));
+        emitHumanBotMessage(msg.room, botUsername, '', 'image', { url: media.url, fileName: media.fileName, replyTo: replyRef });
+        rememberHumanBot(msg.room, { role: 'bot', user: botUsername, text: '[отправил фото]' }, botUsername);
+      }
     }
+    const roomCtx = getHumanBotRoomContext(msg.room, botUsername);
+    roomCtx.activeTarget = botUsername;
+    roomCtx.lastHandledAt = Date.now();
     rememberHumanBotThought(msg.room, `${profile.nickname} ответил(а) ${msg.user}: ${(combined || reply).slice(0, 180)}`, botUsername);
     mem.lastHumanReplyAt = Date.now();
+    users.set(botUsername, getHumanBotUser(botUsername));
+    saveUsers().catch(() => {});
+    if (crossBot) {
+      const relayMsg = {
+        id: Date.now() + Math.random(),
+        user: botUsername,
+        text: humanBotBuildRelayText(msg, botUsername, crossBot.to),
+        type: 'text',
+        room: msg.room,
+        ts: Date.now(),
+        allowBotConversation: true,
+        forceHumanBotReply: true,
+        delayedHumanReply: false,
+        humanBotRelay: {
+          requester: msg.user,
+          from: botUsername,
+          fromNickname: getHumanBotUser(botUsername).nickname || profile.nickname,
+          to: crossBot.to,
+        },
+        relayReplyTo: replyRef,
+      };
+      setTimeout(() => scheduleHumanBotReply(relayMsg, crossBot.to), 2200 + Math.floor(Math.random() * 2800));
+    }
     setHumanBotActivity(botUsername, 12000);
     saveHistory();
   }, thinkingMs);
@@ -1341,9 +1613,9 @@ function scheduleHumanBotsForMessage(msg) {
     visible.forEach(botUsername => scheduleHumanBotReply(msg, botUsername));
     return;
   }
-  const explicitTargets = detectAddressedHumanBots(msg);
-  if (explicitTargets.length) {
-    explicitTargets.forEach(botUsername => scheduleHumanBotReply(msg, botUsername));
+  const intent = detectHumanBotIntent(msg);
+  if (intent.targets.length) {
+    intent.targets.forEach(botUsername => scheduleHumanBotReply({ ...msg, humanBotIntent: intent }, botUsername));
     return;
   }
   const eligible = visible.filter(botUsername => humanBotShouldReply(msg, botUsername));
@@ -1365,7 +1637,9 @@ function humanBotBuildProactiveSeed(botUsername, pick) {
     `Напиши как ${profile.nickname} короткое сообщение первым: спроси, что делает собеседник.`,
     `Напиши спокойное дружеское сообщение от ${profile.nickname}, будто делишься мыслью дня.`,
     `Напиши короткое "привет, как дела?" в стиле ${profile.nickname}, без официальности.`,
-    `Напиши маленькое наблюдение из интернета или жизни от лица ${profile.nickname} и мягкий вопрос.`
+    `Напиши маленькое наблюдение из интернета или жизни от лица ${profile.nickname} и мягкий вопрос.`,
+    `Проверь что-то свежее в интернете или новостях и напиши от лица ${profile.nickname} короткое живое сообщение без официоза.`,
+    `Напиши как ${profile.nickname} короткое человеческое сообщение в чат, будто ты увидел(а) что-то интересное сегодня и решил(а) поделиться.`
   ];
   return seedTexts[Math.floor(Math.random() * seedTexts.length)];
 }
@@ -1384,6 +1658,7 @@ async function sendHumanBotProactive(botUsername = HUMAN_BOT_USERNAME) {
   if (Math.random() > profile.proactiveChance) return;
 
   const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  await humanBotMaybeRefreshIdentity(botUsername, pick.kind === 'group' ? `${profile.nickname} group chat avatar` : `${profile.nickname} private chat avatar`);
   humanBotMaybeRefreshProfile(botUsername);
   const seed = humanBotBuildProactiveSeed(botUsername, pick);
   setHumanBotActivity(botUsername, 30000);
@@ -1398,7 +1673,7 @@ async function sendHumanBotProactive(botUsername = HUMAN_BOT_USERNAME) {
 }
 
 function scheduleHumanBotProactiveLoop() {
-  const delay = (30 + Math.floor(Math.random() * 31)) * 60 * 1000;
+  const delay = (20 + Math.floor(Math.random() * 26)) * 60 * 1000;
   setTimeout(async () => {
     for (const botUsername of HUMAN_BOT_USERNAMES) {
       try { await sendHumanBotProactive(botUsername); } catch(e) { console.warn(`[${getHumanBotProfile(botUsername).nickname}] proactive failed:`, e.message); }
