@@ -398,6 +398,9 @@ let friendRequests = [];
 // Аватарки и ники — загружаем из localStorage для мгновенной отрисовки
 let userAvatars   = {};
 let userNicknames = {};
+const _avatarOk = new Set();
+const _avatarBad = new Set();
+const _avatarPending = new Map();
 try {
   const cached = JSON.parse(localStorage.getItem('aura_avatars') || '{}');
   const cachedN = JSON.parse(localStorage.getItem('aura_nicknames') || '{}');
@@ -960,16 +963,47 @@ function updateProfileUI() {
 
 function setAvatar(el, name, url) {
   if (!el) return;
-  if (url) {
+  const applyFallback = () => {
+    el.style.backgroundImage = '';
+    el.style.background = `linear-gradient(135deg, var(--accent), var(--accent2))`;
+    el.textContent = (name || '?').charAt(0).toUpperCase();
+  };
+  const applyUrl = () => {
     el.style.backgroundImage = `url(${url})`;
-    el.style.backgroundSize  = 'cover';
+    el.style.backgroundSize = 'cover';
     el.style.backgroundPosition = 'center';
     el.textContent = '';
-  } else {
-    el.style.backgroundImage = '';
-    el.style.background      = `linear-gradient(135deg, var(--accent), var(--accent2))`;
-    el.textContent = (name || '?').charAt(0).toUpperCase();
+  };
+  if (!url || _avatarBad.has(url)) {
+    applyFallback();
+    return;
   }
+  if (_avatarOk.has(url) || String(url).startsWith('data:image/')) {
+    applyUrl();
+    return;
+  }
+  applyFallback();
+  if (!_avatarPending.has(url)) {
+    _avatarPending.set(url, new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        _avatarOk.add(url);
+        _avatarPending.delete(url);
+        resolve(true);
+      };
+      img.onerror = () => {
+        _avatarBad.add(url);
+        _avatarPending.delete(url);
+        resolve(false);
+      };
+      img.src = url;
+    }));
+  }
+  _avatarPending.get(url).then(ok => {
+    if (!el || !document.body.contains(el)) return;
+    if (ok) applyUrl();
+    else applyFallback();
+  });
 }
 
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
