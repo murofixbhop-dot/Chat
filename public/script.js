@@ -5712,6 +5712,9 @@ let _botSilentCall = false;
 let _pendingBotCall = null;
 let _groupBotMembers = new Set();
 let _groupBotTargets = [];
+let _botSpeechRec = null;
+let _botSpeechRestartTimer = null;
+let _lastBotSpeech = { text: '', at: 0 };
 let groupPeers   = new Map(); // member -> RTCPeerConnection
 
 // DOM
@@ -6356,7 +6359,7 @@ async function _initiateGroupPeer(member) {
         groupPeers.delete(member);
         document.querySelector(`[data-participant="${member}"]`)?.remove();
         _updateGroupCallStatus();
-        if (groupPeers.size === 0 && _groupMembers.length === 0) endCall();
+        if (!_groupCallHasTargets()) endCall();
       }
     }
   };
@@ -6389,6 +6392,62 @@ function _updateGroupCallStatus() {
       statusEl.textContent = `${current} участник${current !== total ? ` из ${total}` : ''}`;
     }
   }
+}
+
+function _hasBotCallContext() {
+  return !!(_botSilentCall || (_groupCall && _groupBotMembers.size > 0));
+}
+
+function _groupCallHasTargets() {
+  return groupPeers.size > 0 || _groupMembers.length > 0 || _groupBotMembers.size > 0 || _groupBotTargets.length > 0;
+}
+
+function _emitBotHeardTranscript(text) {
+  const clean = String(text || '').trim().replace(/\s+/g, ' ');
+  if (clean.length < 2) return;
+  if (_lastBotSpeech.text === clean && (Date.now() - _lastBotSpeech.at) < 8000) return;
+  _lastBotSpeech = { text: clean, at: Date.now() };
+  socket.emit('human-bot-heard', { room: _callRoom || currentRoom, text: clean });
+}
+
+function stopBotSpeechRecognition() {
+  if (_botSpeechRestartTimer) {
+    clearTimeout(_botSpeechRestartTimer);
+    _botSpeechRestartTimer = null;
+  }
+  if (_botSpeechRec) {
+    try { _botSpeechRec.onend = null; } catch {}
+    try { _botSpeechRec.stop(); } catch {}
+    _botSpeechRec = null;
+  }
+}
+
+function startBotSpeechRecognition() {
+  if (!_hasBotCallContext()) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR || _botSpeechRec) return;
+  try {
+    const rec = new SR();
+    rec.lang = 'ru-RU';
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (ev) => {
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) _emitBotHeardTranscript(r[0]?.transcript || '');
+      }
+    };
+    rec.onerror = () => {};
+    rec.onend = () => {
+      _botSpeechRec = null;
+      if (_hasBotCallContext()) {
+        _botSpeechRestartTimer = setTimeout(() => startBotSpeechRecognition(), 1200);
+      }
+    };
+    rec.start();
+    _botSpeechRec = rec;
+  } catch {}
 }
 
 let _gcwTimer = null; // таймер длительности звонка
@@ -6435,6 +6494,9 @@ function _showGroupCallUI(groupName, members) {
         <button class="gcw-btn gcw-screen" id="gcwScreenBtn" onclick="toggleGroupScreenShare()" title="Демонстрация экрана">
           <i class="ti ti-screen-share"></i>
         </button>
+        <button class="gcw-btn gcw-compact" onclick="toggleGroupCallCompact()" title="Компактный режим">
+          <i class="ti ti-arrows-minimize"></i>
+        </button>
         <button class="gcw-btn gcw-end" onclick="endCall()" title="Завершить">
           <i class="ti ti-phone-off"></i>
         </button>
@@ -6457,6 +6519,7 @@ function _showGroupCallUI(groupName, members) {
     if (el) el.textContent = _gcwFormatTime(Math.floor((Date.now() - _gcwStartTime) / 1000));
   }, 1000);
   win._timer = _gcwTimer;
+  makeDraggable(win);
 }
 
 function _updateGcwGrid(count) {
@@ -6467,6 +6530,14 @@ function _updateGcwGrid(count) {
   win.style.setProperty('--gp-cols', cols);
   const grid = document.getElementById('gcwGrid');
   if (grid) grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+}
+
+function toggleGroupCallCompact() {
+  const win = document.getElementById('groupCallWin');
+  if (!win) return;
+  const compact = win.classList.toggle('gcw-compact');
+  const btn = win.querySelector('.gcw-compact i');
+  if (btn) btn.className = compact ? 'ti ti-arrows-maximize' : 'ti ti-arrows-minimize';
 }
 
 function _addGroupParticipantTile(grid, member, stream, isLocal) {
@@ -6860,6 +6931,7 @@ function answerBotCall() {
   _connected = true;
   _callConnectedTime = Date.now();
   _showBotSilentCallWindow();
+  startBotSpeechRecognition();
   _pendingBotCall = null;
 }
 
@@ -6878,6 +6950,7 @@ socket.on('call-bot-accepted', ({ from, room }) => {
   _callConnectedTime = Date.now();
   if (callSt) callSt.textContent = 'в звонке без микрофона';
   _showBotSilentCallWindow();
+  startBotSpeechRecognition();
 });
 
 socket.on('call-bot-ended', ({ from }) => {
@@ -6890,18 +6963,22 @@ socket.on('call-bot-ended', ({ from }) => {
 socket.on('call-bot-group-joined', ({ room, username }) => {
   if (!_groupCall || !_inCall || currentRoom !== room) return;
   if (_groupBotMembers.has(username)) return;
+  _groupBotTargets = _groupBotTargets.filter(x => x !== username);
   _groupBotMembers.add(username);
   const grid = document.getElementById('gcwGrid');
   if (grid) _addGroupParticipantTile(grid, username, null, false);
   _updateGroupCallStatus();
+  startBotSpeechRecognition();
   toast(`${userNicknames[username] || username} зашёл в звонок без микрофона`, 'info', 1800);
 });
 
 socket.on('call-bot-group-left', ({ room, username }) => {
   if (currentRoom !== room) return;
   _groupBotMembers.delete(username);
+  _groupBotTargets = _groupBotTargets.filter(x => x !== username);
   document.querySelector(`[data-participant="${username}"]`)?.remove();
   _updateGroupCallStatus();
+  if (!_hasBotCallContext()) stopBotSpeechRecognition();
 });
 
 async function _handleGroupAnswer(from, isVid) {
@@ -6932,9 +7009,10 @@ socket.on('call-busy', ({ from }) => {
     const pc = groupPeers.get(from);
     if (pc) { pc.close(); groupPeers.delete(from); }
     document.querySelector(`[data-participant="${from}"]`)?.remove();
-    _groupMembers = _groupMembers.filter(m => m !== from);
+    if (isHumanBotUser(from)) _groupBotTargets = _groupBotTargets.filter(m => m !== from);
+    else _groupMembers = _groupMembers.filter(m => m !== from);
     _updateGroupCallStatus();
-    if (groupPeers.size === 0 && _groupMembers.length === 0) endCall();
+    if (!_groupCallHasTargets()) endCall();
     return;
   }
   // Личный звонок
@@ -7013,10 +7091,11 @@ socket.on('call-decline', ({ from, groupId } = {}) => {
     // Убираем плитку этого участника из UI
     document.querySelector(`[data-participant="${from}"]`)?.remove();
     // Обновляем счётчик участников
-    _groupMembers = _groupMembers.filter(m => m !== from);
+    if (isHumanBotUser(from)) _groupBotTargets = _groupBotTargets.filter(m => m !== from);
+    else _groupMembers = _groupMembers.filter(m => m !== from);
     _updateGroupCallStatus();
     // Если больше никого нет — завершаем
-    if (groupPeers.size === 0 && _groupMembers.length === 0) {
+    if (!_groupCallHasTargets()) {
       toast('Все участники отклонили звонок', 'info', 2500);
       endCall();
     }
@@ -7117,9 +7196,10 @@ socket.on('call-end', ({ from, groupId } = {}) => {
     const pc = groupPeers.get(from);
     if (pc) { pc.close(); groupPeers.delete(from); }
     document.querySelector(`[data-participant="${from}"]`)?.remove();
-    _groupMembers = _groupMembers.filter(m => m !== from);
+    if (isHumanBotUser(from)) _groupBotMembers.delete(from);
+    else _groupMembers = _groupMembers.filter(m => m !== from);
     _updateGroupCallStatus();
-    if (groupPeers.size === 0 && _groupMembers.length === 0) {
+    if (!_groupCallHasTargets()) {
       endCall();
     }
     return;
@@ -8315,6 +8395,7 @@ function _cleanup() {
 
   if (_callAutoTimeout) { clearTimeout(_callAutoTimeout); _callAutoTimeout = null; }
   _releaseWakeLock();
+  stopBotSpeechRecognition();
   _inCall = false; _connected = false; _screenSharing = false; _muted = false; _callNoCamera = false; _botSilentCall = false;
   rtcPeer?.close(); rtcPeer = null;
   // Close all group peer connections
