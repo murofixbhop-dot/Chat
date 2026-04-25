@@ -604,13 +604,48 @@ function humanBotAliasRegex(alias) {
   return new RegExp(`(^|[^a-zа-я0-9_])${esc}($|[^a-zа-я0-9_])`, 'i');
 }
 
+function humanBotAllAliases(botUsername) {
+  const profile = getHumanBotProfile(botUsername);
+  return [...new Set([botUsername, ...(profile.aliases || [])].map(s => String(s || '').toLowerCase()))];
+}
+
+function humanBotMentions(text, botUsername) {
+  const lower = String(text || '').toLowerCase();
+  return humanBotAllAliases(botUsername).some(alias => humanBotAliasRegex(alias).test(lower));
+}
+
+function humanBotFirstMentionIndex(text, botUsername) {
+  const lower = String(text || '').toLowerCase();
+  let best = -1;
+  for (const alias of humanBotAllAliases(botUsername)) {
+    const idx = lower.indexOf(alias);
+    if (idx >= 0 && (best === -1 || idx < best)) best = idx;
+  }
+  return best;
+}
+
 function detectAddressedHumanBots(msg) {
   const text = String(msg?.text || '').toLowerCase();
   if (!text || !(msg?.room || '').startsWith('group:')) return [];
-  return HUMAN_BOT_USERNAMES.filter((botUsername) => {
-    const profile = getHumanBotProfile(botUsername);
-    return profile.aliases.some(alias => humanBotAliasRegex(alias).test(text)) || humanBotAliasRegex(botUsername).test(text);
-  });
+  const mentioned = HUMAN_BOT_USERNAMES.filter(botUsername => humanBotMentions(text, botUsername));
+  if (mentioned.length <= 1) return mentioned;
+
+  const askWord = /\b(спроси|скажи|напиши|передай|ответь|ответи|попроси)\b/i;
+  const askMatch = text.match(askWord);
+  if (askMatch) {
+    const askIdx = askMatch.index || 0;
+    const before = HUMAN_BOT_USERNAMES
+      .map(bot => ({ bot, idx: humanBotFirstMentionIndex(text.slice(0, askIdx), bot) }))
+      .filter(x => x.idx >= 0)
+      .sort((a, b) => b.idx - a.idx);
+    if (before.length) return [before[0].bot];
+  }
+
+  const sorted = HUMAN_BOT_USERNAMES
+    .map(bot => ({ bot, idx: humanBotFirstMentionIndex(text, bot) }))
+    .filter(x => x.idx >= 0)
+    .sort((a, b) => a.idx - b.idx);
+  return sorted.length ? [sorted[0].bot] : mentioned.slice(0, 1);
 }
 
 function humanBotMediaCooldownPassed(room, botUsername, minMs = 45 * 60 * 1000) {
@@ -731,12 +766,15 @@ function humanBotShouldLateReply(msg, botUsername = HUMAN_BOT_USERNAME) {
   if (!humanBotCanSee(msg, botUsername)) return false;
   const room = String(msg.room || '');
   const text = String(msg.text || '').toLowerCase();
+  const mem = getHumanBotMemory(room, botUsername);
+  const recentActive = Number(mem.lastHumanReplyAt || 0) > Date.now() - (12 * 60 * 1000);
   if (room.startsWith('private:')) {
+    if (recentActive) return Math.random() < 0.1;
     return Math.random() < (/\?|ты тут|ответь|как думаешь|посмотри/.test(text) ? 0.45 : 0.22);
   }
   if (room.startsWith('group:')) {
     const explicitTargets = detectAddressedHumanBots(msg);
-    if (explicitTargets.length) return explicitTargets.includes(botUsername) && Math.random() < 0.22;
+    if (explicitTargets.length) return explicitTargets.includes(botUsername) && Math.random() < (recentActive ? 0.08 : 0.22);
     return false;
   }
   return false;
@@ -1010,20 +1048,40 @@ async function humanBotMaybeGenerateImage(msg, reply, botUsername = HUMAN_BOT_US
   if (!explicitAsk) return null;
 
   const profile = getHumanBotProfile(botUsername);
-  let prompt = '';
   let sceneTag = 'scene';
-  if (/селфи|ты выглядишь|как выглядишь|себя/.test(text)) {
-    sceneTag = 'selfie';
-    prompt = `${profile.sceneStyle}, ${profile.selfImage}, handheld smartphone selfie, authentic candid expression, not studio, real person`;
-  } else if (/лавоч|парк/.test(text)) {
-    sceneTag = 'bench';
-    prompt = `${profile.sceneStyle}, ${profile.selfImage}, sitting on a bench in a city park, casual everyday moment, smartphone snapshot`;
-  } else if (/тц|торгов|mall|магазин/.test(text)) {
-    sceneTag = 'mall';
-    prompt = `${profile.sceneStyle}, inside a shopping mall, escalators, storefront lights, navigation signs, photo taken on a phone, realistic`;
-  } else {
-    sceneTag = 'place';
-    prompt = `${profile.sceneStyle}, everyday place this person could realistically be right now, smartphone photo, realistic candid scene`;
+  if (/селфи|ты выглядишь|как выглядишь|себя/.test(text)) sceneTag = 'selfie';
+  else if (/дом|квартира|подъезд|двор|окно|балкон/.test(text)) sceneTag = 'home';
+  else if (/лавоч|парк/.test(text)) sceneTag = 'bench';
+  else if (/тц|торгов|mall|магазин/.test(text)) sceneTag = 'mall';
+  else sceneTag = 'place';
+
+  let prompt = '';
+  try {
+    const imagePlannerPrompt = `Ты создаёшь промпт для генерации фото в мессенджере. Персонаж: ${profile.nickname}. Кто он/она: ${profile.persona}. Визуальный стиль: ${profile.sceneStyle}. Внешность для селфи: ${profile.selfImage}. Запрос пользователя: ${String(msg?.text || '').slice(0, 500)}. Какой нужен кадр: ${sceneTag}. Верни JSON {"sceneTag":"","prompt":""}. Промпт должен быть на английском, очень конкретный, как для realistic phone photo, без лишней фантазии, без перекрытого камерой лица, если просят дом то именно дом/подъезд/двор а не селфи человека.`;
+    if (MISTRAL_API_KEY) {
+      const r = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+        model: 'mistral-small-latest',
+        messages: [{ role: 'user', content: imagePlannerPrompt }],
+        max_tokens: 260,
+        temperature: 0.5,
+        response_format: { type: 'json_object' },
+      }, {
+        headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+        timeout: 30000,
+      });
+      const content = r.data.choices?.[0]?.message?.content || '{}';
+      const parsed = JSON.parse(content);
+      sceneTag = parsed.sceneTag || sceneTag;
+      prompt = String(parsed.prompt || '').trim();
+    }
+  } catch {}
+
+  if (!prompt) {
+    if (sceneTag === 'selfie') prompt = `${profile.sceneStyle}, ${profile.selfImage}, handheld smartphone selfie, authentic candid expression, not studio, real person`;
+    else if (sceneTag === 'home') prompt = `${profile.sceneStyle}, realistic phone photo of the outside of a modest apartment building or house where this person lives, entrance or yard visible, no person covering camera, everyday residential area, believable candid shot`;
+    else if (sceneTag === 'bench') prompt = `${profile.sceneStyle}, ${profile.selfImage}, sitting on a bench in a city park, casual everyday moment, smartphone snapshot`;
+    else if (sceneTag === 'mall') prompt = `${profile.sceneStyle}, inside a shopping mall, escalators, storefront lights, navigation signs, photo taken on a phone, realistic`;
+    else prompt = `${profile.sceneStyle}, everyday place this person could realistically be right now, smartphone photo, realistic candid scene`;
   }
 
   const media = await humanBotGenerateImage(botUsername, prompt, sceneTag);
@@ -1049,9 +1107,19 @@ async function getEdgeVoices() {
 async function humanBotGenerateVoiceViaWindows(text, botUsername) {
   const { execFile } = require('child_process');
   const tmpFile = path.join(os.tmpdir(), `aura_bot_voice_${botUsername}_${Date.now()}.wav`);
+  const voiceProfiles = botUsername === HUMAN_BOT_MALE_USERNAME
+    ? [
+      { hints: ['David', 'Dmitry', 'Pavel', 'George', 'Mark', 'M'], rate: '-2', volume: 95 },
+      { hints: ['David', 'George', 'Mark'], rate: '-1', volume: 100 }
+    ]
+    : [
+      { hints: ['Irina', 'Svetlana', 'Zira', 'Anna', 'Maria', 'F'], rate: '0', volume: 100 },
+      { hints: ['Zira', 'Anna', 'Maria'], rate: '-1', volume: 95 }
+    ];
+  const chosenVoice = voiceProfiles[Math.floor(Math.random() * voiceProfiles.length)];
   const wantedHints = botUsername === HUMAN_BOT_MALE_USERNAME
-    ? ['David', 'Dmitry', 'Pavel', 'George', 'Mark', 'M']
-    : ['Irina', 'Svetlana', 'Zira', 'Anna', 'Maria', 'F'];
+    ? chosenVoice.hints
+    : chosenVoice.hints;
   const sanitized = String(text || '')
     .replace(/[`"]/g, "'")
     .replace(/\r?\n/g, ' ')
@@ -1067,8 +1135,8 @@ foreach ($h in @(${wantedHints.map(h => `'${h}'`).join(',')})) {
 }
 if (-not $picked) { $picked = $voices | Select-Object -First 1 }
 if ($picked) { $s.SelectVoice($picked) }
-$s.Rate = ${botUsername === HUMAN_BOT_MALE_USERNAME ? '-1' : '0'}
-$s.Volume = 100
+$s.Rate = ${chosenVoice.rate}
+$s.Volume = ${chosenVoice.volume}
 $s.SetOutputToWaveFile('${tmpFile.replace(/\\/g, '\\\\')}')
 $s.Speak("${sanitized}")
 $s.Dispose()
@@ -1157,14 +1225,25 @@ function emitHumanBotMessage(room, botUsername, text, type = 'text', extra = {})
   return msg;
 }
 
+function makeReplyRef(msg) {
+  if (!msg) return undefined;
+  return {
+    id: msg.id,
+    user: msg.user,
+    text: String(msg.text || '').slice(0, 120),
+    type: msg.type || 'text',
+  };
+}
+
 function humanBotThinkingDelay(msg, incomingText) {
   const text = String(incomingText || '');
   const len = text.length;
   const q = (text.match(/\?/g) || []).length;
   const complex = /почему|зачем|объясни|посовет|как сделать|что думаешь|сравни|разбери|на фото|найди|поищи/.test(text.toLowerCase()) ? 1 : 0;
   const mediaBonus = ['image', 'video', 'file'].includes(msg?.type || '') ? 1 : 0;
-  const base = 2000 + Math.min(len * 35, 7000) + q * 900 + complex * 3500 + mediaBonus * 4000 + Math.random() * 2500;
-  return Math.max(2000, Math.min(20000, Math.round(base)));
+  const shortGreeting = /^(привет|хай|ку|здарова|йо|здорово|доброе утро|добрый вечер)[!. ]*$/i.test(text.trim());
+  const base = (shortGreeting ? 3500 : 4500) + Math.min(len * 55, 9000) + q * 1300 + complex * 4200 + mediaBonus * 6000 + Math.random() * 4200;
+  return Math.max(2500, Math.min(26000, Math.round(base)));
 }
 
 function broadcastHumanBotProfile(botUsername) {
@@ -1199,14 +1278,20 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
   const incomingText = humanBotComposeIncomingText(msg, botUsername);
   rememberHumanBot(msg.room, { role: 'user', user: msg.user, text: incomingText }, botUsername);
   humanBotRememberPersonFact(botUsername, msg.user, incomingText);
-  markHumanBotRead(msg, botUsername);
-  setHumanBotActivity(botUsername, 9000);
+  const mem = getHumanBotMemory(msg.room, botUsername);
+  const recentActive = Number(mem.lastHumanReplyAt || 0) > Date.now() - (10 * 60 * 1000);
+  const seenDelay = recentActive ? (1500 + Math.floor(Math.random() * 5000)) : (5000 + Math.floor(Math.random() * 18000));
+  setTimeout(() => {
+    markHumanBotRead(msg, botUsername);
+    setHumanBotActivity(botUsername, 7000 + Math.floor(Math.random() * 6000));
+  }, seenDelay);
   if (!humanBotShouldReply(msg, botUsername)) {
-    const mem = getHumanBotMemory(msg.room, botUsername);
     mem.ignored = (mem.ignored || 0) + 1;
     rememberHumanBotThought(msg.room, `Увидел(а) сообщение от ${msg.user}, но решил(а) не вмешиваться.`, botUsername);
     if (!msg.delayedHumanReply && humanBotShouldLateReply(msg, botUsername)) {
-      const lateDelay = Math.min(8 * 60 * 1000, 45000 + Math.floor(Math.random() * 4.5 * 60 * 1000));
+      const lateDelay = recentActive
+        ? (20000 + Math.floor(Math.random() * 4.5 * 60 * 1000))
+        : (60000 + Math.floor(Math.random() * 4 * 60 * 1000));
       setTimeout(() => {
         if (!humanBotCanSee(msg, botUsername)) return;
         setHumanBotActivity(botUsername, 30000);
@@ -1226,23 +1311,24 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
     let combined = '';
     for (let i = 0; i < parts.length; i++) {
       if (i > 0) await new Promise(resolve => setTimeout(resolve, 900 + Math.floor(Math.random() * 2200)));
-      const botMsg = emitHumanBotMessage(msg.room, botUsername, parts[i], 'text');
+      const botMsg = emitHumanBotMessage(msg.room, botUsername, parts[i], 'text', { replyTo: makeReplyRef(msg) });
       combined = `${combined}${combined ? '\n' : ''}${parts[i]}`;
       rememberHumanBot(botMsg.room, { role: 'bot', user: botUsername, text: parts[i] }, botUsername);
     }
     const voice = await humanBotMaybeGenerateVoice(msg, combined || reply, botUsername);
     if (voice) {
       await new Promise(resolve => setTimeout(resolve, 1000 + Math.floor(Math.random() * 2200)));
-      emitHumanBotMessage(msg.room, botUsername, '', 'audio', { url: voice.url, fileName: voice.fileName });
+      emitHumanBotMessage(msg.room, botUsername, '', 'audio', { url: voice.url, fileName: voice.fileName, replyTo: makeReplyRef(msg) });
       rememberHumanBot(msg.room, { role: 'bot', user: botUsername, text: '[отправил голосовое]' }, botUsername);
     }
     const media = await humanBotMaybeGenerateImage(msg, combined || reply, botUsername);
     if (media) {
       await new Promise(resolve => setTimeout(resolve, 1200 + Math.floor(Math.random() * 2600)));
-      emitHumanBotMessage(msg.room, botUsername, '', 'image', { url: media.url, fileName: media.fileName });
+      emitHumanBotMessage(msg.room, botUsername, '', 'image', { url: media.url, fileName: media.fileName, replyTo: makeReplyRef(msg) });
       rememberHumanBot(msg.room, { role: 'bot', user: botUsername, text: '[отправил фото]' }, botUsername);
     }
     rememberHumanBotThought(msg.room, `${profile.nickname} ответил(а) ${msg.user}: ${(combined || reply).slice(0, 180)}`, botUsername);
+    mem.lastHumanReplyAt = Date.now();
     setHumanBotActivity(botUsername, 12000);
     saveHistory();
   }, thinkingMs);
