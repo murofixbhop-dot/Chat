@@ -388,6 +388,7 @@ let _chatPartner    = null;
 const onlineUsersSet = new Set(); // кто сейчас онлайн
 const humanBotPresence = new Map(); // room -> reading|typing|online
 const HUMAN_BOT_LABELS = { mira_ai: 'Mira', max_ai: 'Max' };
+const isHumanBotUser = (u) => !!HUMAN_BOT_LABELS[u];
 const unreadCounts      = new Map(); // username -> кол-во непрочитанных
 const groupUnreadCounts = new Map(); // groupId -> кол-во непрочитанных
 const _chatOrder        = [];        // порядок чатов по активности
@@ -407,6 +408,12 @@ try {
   userAvatars   = cached  || {};
   userNicknames = cachedN || {};
 } catch(e) { userAvatars = {}; userNicknames = {}; }
+Object.keys(userAvatars).forEach(u => {
+  const v = userAvatars[u];
+  if (typeof v === 'string' && v.startsWith('/api/dl/')) {
+    userAvatars[u] = '/api/dl?f=' + encodeURIComponent(decodeURIComponent(v.slice('/api/dl/'.length)));
+  }
+});
 
 function _saveAvatarCache() {
   try {
@@ -416,6 +423,9 @@ function _saveAvatarCache() {
 }
 
 function _setAvatar(username, avatarUrl, nickname) {
+  if (typeof avatarUrl === 'string' && avatarUrl.startsWith('/api/dl/')) {
+    avatarUrl = '/api/dl?f=' + encodeURIComponent(decodeURIComponent(avatarUrl.slice('/api/dl/'.length)));
+  }
   let changed = false;
   if (avatarUrl !== undefined && userAvatars[username] !== avatarUrl) {
     userAvatars[username] = avatarUrl;
@@ -1636,7 +1646,7 @@ function addMessage(msg) {
 
   // В личных чатах не показываем ник и аватарку собеседника
   const isPrivateChat = currentRoom?.startsWith('private:');
-  let inner = (!own && !isPrivateChat) ? `<div class="msg-sender">${esc(userNicknames[msg.user] || msg.user)}</div>` : '';
+  let inner = (!own && !isPrivateChat) ? `<div class="msg-sender" data-user="${esc(msg.user)}">${esc(userNicknames[msg.user] || msg.user)}</div>` : '';
 
   // ── Цитата ответа ──
   // Метка "Переслано" над сообщением
@@ -3259,6 +3269,9 @@ socket.on('bot-profile-updated', ({ username, avatar, nickname }) => {
   if (nickname !== undefined) _setAvatar(username, undefined, nickname);
   document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, userAvatars[username]));
   document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, userAvatars[username]));
+  document.querySelectorAll(`.msg-sender[data-user="${username}"]`).forEach(el => {
+    el.textContent = userNicknames[username] || nickname || username;
+  });
   if (friendsList) friendsList._lastKey = '';
   if (groupsList) groupsList._lastKey = '';
   if (currentRoom?.startsWith('private:')) {
@@ -5695,6 +5708,9 @@ let _partnerSharing = false; // партнёр тоже шарит экран
 let _groupCall   = false;   // true if in a group call
 let _groupMembers = [];      // members in group call
 let _callGroupName = null;
+let _botSilentCall = false;
+let _pendingBotCall = null;
+let _groupBotMembers = new Set();
 let groupPeers   = new Map(); // member -> RTCPeerConnection
 
 // DOM
@@ -6198,6 +6214,26 @@ async function startCall(isVid) {
   const target = callTarget();
   if (!target) { toast('Открой чат для звонка', 'warning'); return; }
   if (_inCall)  { toast('Звонок уже идёт', 'warning'); return; }
+  if (typeof target === 'string' && isHumanBotUser(target)) {
+    _callTarget = target;
+    _callRoom = currentRoom;
+    _callIsVid = false;
+    _isCaller = true;
+    _inCall = true;
+    _connected = false;
+    _groupCall = false;
+    _groupMembers = [];
+    _botSilentCall = true;
+    socket.emit('call-invite', { to: target, from: currentUser, isVid: false, room: currentRoom, botSilent: true });
+    _showOutgoingUI(target, false);
+    _callAutoTimeout = setTimeout(() => {
+      if (_inCall && !_connected) {
+        toast('Нет ответа', 'info', 3000);
+        endCall();
+      }
+    }, 45000);
+    return;
+  }
 
   const vidConstraints = isVid ? {
     width:       { ideal: 1280, max: 1920 },
@@ -6330,10 +6366,15 @@ function _addGroupParticipantStream(member, remoteStream) {
 function _updateGroupCallStatus() {
   const connectedCount = Array.from(groupPeers.values()).filter(pc => pc.connectionState === 'connected').length;
   const totalCount = _groupMembers.length;
+  const botCount = _groupBotMembers.size;
   const statusEl = document.getElementById('gcStatus');
   if (statusEl) {
-    if (connectedCount === 0) statusEl.textContent = 'Соединение...';
-    else statusEl.textContent = `${connectedCount + 1} участник${connectedCount !== totalCount ? ` из ${totalCount + 1}` : ''}`;
+    if (connectedCount === 0 && botCount === 0) statusEl.textContent = 'Соединение...';
+    else {
+      const current = connectedCount + botCount + 1;
+      const total = totalCount + botCount + 1;
+      statusEl.textContent = `${current} участник${current !== total ? ` из ${total}` : ''}`;
+    }
   }
 }
 
@@ -6350,6 +6391,7 @@ function _gcwFormatTime(sec) {
 
 function _showGroupCallUI(groupName, members) {
   document.querySelectorAll('.group-call-win').forEach(w => { if(w._timer) clearInterval(w._timer); w.remove(); });
+  _groupBotMembers = new Set();
 
   const win = document.createElement('div');
   win.className = 'group-call-win';
@@ -6676,6 +6718,38 @@ function _showOutgoingUI(target, isVid) {
   ringBeep(); // гудок у звонящего
 }
 
+function _showBotSilentCallWindow() {
+  document.querySelectorAll('.call-win, .call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
+  const win = document.createElement('div');
+  win.className = 'call-win-float';
+  win.id = 'activeCallWin';
+  const nick = userNicknames[_callTarget] || _callTarget;
+  win.innerHTML = `
+    <div class="cw-bg"></div>
+    <div class="cw-audio-content" id="cwAudioContent" style="transition:opacity .3s">
+      <div class="cw-ava" id="cwAva"></div>
+      <div class="cw-name" id="cwName">${esc(nick)}</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text3)">в звонке без микрофона</div>
+    </div>
+    <div class="cw-controls" style="z-index:4;">
+      <span class="cw-timer" id="cwTimer">0:00</span>
+      <div class="cw-btns">
+        <button class="cw-btn cw-end" onclick="endCall()" title="Завершить"><i class="ti ti-phone-off"></i></button>
+      </div>
+    </div>`;
+  document.body.appendChild(win);
+  const cwAva = win.querySelector('#cwAva');
+  if (cwAva) setAvatar(cwAva, _callTarget, userAvatars[_callTarget] || null);
+  if (callModal) callModal.classList.remove('open');
+  let secs = 0;
+  win._timer = setInterval(() => {
+    secs++;
+    const m = Math.floor(secs/60), s = secs % 60;
+    const t = win.querySelector('#cwTimer');
+    if (t) t.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  }, 1000);
+}
+
 // в”Ђв”Ђ INCOMING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 socket.on('call-invite', async ({ from, isVid, resumed, groupId, group }) => {
   // Уведомление если вкладка скрыта
@@ -6732,6 +6806,83 @@ socket.on('call-invite', async ({ from, isVid, resumed, groupId, group }) => {
     </button>`;
   callModal.classList.add('open');
   ringBeep();
+});
+
+socket.on('call-bot-invite', ({ from, room }) => {
+  if (_inCall) return;
+  _pendingBotCall = { from, room };
+  _callTarget = from;
+  _callRoom = room || currentRoom;
+  _callIsVid = false;
+  _isCaller = false;
+  _inCall = true;
+  _groupCall = false;
+  _groupMembers = [];
+  _botSilentCall = true;
+  setAvatar(callAva, from, userAvatars[from]);
+  callNm.textContent = userNicknames[from] || from;
+  callSt.textContent = 'входящий звонок…';
+  callAct.innerHTML = `
+    <button class="call-btn call-ans" onclick="answerBotCall()">
+      <i class="ti ti-phone"></i>
+    </button>
+    <button class="call-btn call-end" onclick="declineBotCall()">
+      <i class="ti ti-phone-off"></i>
+    </button>`;
+  callModal.classList.add('open');
+  ringBeep();
+});
+
+function answerBotCall() {
+  if (!_pendingBotCall) return;
+  stopRing();
+  const { from, room } = _pendingBotCall;
+  socket.emit('call-bot-accept', { to: from, from: currentUser, room });
+  _connected = true;
+  _callConnectedTime = Date.now();
+  _showBotSilentCallWindow();
+  _pendingBotCall = null;
+}
+
+function declineBotCall() {
+  if (_pendingBotCall) socket.emit('call-bot-decline', { to: _pendingBotCall.from, from: currentUser });
+  _pendingBotCall = null;
+  _cleanup();
+}
+
+socket.on('call-bot-accepted', ({ from, room }) => {
+  if (!_inCall || _callTarget !== from) return;
+  stopRing();
+  _connected = true;
+  _botSilentCall = true;
+  if (room) _callRoom = room;
+  _callConnectedTime = Date.now();
+  if (callSt) callSt.textContent = 'в звонке без микрофона';
+  _showBotSilentCallWindow();
+});
+
+socket.on('call-bot-ended', ({ from }) => {
+  if (_botSilentCall && _callTarget === from) {
+    toast(`${userNicknames[from] || from} завершил звонок`, 'info', 2000);
+    _cleanup();
+  }
+});
+
+socket.on('call-bot-group-joined', ({ room, username }) => {
+  if (!_groupCall || !_inCall || currentRoom !== room) return;
+  if (_groupBotMembers.has(username)) return;
+  _groupBotMembers.add(username);
+  const grid = document.getElementById('gcwGrid');
+  if (grid) _addGroupParticipantTile(grid, username, null, false);
+  _updateGroupCallStatus();
+  toast(`${userNicknames[username] || username} зашёл в звонок без микрофона`, 'info', 1800);
+});
+
+socket.on('call-bot-group-left', ({ room, username }) => {
+  if (currentRoom !== room) return;
+  _groupBotMembers.delete(username);
+  document.querySelector(`[data-participant="${username}"]`)?.remove();
+  _updateGroupCallStatus();
 });
 
 async function _handleGroupAnswer(from, isVid) {
@@ -8145,7 +8296,7 @@ function _cleanup() {
 
   if (_callAutoTimeout) { clearTimeout(_callAutoTimeout); _callAutoTimeout = null; }
   _releaseWakeLock();
-  _inCall = false; _connected = false; _screenSharing = false; _muted = false; _callNoCamera = false;
+  _inCall = false; _connected = false; _screenSharing = false; _muted = false; _callNoCamera = false; _botSilentCall = false;
   rtcPeer?.close(); rtcPeer = null;
   // Close all group peer connections
   groupPeers.forEach(pc => pc.close());
@@ -8156,6 +8307,7 @@ function _cleanup() {
   _groupScreenSharing = false;
   _groupCall = false;
   _groupMembers = [];
+  _groupBotMembers = new Set();
   _callGroupName = null;
   _gcwFacingMode = 'user'; // сбрасываем на фронтальную камеру
   _cwFacingMode  = 'user';
@@ -8166,6 +8318,7 @@ function _cleanup() {
   if (callNm)  callNm.textContent = '';
   if (callSt)  callSt.textContent = '';
   _callTarget = null;
+  _pendingBotCall = null;
 }
 
 let _callConnectedTime = null;
