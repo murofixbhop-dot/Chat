@@ -1046,6 +1046,8 @@ function humanBotToolNotes(text, botUsername = HUMAN_BOT_USERNAME) {
   if (/выбери|как лучше|вариант|посовет/.test(t)) notes.push('инструмент советника: сравни варианты и дай человеческий вывод');
   if (/настроен|груст|рад|злюсь|устал/.test(t)) notes.push('инструмент эмпатии: сначала отреагируй на настроение');
   if (/сегодня|сейчас|новост|интернет|найди|поищи|курс|погода|актуальн/.test(t)) notes.push('инструмент поиска: можно использовать найденный контекст, но не звучать как справочник');
+  if (/время|который час|часовой пояс/.test(t)) notes.push('инструмент времени: можно быстро проверить локальное время в городе или стране');
+  if (/посчитай|сколько будет|вычисли|умнож|раздели|плюс|минус/.test(t)) notes.push('инструмент расчёта: можно быстро посчитать и ответить простыми словами');
   if (/фото|фотку|селфи|покажи|скинь|как там|что видишь/.test(t)) notes.push('инструмент фото: если просят показать место или себя, можно отправить реалистичное фото как из телефона, но не слишком часто');
   if (/на фото|что на фото|видишь/.test(t)) notes.push('инструмент зрения: опиши изображение своими словами');
   notes.push(`стиль ответа: ${humanBotPickStyle(text, botUsername)}`);
@@ -1058,10 +1060,24 @@ function humanBotComposeIncomingText(msg, botUsername = HUMAN_BOT_USERNAME) {
     return `через ${msg.humanBotRelay.fromNickname || msg.user} тебе передали вопрос от ${msg.humanBotRelay.requester}: ${String(msg.text || '').trim()}`.trim();
   }
   const base = String(msg.text || '').trim();
+  if (msg.callTranscript) {
+    return `[это распознанная речь из звонка, в тексте могут быть ошибки]\n${base}`.trim();
+  }
   if (msg.type === 'image') return `${base ? base + '\n' : ''}[Пользователь отправил изображение]`;
   if (msg.type === 'video') return `${base ? base + '\n' : ''}[Пользователь отправил видео]`;
   if (msg.type === 'file') return `${base ? base + '\n' : ''}[Пользователь отправил файл ${msg.fileName || ''}]`;
   return base;
+}
+
+function humanBotNormalizeCallTranscript(text) {
+  return String(text || '')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/\b(эм|кхм|ээ+|мм+|ну вот|типа)\b/gi, ' ')
+    .replace(/\b(\S+)(?:\s+\1){2,}\b/gi, '$1')
+    .replace(/\s+([?!.,:;])/g, '$1')
+    .replace(/[ ]{2,}/g, ' ')
+    .trim()
+    .slice(0, 400);
 }
 
 async function humanBotImageToDataUrl(url) {
@@ -1192,9 +1208,55 @@ async function humanBotFetchUsdContext(text) {
   }
 }
 
+function humanBotExtractTimeLocation(text) {
+  const src = String(text || '').trim();
+  const m = src.match(/(?:сколько\s+времени|который\s+час|время)(?:\s+сейчас)?(?:\s+в|\s+во|\s+на)?\s+([a-zа-яё0-9 .\-]{2,60})/i);
+  if (!m?.[1]) return '';
+  return m[1].replace(/[?!.,]+$/g, '').trim();
+}
+
+async function humanBotFetchTimeContext(location) {
+  const place = String(location || '').trim();
+  if (!place) return '';
+  try {
+    const geo = await axios.get('https://geocoding-api.open-meteo.com/v1/search', {
+      timeout: 9000,
+      params: { name: place, count: 1, language: 'ru', format: 'json' },
+      headers: { 'User-Agent': 'Mozilla/5.0 AuraBot/1.0' }
+    });
+    const hit = geo.data?.results?.[0];
+    if (!hit?.timezone) return '';
+    const label = [hit.name, hit.country].filter(Boolean).join(', ');
+    const formatted = new Intl.DateTimeFormat('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: hit.timezone
+    }).format(new Date());
+    return `Время в ${label}: ${formatted}.`;
+  } catch {
+    return '';
+  }
+}
+
+function humanBotMaybeCalcContext(text) {
+  const src = String(text || '').trim();
+  const m = src.match(/(?:посчитай|сколько будет|вычисли)\s+([0-9+\-*/().,\s]{3,80})/i);
+  if (!m?.[1]) return '';
+  const expr = m[1].replace(/,/g, '.').replace(/\s+/g, '');
+  if (!/^[0-9+\-*/().]+$/.test(expr)) return '';
+  try {
+    const value = Function(`"use strict"; return (${expr});`)();
+    if (!Number.isFinite(value)) return '';
+    const pretty = Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
+    return `Быстрый расчёт: ${m[1].trim()} = ${pretty}.`;
+  } catch {
+    return '';
+  }
+}
+
 async function humanBotMaybeWebContext(text, botUsername = HUMAN_BOT_USERNAME) {
   const profile = getHumanBotProfile(botUsername);
-  if (!/(сегодня|сейчас|новост|интернет|найди|поищи|курс|погода|что там|актуальн|доллар|usd|eur|евро|weather)/i.test(String(text || ''))) return '';
+  if (!/(сегодня|сейчас|новост|интернет|найди|поищи|курс|погода|что там|актуальн|доллар|usd|eur|евро|weather|время|который час|посчитай|сколько будет|вычисли)/i.test(String(text || ''))) return '';
   try {
     let q = String(text || '');
     for (const a of profile.aliases) q = q.replace(new RegExp(a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), '');
@@ -1210,6 +1272,13 @@ async function humanBotMaybeWebContext(text, botUsername = HUMAN_BOT_USERNAME) {
 
     const usd = await humanBotFetchUsdContext(q);
     if (usd) parts.push(usd);
+
+    const timeLoc = humanBotExtractTimeLocation(q);
+    const timeCtx = await humanBotFetchTimeContext(timeLoc);
+    if (timeCtx) parts.push(timeCtx);
+
+    const calc = humanBotMaybeCalcContext(q);
+    if (calc) parts.push(calc);
 
     const shouldSearch = !parts.length || /(новост|интернет|найди|поищи|что там|актуальн)/i.test(q);
     if (shouldSearch) {
@@ -1293,6 +1362,9 @@ Reply as ${profile.nickname}. Russian only. 1-3 short sentences. No official ton
 
   return humanBotFallbackText(incomingText, botUsername);
 }
+
+const humanBotHeardTimers = new Map();
+const humanBotHeardLastEmitted = new Map();
 
 function emitMessageToRoomOrMember(msg) {
   io.to(msg.room).emit('message', msg);
@@ -1594,6 +1666,14 @@ function humanBotThinkingDelay(msg, incomingText) {
   const complex = /почему|зачем|объясни|посовет|как сделать|что думаешь|сравни|разбери|на фото|найди|поищи/.test(text.toLowerCase()) ? 1 : 0;
   const mediaBonus = ['image', 'video', 'file'].includes(msg?.type || '') ? 1 : 0;
   const shortGreeting = /^(привет|хай|ку|здарова|йо|здорово|доброе утро|добрый вечер)[!. ]*$/i.test(text.trim());
+  if (msg?.callTranscript) {
+    const callBase = (msg?.callTranscriptQuick ? 650 : (shortGreeting ? 1100 : 1700))
+      + Math.min(len * 22, 1800)
+      + q * 400
+      + complex * 900
+      + Math.random() * (msg?.callTranscriptQuick ? 450 : 1200);
+    return Math.max(msg?.callTranscriptQuick ? 700 : 1200, Math.min(msg?.callTranscriptQuick ? 2600 : 5200, Math.round(callBase)));
+  }
   const base = (shortGreeting ? 3500 : 4500) + Math.min(len * 55, 9000) + q * 1300 + complex * 4200 + mediaBonus * 6000 + Math.random() * 4200;
   return Math.max(2500, Math.min(26000, Math.round(base)));
 }
@@ -1656,7 +1736,11 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
   humanBotRememberPersonFact(botUsername, msg.user, incomingText);
   const mem = getHumanBotMemory(msg.room, botUsername);
   const recentActive = Number(mem.lastHumanReplyAt || 0) > Date.now() - (10 * 60 * 1000);
-  const seenDelay = msg.forceHumanBotReply
+  const seenDelay = msg.callTranscript
+    ? (msg.callTranscriptQuick
+      ? (180 + Math.floor(Math.random() * 420))
+      : (800 + Math.floor(Math.random() * 1500)))
+    : msg.forceHumanBotReply
     ? (1800 + Math.floor(Math.random() * 2600))
     : (recentActive ? (1800 + Math.floor(Math.random() * 5200)) : (5000 + Math.floor(Math.random() * 18000)));
   if (!msg.forceHumanBotReply && !profileAction && !crossBot && !humanBotShouldReply(msg, botUsername)) {
@@ -1675,7 +1759,11 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
     }
     return;
   }
-  const readDelay = msg.forceHumanBotReply
+  const readDelay = msg.callTranscript
+    ? (msg.callTranscriptQuick
+      ? (120 + Math.floor(Math.random() * 240))
+      : (350 + Math.floor(Math.random() * 700)))
+    : msg.forceHumanBotReply
     ? (900 + Math.floor(Math.random() * 900))
     : (1100 + Math.floor(Math.random() * 2400));
   setTimeout(() => {
@@ -1710,7 +1798,14 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
       reply = cleanHumanBotText(await humanBotCallLLM(msg.room, `${incomingText}${visionContext}`, msg.user, isGroup, botUsername), botUsername);
     }
     const parts = humanBotSplitReply(reply);
-    const replyRef = msg.relayReplyTo || makeReplyRef(msg);
+    const shouldReplyRef = Boolean(
+      msg.relayReplyTo ||
+      isGroup ||
+      msg.delayedHumanReply ||
+      msg.callTranscript ||
+      crossBot
+    );
+    const replyRef = shouldReplyRef ? (msg.relayReplyTo || makeReplyRef(msg)) : undefined;
     let combined = '';
     for (let i = 0; i < parts.length; i++) {
       if (i > 0) await new Promise(resolve => setTimeout(resolve, 900 + Math.floor(Math.random() * 2200)));
@@ -7551,21 +7646,35 @@ io.on('connection', (socket) => {
     socket.to(room).emit('messages-read', { room, by });
   });
 
-  socket.on('human-bot-heard', ({ room, text }) => {
+  socket.on('human-bot-heard', ({ room, text, final }) => {
     if (!currentUser || !room || !text) return;
-    const clean = String(text).trim().slice(0, 400);
+    const clean = humanBotNormalizeCallTranscript(text);
     if (!clean) return;
-    const synthetic = {
-      id: Date.now() + Math.random(),
-      user: currentUser,
-      text: clean,
-      type: 'text',
-      room: String(room),
-      ts: Date.now(),
-      callTranscript: true,
-      readBy: [currentUser],
-    };
-    scheduleHumanBotsForMessage(synthetic);
+    const key = `${currentUser}|${String(room)}`;
+    const prev = humanBotHeardLastEmitted.get(key);
+    if (prev?.text === clean && (Date.now() - Number(prev.at || 0)) < 5000) return;
+    const pending = { text: clean, final: !!final, room: String(room), user: currentUser };
+    const delay = pending.final ? 90 : (clean.length < 18 ? 260 : 420);
+    if (humanBotHeardTimers.has(key)) clearTimeout(humanBotHeardTimers.get(key));
+    humanBotHeardTimers.set(key, setTimeout(() => {
+      humanBotHeardTimers.delete(key);
+      const again = humanBotHeardLastEmitted.get(key);
+      if (again?.text === pending.text && (Date.now() - Number(again.at || 0)) < 5000) return;
+      humanBotHeardLastEmitted.set(key, { text: pending.text, at: Date.now() });
+      const synthetic = {
+        id: Date.now() + Math.random(),
+        user: pending.user,
+        text: pending.text,
+        type: 'text',
+        room: pending.room,
+        ts: Date.now(),
+        callTranscript: true,
+        callTranscriptFinal: pending.final,
+        callTranscriptQuick: !pending.final,
+        readBy: [pending.user],
+      };
+      scheduleHumanBotsForMessage(synthetic);
+    }, delay));
   });
 
   socket.on('call-end', data => {
