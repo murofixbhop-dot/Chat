@@ -954,6 +954,10 @@ function humanBotShouldReply(msg, botUsername = HUMAN_BOT_USERNAME) {
     const roomCtx = getHumanBotRoomContext(msg.room, botUsername);
     if (msg?.replyTo?.user === botUsername) return Math.random() < 0.96;
     if (humanBotIsInGroupCall(msg.room, botUsername)) {
+      if (msg.callTranscript) {
+        if (explicitTargets.includes(botUsername)) return Math.random() < 0.99;
+        return /\?|как|что|кто|почему|зачем|слыш|ответь|скаж|думаешь/i.test(text) ? Math.random() < 0.8 : Math.random() < 0.35;
+      }
       if (explicitTargets.includes(botUsername)) return Math.random() < 0.98;
       if (/\?|как|что|кто|почему|зачем|слыш|ответь|скаж|думаешь/i.test(text)) return Math.random() < 0.55;
       return Math.random() < 0.2;
@@ -7545,6 +7549,23 @@ io.on('connection', (socket) => {
     if (changed) saveHistory();
     // Оповещаем отправителя что прочитано
     socket.to(room).emit('messages-read', { room, by });
+  });
+
+  socket.on('human-bot-heard', ({ room, text }) => {
+    if (!currentUser || !room || !text) return;
+    const clean = String(text).trim().slice(0, 400);
+    if (!clean) return;
+    const synthetic = {
+      id: Date.now() + Math.random(),
+      user: currentUser,
+      text: clean,
+      type: 'text',
+      room: String(room),
+      ts: Date.now(),
+      callTranscript: true,
+      readBy: [currentUser],
+    };
+    scheduleHumanBotsForMessage(synthetic);
   });
 
   socket.on('call-end', data => {
