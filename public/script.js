@@ -5711,6 +5711,7 @@ let _callGroupName = null;
 let _botSilentCall = false;
 let _pendingBotCall = null;
 let _groupBotMembers = new Set();
+let _groupBotTargets = [];
 let groupPeers   = new Map(); // member -> RTCPeerConnection
 
 // DOM
@@ -6253,16 +6254,22 @@ async function startCall(isVid) {
     if (typeof target === 'object' && target.type === 'group') {
       // GROUP CALL
       _groupCall = true;
-      _groupMembers = target.members;
+      _groupBotTargets = (target.members || []).filter(m => isHumanBotUser(m));
+      _groupMembers = (target.members || []).filter(m => !isHumanBotUser(m));
       _callTarget = target.name;
       _callGroupName = target.name;
-      if (target.members.length === 0) { toast('В группе нет участников', 'warning'); _cleanup(); return; }
+      if (_groupMembers.length === 0 && _groupBotTargets.length === 0) { toast('В группе нет участников', 'warning'); _cleanup(); return; }
       // Create peer connections for each member
       _showGroupCallUI(target.name, target.members);
       ringBeep(); // гудок у звонящего в группе
       // Initiate call with each member sequentially
       for (const member of target.members) {
-        await _initiateGroupPeer(member);
+        if (isHumanBotUser(member)) {
+          const gid = currentRoom?.startsWith('group:') ? currentRoom.replace('group:', '') : null;
+          socket.emit('call-invite', { to: member, from: currentUser, isVid: false, groupId: gid, room: currentRoom, botSilent: true });
+        } else {
+          await _initiateGroupPeer(member);
+        }
       }
     } else {
       // PRIVATE CALL
@@ -6286,6 +6293,12 @@ async function startCall(isVid) {
 }
 
 async function _initiateGroupPeer(member) {
+  if (isHumanBotUser(member)) {
+    const gid = currentRoom?.startsWith('group:') ? currentRoom.replace('group:', '') : (_callRoom?.replace('group:', '') || null);
+    socket.emit('call-invite', { to: member, from: currentUser, isVid: false, groupId: gid, room: currentRoom || _callRoom, botSilent: true });
+    return;
+  }
+  if (!localStream) return;
   const pc = new RTCPeerConnection({
     iceServers: ICE_SERVERS,
     iceTransportPolicy: 'all',       // пробуем все пути включая TURN
@@ -6668,7 +6681,8 @@ function _showGroupIncomingUI(from, isVid, group) {
   _isCaller   = false;
   _inCall     = true;
   _groupCall  = true;
-  _groupMembers = group.members.filter(m => m !== currentUser);
+  _groupBotTargets = (group.members || []).filter(m => m !== currentUser && isHumanBotUser(m));
+  _groupMembers = (group.members || []).filter(m => m !== currentUser && !isHumanBotUser(m));
   _callGroupName = group.name || 'Group';
 
   const fromNick = userNicknames[from] || from;
@@ -6696,6 +6710,10 @@ async function answerGroupCall() {
     // Connect back to each group member
     for (const member of _groupMembers) {
       await _initiateGroupPeer(member);
+    }
+    for (const bot of _groupBotTargets) {
+      const gid = _callRoom?.replace('group:', '') || null;
+      socket.emit('call-invite', { to: bot, from: currentUser, isVid: false, groupId: gid, room: _callRoom, botSilent: true });
     }
   } catch(e) {
     toast('Нет доступа к микрофону', 'error');
@@ -6762,6 +6780,7 @@ socket.on('call-invite', async ({ from, isVid, resumed, groupId, group }) => {
 
   // Уже в групповом звонке — добавляем участника
   if (_groupCall) {
+    if (isHumanBotUser(from)) return;
     if (groupPeers.has(from)) { _handleGroupAnswer(from, isVid); return; }
     _initiateGroupPeer(from);
     return;
@@ -8308,6 +8327,7 @@ function _cleanup() {
   _groupCall = false;
   _groupMembers = [];
   _groupBotMembers = new Set();
+  _groupBotTargets = [];
   _callGroupName = null;
   _gcwFacingMode = 'user'; // сбрасываем на фронтальную камеру
   _cwFacingMode  = 'user';
