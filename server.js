@@ -627,6 +627,7 @@ function humanBotFirstMentionIndex(text, botUsername) {
 function detectAddressedHumanBots(msg) {
   const text = String(msg?.text || '').toLowerCase();
   if (!text || !(msg?.room || '').startsWith('group:')) return [];
+  if (isHumanBotUsername(msg?.replyTo?.user)) return [msg.replyTo.user];
   const mentioned = HUMAN_BOT_USERNAMES.filter(botUsername => humanBotMentions(text, botUsername));
   if (mentioned.length <= 1) return mentioned;
 
@@ -708,7 +709,7 @@ function humanBotExtractNicknameRequest(text) {
 async function humanBotPersistExternalImage(url, botUsername, prefix = 'avatars') {
   const src = String(url || '').trim();
   if (!src) return null;
-  if (src.startsWith('/api/dl/') || src.startsWith('data:image/')) return src;
+  if (src.startsWith('/api/dl') || src.startsWith('data:image/')) return src;
   try {
     const r = await axios.get(src, {
       responseType: 'arraybuffer',
@@ -720,7 +721,7 @@ async function humanBotPersistExternalImage(url, botUsername, prefix = 'avatars'
     const ext = ct.includes('png') ? 'png' : (ct.includes('webp') ? 'webp' : 'jpg');
     const fileName = `${prefix}/${Date.now()}-${botUsername}.${ext}`;
     await storageUpload(fileName, Buffer.from(r.data), ct);
-    return `/api/dl/${encodeURIComponent(fileName)}`;
+    return '/api/dl?f=' + encodeURIComponent(fileName);
   } catch {
     return null;
   }
@@ -781,7 +782,7 @@ async function humanBotGenerateAvatarByPrompt(botUsername, query) {
       const ext = ct.includes('png') ? 'png' : 'jpg';
       const fileName = `avatars/${Date.now()}-${botUsername}.${ext}`;
       await storageUpload(fileName, Buffer.from(r.data), ct);
-      return `/api/dl/${encodeURIComponent(fileName)}`;
+      return '/api/dl?f=' + encodeURIComponent(fileName);
     } catch {}
   }
   return null;
@@ -798,8 +799,10 @@ async function humanBotApplyProfileAction(botUsername, action, sourceText = '') 
   const user = getHumanBotUser(botUsername);
   const profile = getHumanBotProfile(botUsername);
   user.botMemory = user.botMemory || { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
+  user.botMemory.profileLocks = user.botMemory.profileLocks || {};
   if (action === 'avatar') {
     user.avatar = await humanBotPickAvatar(botUsername, sourceText);
+    user.botMemory.profileLocks.avatarUntil = Date.now() + 12 * 60 * 60 * 1000;
   } else if (action === 'nickname') {
     const requested = humanBotExtractNicknameRequest(sourceText);
     if (requested) user.nickname = requested;
@@ -809,6 +812,7 @@ async function humanBotApplyProfileAction(botUsername, action, sourceText = '') 
       const options = pool.filter(n => n !== current);
       user.nickname = options[Math.floor(Math.random() * options.length)] || pool[0] || profile.nickname;
     }
+    user.botMemory.profileLocks.nicknameUntil = Date.now() + 12 * 60 * 60 * 1000;
   }
   users.set(botUsername, user);
   saveUsers().catch(() => {});
@@ -940,6 +944,7 @@ function humanBotShouldReply(msg, botUsername = HUMAN_BOT_USERNAME) {
   if (!humanBotCanSee(msg, botUsername)) return false;
   if ((msg.room || '').startsWith('private:')) {
     const text = String(msg.text || '').toLowerCase();
+    if (humanBotIsInCallWith(msg.room, msg.user, botUsername)) return true;
     const urgent = /\?|срочно|важно|ответь|ты тут|ау|что думаешь|посмотри/.test(text) || msg.type === 'image';
     return Math.random() < (urgent ? 0.88 : 0.68);
   }
@@ -947,6 +952,12 @@ function humanBotShouldReply(msg, botUsername = HUMAN_BOT_USERNAME) {
     const text = String(msg.text || '').toLowerCase();
     const explicitTargets = detectHumanBotIntent(msg).targets;
     const roomCtx = getHumanBotRoomContext(msg.room, botUsername);
+    if (msg?.replyTo?.user === botUsername) return Math.random() < 0.96;
+    if (humanBotIsInGroupCall(msg.room, botUsername)) {
+      if (explicitTargets.includes(botUsername)) return Math.random() < 0.98;
+      if (/\?|как|что|кто|почему|зачем|слыш|ответь|скаж|думаешь/i.test(text)) return Math.random() < 0.55;
+      return Math.random() < 0.2;
+    }
     if (!explicitTargets.length && roomCtx.activeTarget === botUsername && (Date.now() - Number(roomCtx.lastHandledAt || 0)) < 4 * 60 * 1000) {
       return Math.random() < 0.82;
     }
@@ -996,6 +1007,21 @@ function humanBotNaturalizeText(text) {
     .replace(/\(\(+/g, '(')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function humanBotRemoveProfanity(text) {
+  const swaps = [
+    [/\b(бля|блинть|блять|блядь|блят)\b/gi, 'блин'],
+    [/\b(нахер|на хер|нафиг|нах)\b/gi, 'не надо'],
+    [/\b(херня|хрень)\b/gi, 'странная штука'],
+    [/\b(ебать|ебан|ёбан|е*б|заеб|заёб|уеб|уёб)\w*\b/gi, 'очень'],
+    [/\b(пизд|пздц)\w*\b/gi, 'жесть'],
+    [/\b(сука|сучк)\w*\b/gi, 'блин'],
+    [/\b(мудак|идиот|дебил|придурок)\w*\b/gi, 'странный человек'],
+  ];
+  let out = String(text || '');
+  swaps.forEach(([rx, to]) => { out = out.replace(rx, to); });
+  return out;
 }
 
 function humanBotPickStyle(text, botUsername = HUMAN_BOT_USERNAME) {
@@ -1208,6 +1234,7 @@ async function humanBotCallLLM(room, incomingText, author, isGroup, botUsername 
     'Reply only in Russian.',
     'Write like a real chat person: casual, short, usually lowercase, with very few commas and capital letters.',
     'Be grammatically correct and avoid spelling mistakes.',
+    'Never swear, curse, insult, or use rude words.',
     'Use the word "сейчас", never "щас" or "ща".',
     'Do not use Chinese, English, markdown, bullet lists, or assistant phrasing.',
     'Never say that you are an AI or a neural network.',
@@ -1310,7 +1337,7 @@ function markHumanBotRead(msg, botUsername = HUMAN_BOT_USERNAME) {
 }
 
 function cleanHumanBotText(text, botUsername = HUMAN_BOT_USERNAME) {
-  let out = humanBotNaturalizeText(String(text || ''))
+  let out = humanBotRemoveProfanity(humanBotNaturalizeText(String(text || '')))
     .replace(/[\u3400-\u9fff\uf900-\ufaff]/g, '')
     .replace(/\s+([?.!,;:])/g, '$1')
     .replace(/[ \t]{2,}/g, ' ')
@@ -1580,11 +1607,15 @@ async function humanBotMaybeRefreshIdentity(botUsername, reasonText = '', force 
   const profile = getHumanBotProfile(botUsername);
   const user = getHumanBotUser(botUsername);
   if (!force && Math.random() > 0.16) return false;
+  user.botMemory = user.botMemory || { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
+  user.botMemory.profileLocks = user.botMemory.profileLocks || {};
+  const now = Date.now();
   const mood = profile.moods[Math.floor(Math.random() * profile.moods.length)];
   const nick = profile.nicknamePool[Math.floor(Math.random() * profile.nicknamePool.length)];
-  user.nickname = nick;
-  user.avatar = await humanBotPickAvatar(botUsername, reasonText || `${profile.nickname} ${mood} avatar`);
-  user.botMemory = user.botMemory || { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
+  if (now >= Number(user.botMemory.profileLocks.nicknameUntil || 0)) user.nickname = nick;
+  if (now >= Number(user.botMemory.profileLocks.avatarUntil || 0)) {
+    user.avatar = await humanBotPickAvatar(botUsername, reasonText || `${profile.nickname} ${mood} avatar`);
+  }
   user.botMemory.currentMood = mood;
   users.set(botUsername, user);
   saveUsers().catch(() => {});
@@ -1596,10 +1627,12 @@ function humanBotMaybeRefreshProfile(botUsername, force = false) {
   const profile = getHumanBotProfile(botUsername);
   const user = getHumanBotUser(botUsername);
   if (!force && Math.random() > 0.08) return;
+  user.botMemory = user.botMemory || { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
+  user.botMemory.profileLocks = user.botMemory.profileLocks || {};
+  const now = Date.now();
   const mood = profile.moods[Math.floor(Math.random() * profile.moods.length)];
   const nick = profile.nicknamePool[Math.floor(Math.random() * profile.nicknamePool.length)];
-  user.nickname = nick;
-  user.botMemory = user.botMemory || { rooms: {}, thoughts: [], people: {}, lastProactiveAt: 0 };
+  if (now >= Number(user.botMemory.profileLocks.nicknameUntil || 0)) user.nickname = nick;
   user.botMemory.currentMood = mood;
   users.set(botUsername, user);
   saveUsers().catch(() => {});
@@ -1621,12 +1654,6 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
   const seenDelay = msg.forceHumanBotReply
     ? (1800 + Math.floor(Math.random() * 2600))
     : (recentActive ? (1800 + Math.floor(Math.random() * 5200)) : (5000 + Math.floor(Math.random() * 18000)));
-  if (!(msg.forceHumanBotReply && isHumanBotUsername(msg.user))) {
-    setTimeout(() => {
-      markHumanBotRead(msg, botUsername);
-      setHumanBotActivity(botUsername, 7000 + Math.floor(Math.random() * 6000));
-    }, seenDelay);
-  }
   if (!msg.forceHumanBotReply && !profileAction && !crossBot && !humanBotShouldReply(msg, botUsername)) {
     mem.ignored = (mem.ignored || 0) + 1;
     rememberHumanBotThought(msg.room, `Увидел(а) сообщение от ${msg.user}, но решил(а) не вмешиваться.`, botUsername);
@@ -1643,12 +1670,24 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
     }
     return;
   }
+  const readDelay = msg.forceHumanBotReply
+    ? (900 + Math.floor(Math.random() * 900))
+    : (1100 + Math.floor(Math.random() * 2400));
+  setTimeout(() => {
+    setHumanBotActivity(botUsername, 9000 + Math.floor(Math.random() * 7000));
+  }, seenDelay);
+  if (!(msg.forceHumanBotReply && isHumanBotUsername(msg.user))) {
+    setTimeout(() => {
+      markHumanBotRead(msg, botUsername);
+    }, seenDelay + readDelay);
+  }
   const thinkingMs = profileAction
     ? (2600 + Math.floor(Math.random() * 2600))
     : crossBot
       ? (3200 + Math.floor(Math.random() * 3800))
       : humanBotThinkingDelay(msg, incomingText);
-  setTimeout(() => setHumanBotActivity(botUsername, thinkingMs + 45000), Math.max(1200, seenDelay));
+  const answerDelay = seenDelay + readDelay + thinkingMs;
+  setTimeout(() => setHumanBotActivity(botUsername, thinkingMs + 45000), Math.max(1200, seenDelay + readDelay));
   setTimeout(async () => {
     if (!profileAction && !crossBot) {
       await humanBotMaybeRefreshIdentity(botUsername, incomingText);
@@ -1720,7 +1759,7 @@ function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
     }
     setHumanBotActivity(botUsername, 12000);
     saveHistory();
-  }, thinkingMs);
+  }, answerDelay);
 }
 
 function scheduleHumanBotsForMessage(msg) {
@@ -1775,6 +1814,17 @@ async function sendHumanBotProactive(botUsername = HUMAN_BOT_USERNAME) {
   if (Math.random() > profile.proactiveChance) return;
 
   const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  if (pick.kind === 'private' && Math.random() < 0.1 && !humanBotGetCallSession(botUsername, pick.target)) {
+    if (humanBotEmitCallToUser(pick.target, 'call-bot-invite', { from: botUsername, room: pick.room, isVid: false })) {
+      humanBotSetCallSession(botUsername, pick.target, { room: pick.room, startedAt: Date.now(), active: false, direction: 'outgoing_pending' });
+      setTimeout(() => {
+        const session = humanBotGetCallSession(botUsername, pick.target);
+        if (session && !session.active) humanBotClearCallSession(botUsername, pick.target);
+      }, 60 * 1000);
+      setHumanBotActivity(botUsername, 45000);
+      return;
+    }
+  }
   await humanBotMaybeRefreshIdentity(botUsername, pick.kind === 'group' ? `${profile.nickname} group chat avatar` : `${profile.nickname} private chat avatar`);
   humanBotMaybeRefreshProfile(botUsername);
   const seed = humanBotBuildProactiveSeed(botUsername, pick);
@@ -1797,6 +1847,97 @@ function scheduleHumanBotProactiveLoop() {
     }
     scheduleHumanBotProactiveLoop();
   }, delay);
+}
+
+function humanBotCallSessionKey(botUsername, username) {
+  return `${botUsername}|${username}`;
+}
+
+function humanBotGetCallSession(botUsername, username) {
+  return humanBotCallSessions.get(humanBotCallSessionKey(botUsername, username)) || null;
+}
+
+function humanBotSetCallSession(botUsername, username, data) {
+  const value = { bot: botUsername, user: username, active: true, startedAt: Date.now(), ...data };
+  humanBotCallSessions.set(humanBotCallSessionKey(botUsername, username), value);
+  return value;
+}
+
+function humanBotClearCallSession(botUsername, username) {
+  humanBotCallSessions.delete(humanBotCallSessionKey(botUsername, username));
+}
+
+function humanBotIsInCallWith(room, username, botUsername) {
+  const session = humanBotGetCallSession(botUsername, username);
+  if (!session || !session.active) return false;
+  if (room && session.room && session.room !== room) return false;
+  if (Date.now() - Number(session.acceptedAt || session.startedAt || 0) > 90 * 60 * 1000) {
+    humanBotClearCallSession(botUsername, username);
+    return false;
+  }
+  return true;
+}
+
+function humanBotCallRoom(data, botUsername) {
+  if (data?.room) return String(data.room);
+  if (data?.groupId) return `group:${data.groupId}`;
+  return ['private', botUsername, data?.from].sort().join(':');
+}
+
+function humanBotShouldAcceptCall(data, botUsername) {
+  const room = humanBotCallRoom(data, botUsername);
+  const mem = getHumanBotMemory(room, botUsername);
+  const recentActive = Number(mem.lastHumanReplyAt || 0) > Date.now() - (20 * 60 * 1000);
+  const isGroup = room.startsWith('group:');
+  if (isGroup) return Math.random() < (recentActive ? 0.5 : 0.28);
+  return Math.random() < (recentActive ? 0.82 : 0.58);
+}
+
+function humanBotEmitCallToUser(username, event, payload) {
+  const sid = userSockets.get(username);
+  if (!sid) return false;
+  io.to(sid).emit(event, payload);
+  return true;
+}
+
+function humanBotMaybeChatDuringCall(botUsername, username, room, seed = '') {
+  const texts = botUsername === HUMAN_BOT_MALE_USERNAME
+    ? ['я в звонке без микро, если что пиши сюда', 'я зашёл без микрофона, но читать буду', 'я тут, просто без голоса. можешь писать']
+    : ['я в звонке без микро, если что пиши сюда', 'я зашла без микрофона, но читать буду', 'я тут, просто без голоса. можешь писать'];
+  const msg = cleanHumanBotText(seed || texts[Math.floor(Math.random() * texts.length)], botUsername);
+  const sent = emitHumanBotMessage(room, botUsername, msg, 'text');
+  rememberHumanBot(room, { role: 'bot', user: botUsername, text: sent.text }, botUsername);
+}
+
+function humanBotGroupCallKey(botUsername, room) {
+  return `${botUsername}|${room}`;
+}
+
+function humanBotSetGroupCallSession(botUsername, room, data = {}) {
+  const value = { bot: botUsername, room, active: true, startedAt: Date.now(), participants: [], ...data };
+  humanBotGroupCallSessions.set(humanBotGroupCallKey(botUsername, room), value);
+  return value;
+}
+
+function humanBotGetGroupCallSession(botUsername, room) {
+  return humanBotGroupCallSessions.get(humanBotGroupCallKey(botUsername, room)) || null;
+}
+
+function humanBotIsInGroupCall(room, botUsername) {
+  const session = humanBotGetGroupCallSession(botUsername, room);
+  return !!(session && session.active);
+}
+
+function humanBotClearGroupCallSession(botUsername, room) {
+  humanBotGroupCallSessions.delete(humanBotGroupCallKey(botUsername, room));
+}
+
+function emitToGroupMembers(groupId, event, payload) {
+  for (const [uname, udata] of users.entries()) {
+    if (!(udata.groups || []).some(g => g.id === groupId)) continue;
+    const sid = userSockets.get(uname);
+    if (sid) io.to(sid).emit(event, payload);
+  }
 }
 
 // в”Ђв”Ђ EMAIL С‡РµСЂРµР· Resend (resend.com) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -1991,9 +2132,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 app.use(express.static('public'));
 
 // в”Ђв”Ђ РџСЂРѕРєСЃРё РґР»СЏ СЃРєР°С‡РёРІР°РЅРёСЏ С„Р°Р№Р»РѕРІ СЃ B2 в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-// Стримим файл через сервер — браузер не идёт на B2 напрямую (нет CORS проблем)
-app.get('/api/dl', async (req, res) => {
-  const rawF = req.query.f;
+async function handleDownloadProxy(req, res, rawF) {
   if (!rawF) return res.status(400).send('Missing file param');
 
   // Поддерживаем и короткий путь "photos/file.jpg" и полный B2 URL
@@ -2053,7 +2192,12 @@ app.get('/api/dl', async (req, res) => {
       res.status(500).send('Не удалось получить файл');
     }
   }
-});
+}
+
+app.get('/api/dl/:f', async (req, res) => handleDownloadProxy(req, res, req.params.f));
+
+// Стримим файл через сервер — браузер не идёт на B2 напрямую (нет CORS проблем)
+app.get('/api/dl', async (req, res) => handleDownloadProxy(req, res, req.query.f));
 
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
@@ -6940,6 +7084,8 @@ function isHumanBotActive(botUsername) {
 const peerIdRegistry = new Map(); // username -> peerId
 const missedCalls    = new Map(); // username -> [{ from, isVid, time }]
 const activeCalls    = new Map(); // callee_username -> { from, isVid, startTime }
+const humanBotCallSessions = new Map(); // bot|user -> { bot, user, room, startedAt, acceptedAt, active, direction }
+const humanBotGroupCallSessions = new Map(); // bot|room -> { bot, room, groupId, active, participants: [] }
 
 // Clean stale active calls every 30s
 setInterval(() => {
@@ -7245,6 +7391,54 @@ io.on('connection', (socket) => {
     }
   }
   socket.on('call-invite', data => {
+    if (isHumanBotUsername(data?.to)) {
+      const botUsername = data.to;
+      const caller = data.from;
+      const room = humanBotCallRoom(data, botUsername);
+      if (data?.groupId) {
+        const accept = humanBotShouldAcceptCall(data, botUsername);
+        const delay = 2500 + Math.floor(Math.random() * 7000);
+        setHumanBotActivity(botUsername, delay + 45000);
+        setTimeout(() => {
+          if (!accept) {
+            const callerSid = userSockets.get(caller);
+            if (callerSid) io.to(callerSid).emit('call-decline', { from: botUsername, groupId: data.groupId });
+            return;
+          }
+          humanBotSetGroupCallSession(botUsername, room, {
+            groupId: data.groupId,
+            acceptedAt: Date.now(),
+            participants: Array.isArray(data.group?.members) ? data.group.members.slice() : [caller],
+          });
+          emitToGroupMembers(data.groupId, 'call-bot-group-joined', { room, groupId: data.groupId, username: botUsername });
+          setTimeout(() => humanBotMaybeChatDuringCall(botUsername, caller, room), 1200 + Math.floor(Math.random() * 2200));
+        }, delay);
+        return;
+      }
+      const session = humanBotGetCallSession(botUsername, caller);
+      if (session?.active) {
+        humanBotEmitCallToUser(caller, 'call-bot-accepted', { from: botUsername, room, isVid: false });
+        return;
+      }
+      const accept = humanBotShouldAcceptCall(data, botUsername);
+      const delay = 2500 + Math.floor(Math.random() * 7000);
+      setHumanBotActivity(botUsername, delay + 45000);
+      setTimeout(() => {
+        if (!accept) {
+          if (Math.random() < 0.7) humanBotEmitCallToUser(caller, 'call-decline', { from: botUsername });
+          return;
+        }
+        humanBotSetCallSession(botUsername, caller, {
+          room,
+          acceptedAt: Date.now(),
+          direction: 'incoming',
+          active: true,
+        });
+        humanBotEmitCallToUser(caller, 'call-bot-accepted', { from: botUsername, room, isVid: false });
+        setTimeout(() => humanBotMaybeChatDuringCall(botUsername, caller, room), 1200 + Math.floor(Math.random() * 2200));
+      }, delay);
+      return;
+    }
     if (!data.resumed) {
       // Групповые звонки — пропускаем проверку занятости
       if (!data.groupId) {
@@ -7263,6 +7457,22 @@ io.on('connection', (socket) => {
   socket.on('call-offer',        data => relayTo('call-offer',        data));
   socket.on('call-answer',       data => relayTo('call-answer',       data));
   socket.on('call-ice',          data => relayTo('call-ice',          data));
+  socket.on('call-bot-accept', ({ to, from, room }) => {
+    if (!isHumanBotUsername(to) || !from) return;
+    const resolvedRoom = room || humanBotCallRoom({ from, room }, to);
+    humanBotSetCallSession(to, from, {
+      room: resolvedRoom,
+      acceptedAt: Date.now(),
+      direction: 'outgoing',
+      active: true,
+    });
+    setHumanBotActivity(to, 60000);
+    setTimeout(() => humanBotMaybeChatDuringCall(to, from, resolvedRoom), 800 + Math.floor(Math.random() * 2000));
+  });
+  socket.on('call-bot-decline', ({ to, from }) => {
+    if (!isHumanBotUsername(to) || !from) return;
+    humanBotClearCallSession(to, from);
+  });
   // в”Ђв”Ђ Р—Р°РїРёСЃСЊ Рѕ Р·РІРѕРЅРєРµ в†’ РІ РёСЃС‚РѕСЂРёСЋ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   socket.on('save-call-record', async ({ room, from, to, isVid, isCaller, connected, dur, missed, timestamp }) => {
     if (!room || !from) return;
@@ -7339,6 +7549,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('call-end', data => {
+    if (isHumanBotUsername(data?.to) && data?.groupId) {
+      const room = `group:${data.groupId}`;
+      humanBotClearGroupCallSession(data.to, room);
+      emitToGroupMembers(data.groupId, 'call-bot-group-left', { room, groupId: data.groupId, username: data.to });
+      return;
+    }
+    if (isHumanBotUsername(data?.to) || isHumanBotUsername(data?.from)) {
+      const botUsername = isHumanBotUsername(data?.to) ? data.to : data.from;
+      const other = botUsername === data?.to ? data.from : data.to;
+      if (other) humanBotClearCallSession(botUsername, other);
+      if (other && botUsername === data?.from) humanBotEmitCallToUser(other, 'call-bot-ended', { from: botUsername });
+      return;
+    }
     // Очищаем активный звонок
     activeCalls.delete(data.to);
     activeCalls.delete(data.from);
@@ -7349,6 +7572,16 @@ io.on('connection', (socket) => {
     if (fromId) io.to(fromId).emit('call-end', data);
   });
   socket.on('call-decline', data => {
+    if (isHumanBotUsername(data?.to) && data?.groupId) {
+      const room = `group:${data.groupId}`;
+      humanBotClearGroupCallSession(data.to, room);
+      return;
+    }
+    if (isHumanBotUsername(data?.to) || isHumanBotUsername(data?.from)) {
+      const botUsername = isHumanBotUsername(data?.to) ? data.to : data.from;
+      const other = botUsername === data?.to ? data.from : data.to;
+      if (other) humanBotClearCallSession(botUsername, other);
+    }
     activeCalls.delete(data.to);
     activeCalls.delete(data.from);
     // Для группового звонка: шлём только звонящему (не обратно отклонившему)
