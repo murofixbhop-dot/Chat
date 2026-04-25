@@ -264,6 +264,15 @@
             <i class="ti ti-player-play"></i> Прослушать
           </button>
         </div>
+        <div class="notif-pref-row">
+          <label class="notif-pref-check">
+            <input type="checkbox" id="notifBrowserToggle" onchange="saveNotificationPrefs()">
+            <span>Показывать браузерные уведомления</span>
+          </label>
+          <button class="btn-secondary" style="font-size:12px;padding:8px 12px" onclick="hideAllToasts()">
+            <i class="ti ti-eye-off"></i> Скрыть
+          </button>
+        </div>
       </div>
     </div>
 
