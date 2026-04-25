@@ -5715,6 +5715,8 @@ let _groupBotTargets = [];
 let _botSpeechRec = null;
 let _botSpeechRestartTimer = null;
 let _lastBotSpeech = { text: '', at: 0 };
+let _botSpeechDebounceTimer = null;
+let _botSpeechDraft = '';
 let groupPeers   = new Map(); // member -> RTCPeerConnection
 
 // DOM
@@ -6402,12 +6404,37 @@ function _groupCallHasTargets() {
   return groupPeers.size > 0 || _groupMembers.length > 0 || _groupBotMembers.size > 0 || _groupBotTargets.length > 0;
 }
 
-function _emitBotHeardTranscript(text) {
-  const clean = String(text || '').trim().replace(/\s+/g, ' ');
+function _normalizeBotSpeechTranscript(text) {
+  return String(text || '')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/\b(эм|кхм|ээ+|мм+)\b/gi, ' ')
+    .replace(/\b(\S+)(?:\s+\1){2,}\b/gi, '$1')
+    .replace(/\s+([?!.,:;])/g, '$1')
+    .replace(/[ ]{2,}/g, ' ')
+    .trim();
+}
+
+function _emitBotHeardTranscript(text, final = true) {
+  const clean = _normalizeBotSpeechTranscript(text);
   if (clean.length < 2) return;
-  if (_lastBotSpeech.text === clean && (Date.now() - _lastBotSpeech.at) < 8000) return;
+  if (_lastBotSpeech.text === clean && (Date.now() - _lastBotSpeech.at) < 5000) return;
   _lastBotSpeech = { text: clean, at: Date.now() };
-  socket.emit('human-bot-heard', { room: _callRoom || currentRoom, text: clean });
+  socket.emit('human-bot-heard', { room: _callRoom || currentRoom, text: clean, final: !!final });
+}
+
+function _queueBotHeardTranscript(text, final = false) {
+  const clean = _normalizeBotSpeechTranscript(text);
+  if (clean.length < (final ? 2 : 5)) return;
+  _botSpeechDraft = clean;
+  if (_botSpeechDebounceTimer) {
+    clearTimeout(_botSpeechDebounceTimer);
+    _botSpeechDebounceTimer = null;
+  }
+  const waitMs = final ? 0 : (clean.length < 18 ? 220 : 420);
+  _botSpeechDebounceTimer = setTimeout(() => {
+    if (!final && _botSpeechDraft !== clean) return;
+    _emitBotHeardTranscript(clean, final);
+  }, waitMs);
 }
 
 function stopBotSpeechRecognition() {
@@ -6415,6 +6442,11 @@ function stopBotSpeechRecognition() {
     clearTimeout(_botSpeechRestartTimer);
     _botSpeechRestartTimer = null;
   }
+  if (_botSpeechDebounceTimer) {
+    clearTimeout(_botSpeechDebounceTimer);
+    _botSpeechDebounceTimer = null;
+  }
+  _botSpeechDraft = '';
   if (_botSpeechRec) {
     try { _botSpeechRec.onend = null; } catch {}
     try { _botSpeechRec.stop(); } catch {}
@@ -6430,19 +6462,21 @@ function startBotSpeechRecognition() {
     const rec = new SR();
     rec.lang = 'ru-RU';
     rec.continuous = true;
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
+    rec.interimResults = true;
+    rec.maxAlternatives = 3;
     rec.onresult = (ev) => {
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results[i];
-        if (r.isFinal) _emitBotHeardTranscript(r[0]?.transcript || '');
+        const best = r[0]?.transcript || '';
+        if (r.isFinal) _queueBotHeardTranscript(best, true);
+        else _queueBotHeardTranscript(best, false);
       }
     };
     rec.onerror = () => {};
     rec.onend = () => {
       _botSpeechRec = null;
       if (_hasBotCallContext()) {
-        _botSpeechRestartTimer = setTimeout(() => startBotSpeechRecognition(), 1200);
+        _botSpeechRestartTimer = setTimeout(() => startBotSpeechRecognition(), 250);
       }
     };
     rec.start();
