@@ -1452,7 +1452,7 @@ socket.on('message', msg => {
         // Push-уведомление если вкладка скрыта
         if (document.hidden) {
           const senderNick = userNicknames?.[msg.user] || msg.user || '';
-          const preview = msg.text ? msg.text.slice(0, 60) : '📎 Вложение';
+          const preview = msg.text ? plainMsgText(msg.text).slice(0, 60) : '📎 Вложение';
           showPushNotification(senderNick, preview, room);
         }
       }
@@ -1486,7 +1486,7 @@ socket.on('message', msg => {
         const grpName = grp?.name || 'Группа';
         const senderNick = userNicknames?.[msg.user] || msg.user || '';
         const preview = msg.text
-          ? (senderNick ? `${senderNick}: ${msg.text.slice(0,60)}` : msg.text.slice(0,60))
+          ? (senderNick ? `${senderNick}: ${plainMsgText(msg.text).slice(0,60)}` : plainMsgText(msg.text).slice(0,60))
           : `${senderNick}: 📎 Вложение`;
         showPushNotification(grpName, preview, `group:${gid}`);
       }
@@ -1609,7 +1609,7 @@ function addMessage(msg) {
     const rt = msg.replyTo;
     const rNick = esc(userNicknames?.[rt.user] || rt.user || '?');
     const rText = rt.text
-      ? esc(rt.text.slice(0, 80))
+      ? esc(plainMsgText(rt.text).slice(0, 80))
       : (rt.type === 'audio' ? '🎤 Голосовое'
         : rt.type === 'video_circle' ? '📹 Видео'
         : '📎 Вложение');
@@ -1800,7 +1800,7 @@ function addMessage(msg) {
   }
   if (!_historyLoading && msg.user !== currentUser && document.visibilityState !== 'visible') {
     const nick = userNicknames[msg.user] || msg.user;
-    const txt  = msg.type === 'text' ? msg.text : (msg.type === 'audio' ? 'Голосовое сообщение' : 'Медиафайл');
+    const txt  = msg.type === 'text' ? plainMsgText(msg.text) : (msg.type === 'audio' ? 'Голосовое сообщение' : 'Медиафайл');
     showPushNotification(nick, txt, 'msg-' + msg.user);
   }
 }
@@ -1818,6 +1818,19 @@ function esc(s) {
 }
 
 // Рендер текста сообщения: markdown + автоссылки
+function plainMsgText(s) {
+  return String(s || '')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1')
+    .replace(/\[([^\]]+)\]\{(https?:\/\/[^}\s]+)\}/g, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/(?<![_])__(?!_)(.+?)__(?![_])/g, '$1')
+    .replace(/(?<![_*])_(?!_)(.+?)_(?![_*])/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function renderMsgText(s) {
   let t = String(s)
     .replace(/&/g,'&amp;')
@@ -1830,6 +1843,8 @@ function renderMsgText(s) {
     .replace(/(?<![_*])_(?!_)(.+?)_(?![_*])/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code class="msg-code">$1</code>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+             '<a href="$2" target="_blank" rel="noopener" class="msg-link">$1</a>')
+    .replace(/\[([^\]]+)\]\{(https?:\/\/[^}\s]+)\}/g,
              '<a href="$2" target="_blank" rel="noopener" class="msg-link">$1</a>')
     .replace(/(^|[\s])(https?:\/\/[^\s<"]+)/g,
              '$1<a href="$2" target="_blank" rel="noopener" class="msg-link">$2</a>');
@@ -2111,13 +2126,15 @@ document.addEventListener('paste', (e) => {
   }
 });
 function handleSend() {
-  const text = msgInput.value.trim();
+  const visibleText = msgInput.value.trim();
+  const text = window._auraBuildFormattedInput ? window._auraBuildFormattedInput(msgInput.value) : visibleText;
 
   if (_editMsgId) {
     if (!text) { toast('Текст не может быть пустым', 'warning', 1600); return; }
     socket.emit('edit-message', { messageId: _editMsgId, text, room: _editRoom || currentRoom });
     cancelEdit();
     msgInput.value = '';
+    window._auraClearFormattedInput?.();
     autoGrow(msgInput);
     refreshSendBtn();
     return;
@@ -2130,6 +2147,7 @@ function handleSend() {
     cancelReply();
     socket.emit('message', { text, room: currentRoom, replyTo: replySnap });
     msgInput.value = '';
+    window._auraClearFormattedInput?.();
     autoGrow(msgInput);
   }
   if (selectedFiles.length) sendFiles();
@@ -2602,6 +2620,39 @@ let _editMsgId = null;
 let _editRoom = null;
 const _replyStore = new Map(); // id -> msg snapshot для ответа
 
+window._auraInputLinks = window._auraInputLinks || [];
+window._auraClearFormattedInput = function() {
+  window._auraInputLinks = [];
+};
+window._auraBuildFormattedInput = function(value) {
+  let out = String(value || '');
+  const ranges = [...(window._auraInputLinks || [])]
+    .filter(r => Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start)
+    .sort((a, b) => b.start - a.start);
+  for (const r of ranges) {
+    const label = out.slice(r.start, r.end);
+    if (!label || label !== r.text) continue;
+    out = out.slice(0, r.start) + `[${label}](${r.url})` + out.slice(r.end);
+  }
+  return out.trim();
+};
+window._auraSetFormattedInputFromText = function(ta, raw) {
+  const src = String(raw || '');
+  const links = [];
+  let visible = '';
+  let last = 0;
+  src.replace(/\[([^\]]+)\][({](https?:\/\/[^)}\s]+)[)}]/g, (m, label, url, idx) => {
+    visible += src.slice(last, idx) + label;
+    const start = visible.length - label.length;
+    links.push({ start, end: visible.length, text: label, url });
+    last = idx + m.length;
+    return m;
+  });
+  visible += src.slice(last);
+  window._auraInputLinks = links;
+  ta.value = visible;
+};
+
 function startReply(msg) {
   _replyMsg = msg;
   let bar = document.getElementById('replyBar');
@@ -2615,7 +2666,7 @@ function startReply(msg) {
   }
   const nick = userNicknames?.[msg.user] || msg.user;
   const prev = msg.text
-    ? msg.text.slice(0, 60)
+    ? plainMsgText(msg.text).slice(0, 60)
     : (msg.type === 'audio' ? '🎤 Голосовое' : msg.type === 'video_circle' ? '📹 Видео' : '📎 Вложение');
   bar.innerHTML = `
     <i class="ti ti-arrow-back-up" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
@@ -2638,6 +2689,7 @@ function cancelReply() {
 function cancelEdit() {
   _editMsgId = null;
   _editRoom = null;
+  window._auraClearFormattedInput?.();
   const bar = document.getElementById('editBar');
   if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
 }
@@ -2665,7 +2717,7 @@ function startMsgEdit(id) {
     if (inputRow) inputRow.parentElement.insertBefore(bar, inputRow);
     else document.querySelector('.input-zone')?.prepend(bar);
   }
-  const prev = text.slice(0, 60);
+  const prev = plainMsgText(text).slice(0, 60);
   bar.innerHTML = `
     <i class="ti ti-edit" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
     <div style="flex:1;min-width:0;overflow:hidden">
@@ -2676,7 +2728,8 @@ function startMsgEdit(id) {
   bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 14px;border-left:3px solid var(--accent);background:var(--surface2);';
   bar.style.display = 'flex';
 
-  msgInput.value = text;
+  if (window._auraSetFormattedInputFromText) window._auraSetFormattedInputFromText(msgInput, text);
+  else msgInput.value = text;
   autoGrow(msgInput);
   msgInput.focus();
   refreshSendBtn();
@@ -2838,14 +2891,14 @@ socket.on('message-deleted', ({ messageId }) => {
   }
 });
 
-function applyMessageEdit(messageId, text) {
+function applyMessageEdit(messageId, text, opts = {}) {
   const row = document.querySelector(`[data-id="${messageId}"]`);
   if (!row) return;
   const textEl = row.querySelector('.msg-text');
-  if (textEl) textEl.textContent = text;
+  if (textEl) textEl.innerHTML = renderMsgText(text);
 
   const meta = row.querySelector('.msg-meta');
-  if (meta) {
+  if (meta && !opts.live) {
     let ed = meta.querySelector('.msg-edited');
     if (!ed) {
       ed = document.createElement('span');
@@ -2860,13 +2913,13 @@ function applyMessageEdit(messageId, text) {
   const cached = _replyStore.get(String(messageId));
   if (cached) {
     cached.text = text;
-    cached.edited = true;
+    if (!opts.live) cached.edited = true;
     _replyStore.set(String(messageId), cached);
   }
 }
 
-socket.on('message-edited', ({ messageId, text }) => {
-  applyMessageEdit(messageId, text);
+socket.on('message-edited', ({ messageId, text, live }) => {
+  applyMessageEdit(messageId, text, { live });
 });
 
 
@@ -5581,6 +5634,7 @@ let screenStream = null;
 let _partnerSharing = false; // партнёр тоже шарит экран
 let _groupCall   = false;   // true if in a group call
 let _groupMembers = [];      // members in group call
+let _callGroupName = null;
 let groupPeers   = new Map(); // member -> RTCPeerConnection
 
 // DOM
@@ -6105,6 +6159,7 @@ async function startCall(isVid) {
       _groupCall = true;
       _groupMembers = target.members;
       _callTarget = target.name;
+      _callGroupName = target.name;
       if (target.members.length === 0) { toast('В группе нет участников', 'warning'); _cleanup(); return; }
       // Create peer connections for each member
       _showGroupCallUI(target.name, target.members);
@@ -6512,6 +6567,7 @@ function _showGroupIncomingUI(from, isVid, group) {
   _inCall     = true;
   _groupCall  = true;
   _groupMembers = group.members.filter(m => m !== currentUser);
+  _callGroupName = group.name || 'Group';
 
   const fromNick = userNicknames[from] || from;
   setAvatar(callAva, `group:${group.id}`, group.avatar);
@@ -6534,7 +6590,7 @@ async function answerGroupCall() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints(), video: _callIsVid ? { facingMode:'user' } : false });
     localStream = stream;
-    _showGroupCallUI(_callTarget, _groupMembers);
+    _showGroupCallUI(_callGroupName || _callTarget, _groupMembers);
     // Connect back to each group member
     for (const member of _groupMembers) {
       await _initiateGroupPeer(member);
@@ -6561,7 +6617,7 @@ function _showOutgoingUI(target, isVid) {
 }
 
 // в”Ђв”Ђ INCOMING в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-socket.on('call-invite', ({ from, isVid, resumed, groupId }) => {
+socket.on('call-invite', async ({ from, isVid, resumed, groupId, group }) => {
   // Уведомление если вкладка скрыта
   if (document.hidden) {
     showPushNotification(
@@ -6589,7 +6645,11 @@ socket.on('call-invite', ({ from, isVid, resumed, groupId }) => {
   // Если звонок групповой — показываем групповой UI
   const incomingGroupId = groupId;
   if (incomingGroupId) {
-    const grp = groups.find(g => g.id === incomingGroupId);
+    let grp = group || groups.find(g => g.id === incomingGroupId);
+    if (!grp) {
+      await loadUserData();
+      grp = groups.find(g => g.id === incomingGroupId);
+    }
     if (grp) { _showGroupIncomingUI(from, isVid, grp); return; }
   }
 
@@ -6707,7 +6767,7 @@ async function _startCallAsCaller_noVideo() {
 function declineCall() {
   stopRing();
   // Для группового звонка: groupId передаём чтобы звонящий знал — это decline от одного участника
-  const gid = _groupCall ? (currentRoom?.replace('group:','') || null) : null;
+  const gid = _groupCall ? (currentRoom?.replace('group:','') || _callRoom?.replace('group:', '') || null) : null;
   socket.emit('call-decline', { to: _callTarget, from: currentUser, groupId: gid });
   _cleanup();
 }
@@ -7346,13 +7406,26 @@ function _setupScreenBtnLongPress(win) {
         // Show quality picker while sharing
         showScreenQualityPicker(async (opts) => {
           if (!opts) return;
-          // Restart with new quality
+          _lastScreenShareOpts = opts;
+          const q = _screenQualityProfile(opts);
           if (screenStream) {
+            _screenShareRestarting = true;
             screenStream.getTracks().forEach(t => t.stop());
+            _screenShareRestarting = false;
             screenStream = null;
           }
           _screenSharing = false;
-          setTimeout(() => switchToScreenShare(), 100);
+          try {
+            const nextStream = await navigator.mediaDevices.getDisplayMedia({
+              video: { width:{ideal:q.w}, height:{ideal:q.h}, frameRate:{ideal:q.fps,max:q.fps} },
+              audio: true
+            });
+            await _applyScreenShare(nextStream);
+          } catch(e) {
+            if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') {
+              toast('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРјРµРЅРёС‚СЊ РєР°С‡РµСЃС‚РІРѕ: ' + e.message, 'error');
+            }
+          }
         });
       }
     }, 500);
@@ -7460,13 +7533,35 @@ function toggleMuteWin(btn) {
 // в”Ђв”Ђ GROUP SCREEN SHARE в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 let _groupScreenSharing = false;
 let _groupScreenStream  = null;
+let _screenShareRestarting = false;
+let _lastScreenShareOpts = { res: '720p', fps: '15' };
+
+function _screenQualityProfile(opts = _lastScreenShareOpts) {
+  const resMap = { '1080p':{w:1920,h:1080,br:2500000}, '720p':{w:1280,h:720,br:1400000}, '480p':{w:854,h:480,br:700000} };
+  const rz = resMap[opts.res] || resMap['720p'];
+  const fps = Math.max(10, Math.min(30, parseInt(opts.fps, 10) || 15));
+  return { ...rz, fps, br: Math.round(rz.br * (fps / 15)) };
+}
+
+async function _applyScreenSenderQuality(sender, opts) {
+  if (!sender?.setParameters) return;
+  try {
+    const p = sender.getParameters() || {};
+    if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+    p.encodings[0].maxBitrate = _screenQualityProfile(opts).br;
+    p.encodings[0].maxFramerate = _screenQualityProfile(opts).fps;
+    await sender.setParameters(p);
+  } catch {}
+}
 
 async function toggleGroupScreenShare() {
   if (!_groupCall) return;
 
   if (_groupScreenSharing) {
     // Остановить демку
+    _screenShareRestarting = true;
     _groupScreenStream?.getTracks().forEach(t => t.stop());
+    _screenShareRestarting = false;
     _groupScreenStream = null;
     _groupScreenSharing = false;
 
@@ -7526,14 +7621,14 @@ async function toggleGroupScreenShare() {
   const opts = await new Promise(res => showScreenQualityPicker(res));
   if (!opts) return;
 
-  const resMap = { '1080p':{w:1920,h:1080}, '720p':{w:1280,h:720}, '480p':{w:854,h:480} };
-  const rz = resMap[opts.res] || resMap['720p'];
-  const fps = parseInt(opts.fps) || 30;
+  _lastScreenShareOpts = opts;
+  const rz = _screenQualityProfile(opts);
+  const fps = rz.fps;
 
   let captured = null;
   try {
     captured = await navigator.mediaDevices.getDisplayMedia({
-      video: { width:{ideal:rz.w,max:rz.w}, height:{ideal:rz.h,max:rz.h}, frameRate:{ideal:fps,max:fps} },
+      video: { width:{ideal:rz.w}, height:{ideal:rz.h}, frameRate:{ideal:fps,max:fps} },
       audio: true
     });
   } catch(e) {
@@ -7552,6 +7647,7 @@ async function toggleGroupScreenShare() {
     const sender = pc.getSenders().find(s => s.track?.kind === 'video');
     if (sender) {
       peerPromises.push(sender.replaceTrack(vid).catch(() => {}));
+      peerPromises.push(_applyScreenSenderQuality(sender, opts));
     } else {
       // Аудио-звонок — добавляем новый трек + рenegotiate
       pc.addTrack(vid, captured);
@@ -7588,7 +7684,7 @@ async function toggleGroupScreenShare() {
   if (btn) { btn.style.background = 'var(--accent)'; btn.querySelector('i').className = 'ti ti-screen-share-off'; }
 
   // Когда пользователь нажал "Остановить" в браузере
-  vid.onended = () => toggleGroupScreenShare();
+  vid.onended = () => { if (!_screenShareRestarting) toggleGroupScreenShare(); };
 
   toast('Демонстрация экрана начата', 'info', 1500);
 }
@@ -7758,13 +7854,15 @@ async function _applyScreenShare(capturedStream) {
     // VIDEO CALL: use replaceTrack вЂ” seamless, no renegotiation needed, ontrack fires on receiver
     try {
       await existingSender.replaceTrack(vid);
+      await _applyScreenSenderQuality(existingSender, _lastScreenShareOpts);
       console.log('[SS] replaceTrack done вЂ” receiver gets new video');
       // Signal to receiver via custom socket event so they know to show screen UI
       socket.emit('screen-share-started', { to: _callTarget, from: currentUser });
     } catch(e) { console.error('[SS] replaceTrack error:', e); return; }
   } else {
     // AUDIO CALL: add new video track then renegotiate
-    rtcPeer.addTrack(vid, screenStream);
+    const newSender = rtcPeer.addTrack(vid, screenStream);
+    await _applyScreenSenderQuality(newSender, _lastScreenShareOpts);
     console.log('[SS] addTrack done, senders:', rtcPeer.getSenders().length);
 
     // Wait for stable state
@@ -7817,7 +7915,7 @@ async function _applyScreenShare(capturedStream) {
   if (ac) { ac.style.display = 'none'; ac.style.pointerEvents = 'none'; }
   toast('Демонстрация экрана активна', 'success', 2500);
 
-  vid.onended = () => switchToScreenShare(); // user clicks "stop sharing" in browser
+  vid.onended = () => { if (!_screenShareRestarting) switchToScreenShare(); }; // user clicks "stop sharing" in browser
 }
 
 
@@ -7840,7 +7938,9 @@ async function switchToScreenShare() {
     return;
   }
   if (_screenSharing) {
+    _screenShareRestarting = true;
     screenStream?.getTracks().forEach(t => t.stop());
+    _screenShareRestarting = false;
     screenStream = null; _screenSharing = false;
     socket.emit('screen-share-stopped', { to: _callTarget, from: currentUser });
     document.querySelectorAll('.ss-toggle').forEach(b => {
@@ -7872,14 +7972,14 @@ async function switchToScreenShare() {
   let _selectedOpts = await new Promise(res => showScreenQualityPicker(res));
   if (!_selectedOpts) return; // пользователь отменил
 
-  const resMap = { '1080p':{w:1920,h:1080}, '720p':{w:1280,h:720}, '480p':{w:854,h:480} };
-  const rz = resMap[_selectedOpts.res] || resMap['720p'];
-  const fps = parseInt(_selectedOpts.fps) || 30;
+  _lastScreenShareOpts = _selectedOpts;
+  const rz = _screenQualityProfile(_selectedOpts);
+  const fps = rz.fps;
 
   let _capturedStream = null;
   try {
     _capturedStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width:{ideal:rz.w,max:rz.w}, height:{ideal:rz.h,max:rz.h}, frameRate:{ideal:fps,max:fps} },
+      video: { width:{ideal:rz.w}, height:{ideal:rz.h}, frameRate:{ideal:fps,max:fps} },
       audio: true
     });
   } catch(e) {
@@ -7894,7 +7994,7 @@ async function switchToScreenShare() {
 
 function showScreenQualityPicker(cb) {
   const ov = $('dialogOverlay'), box = $('dialogBox');
-  if (!ov || !box) { cb({ res:'720p', fps:'30' }); return; }
+  if (!ov || !box) { cb({ res:'720p', fps:'15' }); return; }
   box.innerHTML = `
     <div class="dlg-ico info"><i class="ti ti-screen-share"></i></div>
     <h3>Демонстрация экрана</h3>
@@ -7905,7 +8005,7 @@ function showScreenQualityPicker(cb) {
       </div>
       <div>
         <p class="lbl mb-6">FPS</p>
-        ${['60','30','15'].map((v,i) => `<label class="sq-opt${i===1?' sq-sel':''}"><input type="radio" name="sqf" value="${v}"${i===1?' checked':''}> ${v} FPS</label>`).join('')}
+        ${['30','15','10'].map((v,i) => `<label class="sq-opt${i===1?' sq-sel':''}"><input type="radio" name="sqf" value="${v}"${i===1?' checked':''}> ${v} FPS</label>`).join('')}
       </div>
     </div>
     <div class="dlg-btns">
@@ -7923,7 +8023,7 @@ function showScreenQualityPicker(cb) {
     r.closest('label').classList.add('sq-sel');
   }));
   const close = v => { ov.classList.remove('open'); cb(v); };
-  $('dlgOk').onclick = () => close({ res: box.querySelector('input[name=sqr]:checked')?.value||'720p', fps: box.querySelector('input[name=sqf]:checked')?.value||'30' });
+  $('dlgOk').onclick = () => close({ res: box.querySelector('input[name=sqr]:checked')?.value||'720p', fps: box.querySelector('input[name=sqf]:checked')?.value||'15' });
   $('dlgNo').onclick = () => close(null);
   ov.onclick = e => { if (e.target===ov) close(null); };
 }
@@ -7996,6 +8096,7 @@ function _cleanup() {
   _groupScreenSharing = false;
   _groupCall = false;
   _groupMembers = [];
+  _callGroupName = null;
   _gcwFacingMode = 'user'; // сбрасываем на фронтальную камеру
   _cwFacingMode  = 'user';
   document.querySelectorAll('.call-win-float').forEach(w => { if (w._timer) clearInterval(w._timer); w.remove(); });
@@ -8352,9 +8453,11 @@ function vcShowDuration(id) {
       if (!url) { removeBar(); ta.focus(); return; }
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
       const sel = ta.value.slice(ss, se) || url;
-      const md  = '[' + sel + '](' + url + ')';
-      ta.value = ta.value.slice(0, ss) + md + ta.value.slice(se);
-      ta.selectionStart = ta.selectionEnd = ss + md.length;
+      ta.value = ta.value.slice(0, ss) + sel + ta.value.slice(se);
+      window._auraInputLinks = (window._auraInputLinks || [])
+        .filter(r => r.end <= ss || r.start >= se);
+      window._auraInputLinks.push({ start: ss, end: ss + sel.length, text: sel, url });
+      ta.selectionStart = ta.selectionEnd = ss + sel.length;
       ta.dispatchEvent(new Event('input', {bubbles:true}));
       removeBar(); ta.focus();
     };
@@ -8396,6 +8499,18 @@ function vcShowDuration(id) {
       e.preventDefault();
       e.stopPropagation();
       makeBar(ta, e.clientX, e.clientY);
+    });
+
+    ta.addEventListener('input', () => {
+      const ranges = window._auraInputLinks || [];
+      if (!ranges.length) return;
+      const value = ta.value;
+      window._auraInputLinks = ranges.map(r => {
+        if (value.slice(r.start, r.end) === r.text) return r;
+        const near = value.indexOf(r.text, Math.max(0, r.start - 20));
+        const pos = near >= 0 ? near : value.indexOf(r.text);
+        return pos >= 0 ? { ...r, start: pos, end: pos + r.text.length } : null;
+      }).filter(Boolean);
     });
 
     // Touch: показываем после долгого нажатия/выделения
