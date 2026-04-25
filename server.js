@@ -7691,6 +7691,12 @@ io.on('connection', (socket) => {
       if (other && botUsername === data?.from) humanBotEmitCallToUser(other, 'call-bot-ended', { from: botUsername });
       return;
     }
+    if (data?.groupId) {
+      activeCalls.delete(data.to);
+      const toId = userSockets.get(data.to);
+      if (toId) io.to(toId).emit('call-end', data);
+      return;
+    }
     // Очищаем активный звонок
     activeCalls.delete(data.to);
     activeCalls.delete(data.from);
