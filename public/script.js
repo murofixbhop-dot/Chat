@@ -1378,13 +1378,6 @@ socket.on('online-users', users => {
 
 function _updateChatOnlineStatus() {
   if (!_chatPartner || !roomSub) return;
-  const botPresence = currentRoom ? humanBotPresence.get(currentRoom) : null;
-  const isHumanBot = !!HUMAN_BOT_LABELS[_chatPartner];
-  if (isHumanBot && botPresence?.username === _chatPartner && (botPresence.state === 'reading' || botPresence.state === 'typing')) {
-    const text = botPresence.state === 'reading' ? 'читает...' : 'печатает...';
-    roomSub.innerHTML = `<span id="chatOnlineStatus" style="color:#8b5cf6">${text}</span>`;
-    return;
-  }
   const isOnline = onlineUsersSet.has(_chatPartner);
   const color = isOnline ? '#22c55e' : 'var(--text3)';
   const text = isOnline ? 'онлайн' : 'не в сети';
@@ -1402,20 +1395,6 @@ function _updateChatOnlineStatus() {
 socket.on('human-bot-presence', ({ room, username, nickname, state }) => {
   if (!room) return;
   humanBotPresence.set(room, { username, nickname: nickname || HUMAN_BOT_LABELS[username] || username, state: state || 'online' });
-  if (room !== currentRoom || !roomSub) return;
-
-  if (room.startsWith('private:')) {
-    _updateChatOnlineStatus();
-    return;
-  }
-
-  if (state === 'reading' || state === 'typing') {
-    const name = nickname || HUMAN_BOT_LABELS[username] || username || 'бот';
-    roomSub.textContent = state === 'reading' ? `${name} читает...` : `${name} печатает...`;
-  } else if (room.startsWith('group:')) {
-    const g = groups.find(g => g.id === room.replace('group:', ''));
-    roomSub.textContent = g ? `${(g.members||[]).length} участников` : 'Группа';
-  }
 });
 
 socket.on('history', msgs => {
@@ -3238,6 +3217,25 @@ socket.on('avatar-updated', ({ username, avatar }) => {
   }
   const settingsAva = document.getElementById('settingsAvatar');
   if (settingsAva && username === currentUser) setAvatar(settingsAva, username, avatar);
+});
+
+socket.on('bot-profile-updated', ({ username, avatar, nickname }) => {
+  if (!username) return;
+  if (avatar !== undefined) _setAvatar(username, avatar, undefined);
+  if (nickname !== undefined) _setAvatar(username, undefined, nickname);
+  document.querySelectorAll(`.msg-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, userAvatars[username]));
+  document.querySelectorAll(`.ci-ava[data-user="${username}"]`).forEach(el => setAvatar(el, username, userAvatars[username]));
+  if (friendsList) friendsList._lastKey = '';
+  if (groupsList) groupsList._lastKey = '';
+  if (currentRoom?.startsWith('private:')) {
+    const other = currentRoom.split(':').slice(1).find(p => p !== currentUser);
+    if (other === username) {
+      if (roomName) roomName.textContent = userNicknames[username] || nickname || username;
+      if (roomAvatar) setAvatar(roomAvatar, username, userAvatars[username]);
+    }
+  }
+  renderFriends();
+  renderGroups();
 });
 
 // Fetch avatar + nickname — если уже есть в кэше (localStorage), не делаем запрос
