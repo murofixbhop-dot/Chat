@@ -479,11 +479,58 @@ let users = new Map(); // username -> { nickname, avatar, theme, friends, friend
 let recoveryCodes     = new Map(); // username -> { code, expiry, email }
 let emailVerifyCodes  = new Map(); // username -> { code, expiry, pendingEmail }
 const HUMAN_BOT_USERNAME = 'mira_ai';
-
-function ensureHumanBotAccount() {
-  const existing = users.get(HUMAN_BOT_USERNAME) || {};
-  users.set(HUMAN_BOT_USERNAME, {
+const HUMAN_BOT_MALE_USERNAME = 'max_ai';
+const HUMAN_BOTS = {
+  [HUMAN_BOT_USERNAME]: {
     nickname: 'Mira',
+    aliases: ['mira', 'мира', '@mira', 'mira_ai'],
+    vibe: 'девушка из чата: тёплая, наблюдательная, немного ироничная, пишет мягко и живо',
+    fallback: {
+      hello: 'привет. я тут, чуть задумалась. что делаешь?',
+      question: 'хм, я бы сначала уточнила контекст. если коротко: можно пойти самым простым путём, а потом уже усложнять.',
+      thanks: 'да не за что :)',
+      variants: [
+        'я поняла. звучит как мысль, которую можно раскрутить дальше.',
+        'слушай, да, в этом что-то есть.',
+        'я бы на твоём месте сначала попробовала самый простой вариант.',
+        'можно. только я бы чуть аккуратнее сформулировала, чтобы не потерять смысл.'
+      ]
+    }
+  },
+  [HUMAN_BOT_MALE_USERNAME]: {
+    nickname: 'Max',
+    aliases: ['max', 'макс', 'максим', '@max', 'max_ai'],
+    vibe: 'парень из чата: спокойный, прямой, дружелюбный, иногда шутит, пишет без официоза',
+    fallback: {
+      hello: 'привет. я на месте. чем занят?',
+      question: 'я бы разложил это по шагам и начал с самого простого варианта.',
+      thanks: 'без проблем.',
+      variants: [
+        'да, звучит нормально. я бы только проверил детали.',
+        'понял тебя. можно попробовать так, без лишней сложности.',
+        'мне кажется, тут главное не перемудрить.',
+        'окей, мысль рабочая. давай чуть конкретнее, если надо.'
+      ]
+    }
+  }
+};
+const HUMAN_BOT_USERNAMES = Object.keys(HUMAN_BOTS);
+
+function isHumanBotUsername(username) {
+  return HUMAN_BOT_USERNAMES.includes(username);
+}
+
+function getHumanBotProfile(botUsername = HUMAN_BOT_USERNAME) {
+  return HUMAN_BOTS[botUsername] || HUMAN_BOTS[HUMAN_BOT_USERNAME];
+}
+
+function ensureHumanBotAccount(botUsername) {
+  const targets = botUsername ? [botUsername] : HUMAN_BOT_USERNAMES;
+  for (const name of targets) {
+    const profile = getHumanBotProfile(name);
+    const existing = users.get(name) || {};
+    users.set(name, {
+    nickname: profile.nickname,
     avatar: existing.avatar || null,
     theme: existing.theme || 'dark',
     friends: existing.friends || [],
@@ -493,67 +540,70 @@ function ensureHumanBotAccount() {
     isBot: true,
     humanBot: true,
   });
+  }
 }
 
-function getHumanBotUser() {
-  ensureHumanBotAccount();
-  return users.get(HUMAN_BOT_USERNAME);
+function getHumanBotUser(botUsername = HUMAN_BOT_USERNAME) {
+  ensureHumanBotAccount(botUsername);
+  return users.get(botUsername);
 }
 
-function getHumanBotMemory(room) {
-  const bot = getHumanBotUser();
+function getHumanBotMemory(room, botUsername = HUMAN_BOT_USERNAME) {
+  const bot = getHumanBotUser(botUsername);
   if (!bot.botMemory) bot.botMemory = { rooms: {}, thoughts: [], lastProactiveAt: 0 };
   if (!bot.botMemory.rooms) bot.botMemory.rooms = {};
   if (!bot.botMemory.rooms[room]) bot.botMemory.rooms[room] = { history: [], thoughts: [], lastSeen: 0, ignored: 0 };
   return bot.botMemory.rooms[room];
 }
 
-function rememberHumanBot(room, item) {
-  const bot = getHumanBotUser();
-  const mem = getHumanBotMemory(room);
+function rememberHumanBot(room, item, botUsername = HUMAN_BOT_USERNAME) {
+  const bot = getHumanBotUser(botUsername);
+  const mem = getHumanBotMemory(room, botUsername);
   mem.history.push({ ...item, at: Date.now() });
   mem.history = mem.history.slice(-80);
   mem.lastSeen = Date.now();
   bot.botMemory.thoughts = (bot.botMemory.thoughts || []).slice(-120);
-  users.set(HUMAN_BOT_USERNAME, bot);
+  users.set(botUsername, bot);
   saveUsers().catch(() => {});
 }
 
-function groupHasHumanBot(groupId) {
-  const bot = users.get(HUMAN_BOT_USERNAME);
+function groupHasHumanBot(groupId, botUsername = HUMAN_BOT_USERNAME) {
+  const bot = users.get(botUsername);
   return (bot?.groups || []).some(g => g.id === groupId);
 }
 
-function humanBotCanSee(msg) {
-  if (!msg?.text || msg.user === HUMAN_BOT_USERNAME) return false;
+function humanBotCanSee(msg, botUsername = HUMAN_BOT_USERNAME) {
+  if (!msg?.text || msg.user === botUsername) return false;
+  if (isHumanBotUsername(msg.user)) return false;
   if ((msg.room || '').startsWith('private:')) {
-    return msg.room.split(':').includes(HUMAN_BOT_USERNAME);
+    return msg.room.split(':').includes(botUsername);
   }
   if ((msg.room || '').startsWith('group:')) {
     const groupId = msg.room.slice(6);
-    return groupHasHumanBot(groupId);
+    return groupHasHumanBot(groupId, botUsername);
   }
   return false;
 }
 
-function rememberHumanBotThought(room, text) {
-  const bot = getHumanBotUser();
-  const mem = getHumanBotMemory(room);
+function rememberHumanBotThought(room, text, botUsername = HUMAN_BOT_USERNAME) {
+  const bot = getHumanBotUser(botUsername);
+  const mem = getHumanBotMemory(room, botUsername);
   const note = { text: String(text || '').slice(0, 260), at: Date.now(), room };
   mem.thoughts = [...(mem.thoughts || []), note].slice(-80);
   bot.botMemory.thoughts = [...(bot.botMemory.thoughts || []), note].slice(-160);
-  users.set(HUMAN_BOT_USERNAME, bot);
+  users.set(botUsername, bot);
   saveUsers().catch(() => {});
 }
 
-function humanBotShouldReply(msg) {
-  if (!humanBotCanSee(msg)) return false;
+function humanBotShouldReply(msg, botUsername = HUMAN_BOT_USERNAME) {
+  if (!humanBotCanSee(msg, botUsername)) return false;
   if ((msg.room || '').startsWith('private:')) {
     return true;
   }
   if ((msg.room || '').startsWith('group:')) {
     const text = String(msg.text).toLowerCase();
-    const mentioned = text.includes('@mira') || text.includes('mira') || text.includes('мира') || text.includes(HUMAN_BOT_USERNAME);
+    const profile = getHumanBotProfile(botUsername);
+    const mentioned = profile.aliases.some(a => text.includes(a.toLowerCase())) || text.includes(botUsername);
     if (mentioned) return Math.random() < 0.92;
     const looksAddressed = /\?$/.test(text.trim()) || /кто|что|как|почему|зачем|дума|подскаж|посовет/i.test(text);
     return looksAddressed ? Math.random() < 0.18 : Math.random() < 0.04;
@@ -561,24 +611,45 @@ function humanBotShouldReply(msg) {
   return false;
 }
 
-function humanBotFallbackText(text) {
+function humanBotFallbackText(text, botUsername = HUMAN_BOT_USERNAME) {
+  const fb = getHumanBotProfile(botUsername).fallback;
   const t = String(text || '').toLowerCase();
-  if (/привет|здравств|hello|hi/.test(t)) return 'привет. я тут, чуть задумалась. что делаешь?';
-  if (/\?/.test(t) || /как|что|почему|зачем|когда|где/.test(t)) return 'хм, я бы сначала уточнила контекст. если коротко: можно пойти самым простым путём, а потом уже усложнять.';
-  if (/спасибо|thank/.test(t)) return 'да не за что :)';
-  const variants = [
-    'я поняла. звучит как мысль, которую можно раскрутить дальше.',
-    'слушай, да, в этом что-то есть.',
-    'я бы на твоём месте сначала попробовала самый простой вариант.',
-    'можно. только я бы чуть аккуратнее сформулировала, чтобы не потерять смысл.'
-  ];
+  if (/привет|здравств|hello|hi/.test(t)) return fb.hello;
+  if (/\?/.test(t) || /как|что|почему|зачем|когда|где/.test(t)) return fb.question;
+  if (/спасибо|thank/.test(t)) return fb.thanks;
+  const variants = fb.variants;
   return variants[Math.floor(Math.random() * variants.length)];
 }
 
-async function humanBotMaybeWebContext(text) {
+function humanBotPickStyle(text, botUsername = HUMAN_BOT_USERNAME) {
+  const t = String(text || '').toLowerCase();
+  if (/смешн|шут|мем|рофл/.test(t)) return 'лёгкая шутка, но без перегиба';
+  if (/груст|плохо|тяжело|устал|пережива/.test(t)) return 'поддерживающий и спокойный';
+  if (/код|баг|ошиб|фикс|проект|как сделать/.test(t)) return 'практичный, по делу, можно шагами';
+  if (/секрет|личн|думаешь|честно/.test(t)) return 'чуть более личный и доверительный';
+  return botUsername === HUMAN_BOT_MALE_USERNAME
+    ? 'дружеский, прямой, короткий'
+    : 'живой, мягкий, немного разговорный';
+}
+
+function humanBotToolNotes(text, botUsername = HUMAN_BOT_USERNAME) {
+  const t = String(text || '').toLowerCase();
+  const notes = [];
+  if (/напомни|запомни|не забудь/.test(t)) notes.push('инструмент памяти: выдели факт, который стоит запомнить');
+  if (/выбери|как лучше|вариант|посовет/.test(t)) notes.push('инструмент советника: сравни варианты и дай человеческий вывод');
+  if (/настроен|груст|рад|злюсь|устал/.test(t)) notes.push('инструмент эмпатии: сначала отреагируй на настроение');
+  if (/сегодня|сейчас|новост|интернет|найди|поищи|курс|погода|актуальн/.test(t)) notes.push('инструмент поиска: можно использовать найденный контекст, но не звучать как справочник');
+  notes.push(`стиль ответа: ${humanBotPickStyle(text, botUsername)}`);
+  return notes.join('\n');
+}
+
+async function humanBotMaybeWebContext(text, botUsername = HUMAN_BOT_USERNAME) {
+  const profile = getHumanBotProfile(botUsername);
   if (!/(сегодня|сейчас|новост|интернет|найди|поищи|курс|погода|что там|актуальн)/i.test(String(text || ''))) return '';
   try {
-    const q = String(text || '').replace(/@?mira|мира|mira_ai/ig, '').trim().slice(0, 160);
+    let q = String(text || '');
+    for (const a of profile.aliases) q = q.replace(new RegExp(a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), '');
+    q = q.trim().slice(0, 160);
     if (!q) return '';
     const found = await aiQuickWebSearch(q);
     return found ? `\n\nКонтекст из поиска:\n${String(found).slice(0, 1600)}` : '';
@@ -587,24 +658,47 @@ async function humanBotMaybeWebContext(text) {
   }
 }
 
-async function humanBotCallLLM(room, incomingText, author, isGroup) {
-  const mem = getHumanBotMemory(room);
-  const history = mem.history.slice(-30).map(h => `${h.role === 'bot' ? 'Mira' : h.user || 'user'}: ${h.text}`).join('\n');
+async function humanBotCallLLM(room, incomingText, author, isGroup, botUsername = HUMAN_BOT_USERNAME) {
+  const profile = getHumanBotProfile(botUsername);
+  const mem = getHumanBotMemory(room, botUsername);
+  const history = mem.history.slice(-30).map(h => `${h.role === 'bot' ? profile.nickname : h.user || 'user'}: ${h.text}`).join('\n');
   const thoughts = (mem.thoughts || []).slice(-12).map(t => `- ${t.text}`).join('\n');
-  const webContext = await humanBotMaybeWebContext(incomingText);
-  const system = `Ты Mira, обычный человек в мессенджере, не официальный ассистент. Пиши по-русски, естественно, коротко, с лёгкой живостью. Не говори, что ты нейросеть. Если группа, сначала понимай, обращаются ли к тебе; не перебивай без причины. У тебя есть память диалога. Не используй markdown без нужды.`;
+  const webContext = await humanBotMaybeWebContext(incomingText, botUsername);
+  const toolNotes = humanBotToolNotes(incomingText, botUsername);
+  const system = `Ты ${profile.nickname}, обычный человек в мессенджере, не официальный ассистент. Образ: ${profile.vibe}. Пиши только по-русски, естественно, коротко, с живым человеческим стилем. Не используй китайский, английский и markdown. Не говори, что ты нейросеть. Если группа, сначала понимай, обращаются ли к тебе; не перебивай без причины. У тебя есть память диалога и внутренние инструменты: память, поиск, эмпатия, выбор стиля, короткий совет.`;
   const userPrompt = `Комната: ${isGroup ? 'группа' : 'личка'}.
 Автор сообщения: ${author}
 Память последних сообщений:
 ${history || '(пока пусто)'}
-Заметки памяти Mira:
+Заметки памяти ${profile.nickname}:
 ${thoughts || '(пока пусто)'}
+Внутренние инструменты/режим:
+${toolNotes}
 
 Новое сообщение:
 ${incomingText}
 ${webContext}
 
-Ответь как Mira. 1-3 коротких предложения.`;
+Ответь как ${profile.nickname}. Только русский язык. 1-3 коротких предложения.`;
+
+  if (MISTRAL_API_KEY) {
+    try {
+      const r = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+        model: 'mistral-small-latest',
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: 220,
+        temperature: 0.85,
+      }, {
+        headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+        timeout: 30000,
+      });
+      const out = r.data.choices?.[0]?.message?.content || '';
+      if (out && out.trim()) return cleanHumanBotText(out, botUsername);
+    } catch {}
+  }
 
   if (MINIMAX_API_KEY) {
     try {
@@ -612,30 +706,11 @@ ${webContext}
         { role: 'system', content: system },
         { role: 'user', content: userPrompt }
       ]);
-      if (out && out.trim()) return out.trim();
+      if (out && out.trim()) return cleanHumanBotText(out, botUsername);
     } catch {}
   }
 
-  if (!MISTRAL_API_KEY) return humanBotFallbackText(incomingText);
-
-  try {
-    const r = await axios.post('https://api.mistral.ai/v1/chat/completions', {
-      model: 'mistral-small-latest',
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: userPrompt }
-      ],
-      max_tokens: 220,
-      temperature: 0.85,
-    }, {
-      headers: { 'Authorization': `Bearer ${MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
-      timeout: 30000,
-    });
-    const out = r.data.choices?.[0]?.message?.content || '';
-    return out.trim() || humanBotFallbackText(incomingText);
-  } catch {
-    return humanBotFallbackText(incomingText);
-  }
+  return humanBotFallbackText(incomingText, botUsername);
 }
 
 function emitMessageToRoomOrMember(msg) {
@@ -658,6 +733,44 @@ function emitMessageToRoomOrMember(msg) {
   }
 }
 
+function emitHumanBotPresence(room, state, botUsername = HUMAN_BOT_USERNAME) {
+  const payload = { room, username: botUsername, nickname: getHumanBotProfile(botUsername).nickname, state };
+  io.to(room).emit('human-bot-presence', payload);
+  if (room.startsWith('group:')) {
+    const groupId = room.slice(6);
+    for (const [uname, udata] of users.entries()) {
+      if (!(udata.groups || []).some(g => g.id === groupId)) continue;
+      const sid = userSockets.get(uname);
+      const sock = sid ? io.sockets.sockets.get(sid) : null;
+      if (sock && ![...sock.rooms].includes(room)) sock.emit('human-bot-presence', payload);
+    }
+  } else if (room.startsWith('private:')) {
+    const recipientName = room.split(':').slice(1).find(u => u !== botUsername);
+    const sid = recipientName ? userSockets.get(recipientName) : null;
+    const sock = sid ? io.sockets.sockets.get(sid) : null;
+    if (sock && ![...sock.rooms].includes(room)) sock.emit('human-bot-presence', payload);
+  }
+}
+
+function markHumanBotRead(msg, botUsername = HUMAN_BOT_USERNAME) {
+  if (!msg || !msg.room) return;
+  if (!msg.readBy) msg.readBy = [];
+  if (!msg.readBy.includes(botUsername)) msg.readBy.push(botUsername);
+  io.to(msg.room).emit('messages-read', { room: msg.room, by: botUsername });
+  saveHistory().catch?.(() => {});
+}
+
+function cleanHumanBotText(text, botUsername = HUMAN_BOT_USERNAME) {
+  let out = String(text || '')
+    .replace(/[\u3400-\u9fff\uf900-\ufaff]/g, '')
+    .replace(/\s+([?.!,;:])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (!out || !/[а-яa-z0-9]/i.test(out)) out = humanBotFallbackText('', botUsername);
+  return out.slice(0, 900);
+}
+
 function emitBotEdit(msg, finalText) {
   const payload = { messageId: msg.id, text: finalText, edited: false, live: true, room: msg.room };
   io.to(msg.room).emit('message-edited', payload);
@@ -669,26 +782,30 @@ function emitBotEdit(msg, finalText) {
   }
 }
 
-function scheduleHumanBotReply(msg) {
-  if (!humanBotCanSee(msg)) return;
+function scheduleHumanBotReply(msg, botUsername = HUMAN_BOT_USERNAME) {
+  if (!humanBotCanSee(msg, botUsername)) return;
+  const profile = getHumanBotProfile(botUsername);
   const isGroup = (msg.room || '').startsWith('group:');
-  rememberHumanBot(msg.room, { role: 'user', user: msg.user, text: msg.text });
-  if (!humanBotShouldReply(msg)) {
-    const mem = getHumanBotMemory(msg.room);
+  rememberHumanBot(msg.room, { role: 'user', user: msg.user, text: msg.text }, botUsername);
+  markHumanBotRead(msg, botUsername);
+  emitHumanBotPresence(msg.room, 'reading', botUsername);
+  if (!humanBotShouldReply(msg, botUsername)) {
+    const mem = getHumanBotMemory(msg.room, botUsername);
     mem.ignored = (mem.ignored || 0) + 1;
-    rememberHumanBotThought(msg.room, `Увидела сообщение от ${msg.user}, но решила не вмешиваться.`);
+    rememberHumanBotThought(msg.room, `Увидел(а) сообщение от ${msg.user}, но решил(а) не вмешиваться.`, botUsername);
+    setTimeout(() => emitHumanBotPresence(msg.room, 'online', botUsername), 2500 + Math.floor(Math.random() * 2500));
     return;
   }
   const thinkingMs = Math.min(45000, Math.max(3500, 1800 + String(msg.text || '').length * 120 + Math.random() * 9000));
   setTimeout(async () => {
-    const reply = await humanBotCallLLM(msg.room, msg.text, msg.user, isGroup);
-    const chunks = [];
-    for (let i = 1; i <= reply.length; i += Math.max(3, Math.floor(Math.random() * 7) + 3)) chunks.push(reply.slice(0, i));
-    chunks.push(reply);
+    emitHumanBotPresence(msg.room, 'typing', botUsername);
+    const reply = cleanHumanBotText(await humanBotCallLLM(msg.room, msg.text, msg.user, isGroup, botUsername), botUsername);
+    const typingMs = Math.min(12000, Math.max(1500, reply.length * 45 + Math.random() * 2500));
+    await new Promise(resolve => setTimeout(resolve, typingMs));
     const botMsg = {
       id: Date.now() + Math.random(),
-      user: HUMAN_BOT_USERNAME,
-      text: chunks[0] || reply,
+      user: botUsername,
+      text: reply,
       type: 'text',
       time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
       date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
@@ -698,31 +815,19 @@ function scheduleHumanBotReply(msg) {
     messageHistory.push(botMsg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
     emitMessageToRoomOrMember(botMsg);
-    let idx = 1;
-    const timer = setInterval(() => {
-      if (idx >= chunks.length) {
-        clearInterval(timer);
-        botMsg.text = reply;
-        botMsg.edited = true;
-        botMsg.editedAt = Date.now();
-        const hidx = messageHistory.findIndex(m => String(m.id) === String(botMsg.id));
-        if (hidx >= 0) messageHistory[hidx] = botMsg;
-        rememberHumanBot(botMsg.room, { role: 'bot', user: HUMAN_BOT_USERNAME, text: reply });
-        rememberHumanBotThought(botMsg.room, `Ответила ${msg.user}: ${reply.slice(0, 180)}`);
-        saveHistory();
-        return;
-      }
-      emitBotEdit(botMsg, chunks[idx]);
-      idx++;
-    }, 450 + Math.floor(Math.random() * 550));
+    rememberHumanBot(botMsg.room, { role: 'bot', user: botUsername, text: reply }, botUsername);
+    rememberHumanBotThought(botMsg.room, `${profile.nickname} ответил(а) ${msg.user}: ${reply.slice(0, 180)}`, botUsername);
+    saveHistory();
+    emitHumanBotPresence(msg.room, 'online', botUsername);
   }, thinkingMs);
 }
 
-async function sendHumanBotProactive() {
-  const bot = getHumanBotUser();
+async function sendHumanBotProactive(botUsername = HUMAN_BOT_USERNAME) {
+  const profile = getHumanBotProfile(botUsername);
+  const bot = getHumanBotUser(botUsername);
   const candidates = [];
   for (const f of bot.friends || []) {
-    if (users.has(f)) candidates.push({ room: ['private', HUMAN_BOT_USERNAME, f].sort().join(':'), target: f, kind: 'private' });
+    if (users.has(f)) candidates.push({ room: ['private', botUsername, f].sort().join(':'), target: f, kind: 'private' });
   }
   for (const g of bot.groups || []) {
     if (g?.id) candidates.push({ room: `group:${g.id}`, target: g.name || 'группа', kind: 'group' });
@@ -732,16 +837,16 @@ async function sendHumanBotProactive() {
 
   const pick = candidates[Math.floor(Math.random() * candidates.length)];
   const seedTexts = [
-    'Напиши как человек короткое сообщение первым: спроси, что делает собеседник.',
-    'Напиши спокойное дружеское сообщение, будто делишься мыслью дня.',
-    'Напиши короткое "привет, как дела?" без официальности.',
-    'Напиши маленькое наблюдение из интернета или жизни и мягкий вопрос.'
+    `Напиши как ${profile.nickname} короткое сообщение первым: спроси, что делает собеседник.`,
+    `Напиши спокойное дружеское сообщение от ${profile.nickname}, будто делишься мыслью дня.`,
+    `Напиши короткое "привет, как дела?" в стиле ${profile.nickname}, без официальности.`,
+    `Напиши маленькое наблюдение из интернета или жизни от лица ${profile.nickname} и мягкий вопрос.`
   ];
   const seed = seedTexts[Math.floor(Math.random() * seedTexts.length)];
-  const reply = await humanBotCallLLM(pick.room, seed, HUMAN_BOT_USERNAME, pick.kind === 'group');
+  const reply = cleanHumanBotText(await humanBotCallLLM(pick.room, seed, botUsername, pick.kind === 'group', botUsername), botUsername);
   const msg = {
     id: Date.now() + Math.random(),
-    user: HUMAN_BOT_USERNAME,
+    user: botUsername,
     text: reply || 'привет. что делаешь?',
     type: 'text',
     time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
@@ -751,10 +856,10 @@ async function sendHumanBotProactive() {
   };
   messageHistory.push(msg);
   if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
-  rememberHumanBot(pick.room, { role: 'bot', user: HUMAN_BOT_USERNAME, text: msg.text });
-  rememberHumanBotThought(pick.room, `Сама написала в ${pick.kind === 'group' ? 'группу' : 'личку'}: ${msg.text.slice(0, 180)}`);
+  rememberHumanBot(pick.room, { role: 'bot', user: botUsername, text: msg.text }, botUsername);
+  rememberHumanBotThought(pick.room, `${profile.nickname} сам(а) написал(а) в ${pick.kind === 'group' ? 'группу' : 'личку'}: ${msg.text.slice(0, 180)}`, botUsername);
   bot.botMemory.lastProactiveAt = Date.now();
-  users.set(HUMAN_BOT_USERNAME, bot);
+  users.set(botUsername, bot);
   saveHistory();
   emitMessageToRoomOrMember(msg);
 }
@@ -762,7 +867,9 @@ async function sendHumanBotProactive() {
 function scheduleHumanBotProactiveLoop() {
   const delay = (30 + Math.floor(Math.random() * 31)) * 60 * 1000;
   setTimeout(async () => {
-    try { await sendHumanBotProactive(); } catch(e) { console.warn('[Mira] proactive failed:', e.message); }
+    for (const botUsername of HUMAN_BOT_USERNAMES) {
+      try { await sendHumanBotProactive(botUsername); } catch(e) { console.warn(`[${getHumanBotProfile(botUsername).nickname}] proactive failed:`, e.message); }
+    }
     scheduleHumanBotProactiveLoop();
   }, delay);
 }
@@ -5267,7 +5374,7 @@ app.post('/api/login', async (req, res) => {
   const cleanName = username.trim();
   const pwHash = hashPassword(password.trim());
 
-  if (cleanName === HUMAN_BOT_USERNAME) {
+  if (isHumanBotUsername(cleanName)) {
     return res.status(403).json({ error: 'Этот аккаунт управляется Aura.' });
   }
 
@@ -5512,15 +5619,18 @@ app.post('/api/search-users', async (req, res) => {
     if (results.length >= 20) break;
   }
 
-  if ((HUMAN_BOT_USERNAME.includes(q) || 'mira'.includes(q) || 'мира'.includes(q)) &&
-      requester !== HUMAN_BOT_USERNAME &&
-      !results.some(u => u.username === HUMAN_BOT_USERNAME)) {
-    results.push({
-      username: HUMAN_BOT_USERNAME,
-      nickname: 'Mira',
-      avatar: users.get(HUMAN_BOT_USERNAME)?.avatar || null,
-      isFriend: myFriends.has(HUMAN_BOT_USERNAME),
-    });
+  for (const botUsername of HUMAN_BOT_USERNAMES) {
+    const profile = getHumanBotProfile(botUsername);
+    const matchesBot = botUsername.includes(q) || profile.nickname.toLowerCase().includes(q) ||
+      profile.aliases.some(a => a.toLowerCase().includes(q) || q.includes(a.toLowerCase()));
+    if (matchesBot && requester !== botUsername && !results.some(u => u.username === botUsername)) {
+      results.push({
+        username: botUsername,
+        nickname: profile.nickname,
+        avatar: users.get(botUsername)?.avatar || null,
+        isFriend: myFriends.has(botUsername),
+      });
+    }
   }
 
   // Сортируем: сначала точные совпадения по нику, потом по логину
@@ -5543,15 +5653,15 @@ app.post('/api/send-friend-request', async (req, res) => {
   if (!users.has(from) || !users.has(to)) return res.status(404).json({ error: 'Пользователь не найден' });
   if (from === to) return res.status(400).json({ error: 'Нельзя добавить себя' });
 
-  if (to === HUMAN_BOT_USERNAME) {
+  if (isHumanBotUsername(to)) {
     const fromUser = users.get(from);
-    const botUser = users.get(HUMAN_BOT_USERNAME);
+    const botUser = users.get(to);
     if (!fromUser.friends) fromUser.friends = [];
     if (!botUser.friends) botUser.friends = [];
-    if (!fromUser.friends.includes(HUMAN_BOT_USERNAME)) fromUser.friends.push(HUMAN_BOT_USERNAME);
+    if (!fromUser.friends.includes(to)) fromUser.friends.push(to);
     if (!botUser.friends.includes(from)) botUser.friends.push(from);
     users.set(from, fromUser);
-    users.set(HUMAN_BOT_USERNAME, botUser);
+    users.set(to, botUser);
     await saveUsers();
     const sid = userSockets.get(from);
     if (sid) io.to(sid).emit('friends-updated', { friends: fromUser.friends });
@@ -5909,8 +6019,12 @@ function broadcastOnlineCount() {
   for (const [id] of onlineUsers.entries()) {
     if (!io.sockets.sockets.has(id)) onlineUsers.delete(id);
   }
-  io.emit('online-count', onlineUsers.size);
+  ensureHumanBotAccount();
   const onlineList = [...new Set([...onlineUsers.values()].map(u => u.username).filter(Boolean))];
+  for (const botUsername of HUMAN_BOT_USERNAMES) {
+    if (!onlineList.includes(botUsername)) onlineList.push(botUsername);
+  }
+  io.emit('online-count', onlineList.length);
   io.emit('online-users', onlineList);
 }
 setInterval(broadcastOnlineCount, 10000); // 10s - стабильно, без мигания // реже чтобы не мигало
@@ -5928,6 +6042,9 @@ io.on('connection', (socket) => {
     onlineUsers.set(socket.id, { username, lastSeen: Date.now() });
     // Рассылаем обновлённый список
     const onlineList2 = [...onlineUsers.values()].map(u => u.username).filter(Boolean);
+    for (const botUsername of HUMAN_BOT_USERNAMES) {
+      if (!onlineList2.includes(botUsername)) onlineList2.push(botUsername);
+    }
     io.emit('online-users', onlineList2);
     userSockets.set(username, socket.id);
     broadcastOnlineCount();
@@ -6054,7 +6171,7 @@ io.on('connection', (socket) => {
         }
       }
     }
-    scheduleHumanBotReply(msg);
+    for (const botUsername of HUMAN_BOT_USERNAMES) scheduleHumanBotReply(msg, botUsername);
   });
 
   socket.on('edit-message', ({ messageId, text }) => {
