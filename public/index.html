@@ -26,68 +26,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.14.0/dist/tabler-icons.min.css" crossorigin="anonymous"/>
   <!-- Tabler Icons: fallback CDN (загружается если первый не сработал) -->
   <link rel="stylesheet" id="tablerFallback" href="" crossorigin="anonymous"/>
-  <script>
-  // Проверяем загрузку иконок и подключаем запасной CDN
-  (function() {
-    function checkIcons() {
-      var test = document.createElement('i');
-      test.className = 'ti ti-home';
-      test.style.cssText = 'position:absolute;visibility:hidden;font-size:16px';
-      document.body.appendChild(test);
-      var w = test.getBoundingClientRect().width;
-      document.body.removeChild(test);
-      // Если иконка имеет ширину > 3px — шрифт загружен
-      if (w < 3) {
-        console.log('[Icons] CDN1 не загрузился, пробуем запасной...');
-        var fb = document.getElementById('tablerFallback');
-        if (fb && !fb.href) {
-          fb.href = 'https://unpkg.com/@tabler/icons-webfont@3.14.0/dist/tabler-icons.min.css';
-          // Третий fallback через 2с
-          setTimeout(function() {
-            var w2 = 0;
-            var t2 = document.createElement('i');
-            t2.className = 'ti ti-home';
-            t2.style.cssText = 'position:absolute;visibility:hidden;font-size:16px';
-            document.body.appendChild(t2);
-            w2 = t2.getBoundingClientRect().width;
-            document.body.removeChild(t2);
-            if (w2 < 3) {
-              var l3 = document.createElement('link');
-              l3.rel = 'stylesheet';
-              l3.href = 'https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.14.0/tabler-icons.min.css';
-              document.head.appendChild(l3);
-              console.log('[Icons] CDN2 не загрузился, пробуем CDN3...');
-            }
-          }, 2000);
-        }
-      }
-    }
-    // Проверяем после полной загрузки страницы
-    if (document.readyState === 'complete') { setTimeout(checkIcons, 500); }
-    else { window.addEventListener('load', function(){ setTimeout(checkIcons, 500); }); }
-  })();
-  </script>
   <link rel="stylesheet" href="style.css"/>
-<script>
-// Предотвращаем прыжок страницы при фокусе на input (iOS)
-(function(){
-  if(!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return;
-  var lastScrollY = 0;
-  document.addEventListener('focusin', function(e){
-    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'){
-      lastScrollY = window.scrollY;
-      setTimeout(function(){ window.scrollTo(0, lastScrollY); }, 100);
-    }
-  });
-  // Восстанавливаем позицию после скрытия клавиатуры
-  window.addEventListener('resize', function(){
-    if(document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')) return;
-    window.scrollTo(0, lastScrollY);
-  });
-  // Предотвращаем scroll при появлении клавиатуры
-  document.addEventListener('touchstart', function(){}, {passive:true});
-})();
-</script>
 </head>
 <body>
 
@@ -174,7 +113,7 @@
     </div>
     <div class="field-wrap has-toggle" style="margin-top:10px">
       <i class="ti ti-lock field-ico"></i>
-      <input id="loginPassInput" class="field" type="password" placeholder="Пароль (мин. 4 символа)…" autocomplete="current-password"
+      <input id="loginPassInput" class="field" type="password" placeholder="Пароль (мин. 8 символов)…" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')doLogin()"/>
       <button class="pass-toggle" onclick="togglePassVisibility()" type="button" title="Показать пароль">
         <i class="ti ti-eye" id="passEyeIcon"></i>
@@ -473,49 +412,7 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
-<script>
-  // ── Service Worker ──
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-      .then(r => console.log('SW:', r.scope))
-      .catch(e => console.warn('SW fail:', e));
-  }
-
-  // ── PWA Install ──
-  let _installPrompt = null;
-  window.addEventListener('beforeinstallprompt', e => {
-    e.preventDefault();
-    _installPrompt = e;
-    // Show install button in sidebar after small delay
-    setTimeout(showInstallBtn, 1500);
-  });
-  window.addEventListener('appinstalled', () => {
-    _installPrompt = null;
-    const btn = document.getElementById('pwaInstallBtn');
-    if (btn) btn.remove();
-  });
-  function showInstallBtn() {
-    if (!_installPrompt) return;
-    if (document.getElementById('pwaInstallBtn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'pwaInstallBtn';
-    btn.className = 'pwa-install-btn';
-    btn.innerHTML = '<i class="ti ti-download"></i> Установить приложение';
-    btn.onclick = async () => {
-      if (!_installPrompt) return;
-      _installPrompt.prompt();
-      const { outcome } = await _installPrompt.userChoice;
-      _installPrompt = null;
-      btn.remove();
-      if (outcome === 'accepted' && typeof toast === 'function')
-        toast('Приложение установлено!', 'success');
-    };
-    // Insert before sidebar profile strip
-    const profile = document.querySelector('.sb-profile');
-    if (profile) profile.parentNode.insertBefore(btn, profile);
-    else document.body.appendChild(btn);
-  }
-</script>
+<script src="boot.js"></script>
 
 <!-- FORGOT PASSWORD MODAL -->
 <div id="forgotModal" class="modal-bg">
@@ -562,7 +459,7 @@
         <p class="sub-text" style="margin-bottom:12px">Придумайте новый пароль</p>
         <div class="field-wrap has-toggle">
           <i class="ti ti-lock field-ico"></i>
-          <input id="forgotNewPass" class="field" type="password" placeholder="Новый пароль (мин. 4 символа)…"/>
+          <input id="forgotNewPass" class="field" type="password" placeholder="Новый пароль (мин. 8 символов)…"/>
           <button class="pass-toggle" onclick="toggleForgotPass()" type="button">
             <i class="ti ti-eye" id="forgotEyeIco"></i>
           </button>

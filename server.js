@@ -18,7 +18,9 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), display-capture=(self), geolocation=()');
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
+    "script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
+    "script-src-elem 'self' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
+    "script-src-attr 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
     "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
     "img-src 'self' data: blob: https:",
@@ -26,6 +28,7 @@ app.use((req, res, next) => {
     "connect-src 'self' https: wss:",
     "object-src 'none'",
     "base-uri 'self'",
+    "form-action 'self'",
     "frame-ancestors 'none'"
   ].join('; '));
   if ((req.headers['x-forwarded-proto'] || '').includes('https')) {
@@ -503,12 +506,20 @@ let users = new Map(); // username -> { nickname, avatar, theme, friends, friend
 let recoveryCodes     = new Map(); // username -> { code, expiry, email }
 let emailVerifyCodes  = new Map(); // username -> { code, expiry, pendingEmail }
 const SESSION_COOKIE = 'aura_session';
+const CSRF_COOKIE = 'aura_csrf';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 if (!process.env.SESSION_SECRET) {
   console.warn('[security] SESSION_SECRET is not set; sessions will reset after process restart.');
 }
 const rateBuckets = new Map();
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const CSRF_EXEMPT_PATHS = new Set([
+  '/api/login',
+  '/api/request-password-reset',
+  '/api/reset-password',
+  '/api/metered-webhook',
+]);
 
 function b64url(input) {
   return Buffer.from(input).toString('base64url');
@@ -562,18 +573,88 @@ function cookieOptions(req) {
   ].filter(Boolean);
 }
 
+function appendSetCookie(res, cookieValue) {
+  const current = res.getHeader('Set-Cookie');
+  if (!current) return res.setHeader('Set-Cookie', cookieValue);
+  if (Array.isArray(current)) return res.setHeader('Set-Cookie', current.concat(cookieValue));
+  return res.setHeader('Set-Cookie', [current, cookieValue]);
+}
+
 function setSessionCookie(req, res, username) {
   const token = createSessionToken(username);
   const parts = cookieOptions(req);
   parts[0] = `${SESSION_COOKIE}=${encodeURIComponent(token)}`;
-  res.setHeader('Set-Cookie', parts.join('; '));
+  appendSetCookie(res, parts.join('; '));
 }
 
 function clearSessionCookie(req, res) {
   const parts = cookieOptions(req);
   parts[0] = `${SESSION_COOKIE}=`;
   parts[4] = 'Max-Age=0';
-  res.setHeader('Set-Cookie', parts.join('; '));
+  appendSetCookie(res, parts.join('; '));
+}
+
+function csrfSignature(nonce) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(`csrf:${nonce}`).digest('base64url');
+}
+
+function createCsrfToken() {
+  const nonce = crypto.randomBytes(24).toString('base64url');
+  return `${nonce}.${csrfSignature(nonce)}`;
+}
+
+function verifyCsrfToken(token) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return false;
+  const [nonce, sig] = token.split('.');
+  if (!nonce || !sig) return false;
+  const expected = csrfSignature(nonce);
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+  return sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf);
+}
+
+function csrfCookieOptions(req) {
+  const secure = req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
+  return [
+    `${CSRF_COOKIE}=`,
+    'Path=/',
+    'SameSite=Lax',
+    `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+    secure ? 'Secure' : ''
+  ].filter(Boolean);
+}
+
+function setCsrfCookie(req, res, token = createCsrfToken()) {
+  const parts = csrfCookieOptions(req);
+  parts[0] = `${CSRF_COOKIE}=${encodeURIComponent(token)}`;
+  appendSetCookie(res, parts.join('; '));
+  return token;
+}
+
+function clearCsrfCookie(req, res) {
+  const parts = csrfCookieOptions(req);
+  parts[0] = `${CSRF_COOKIE}=`;
+  parts[3] = 'Max-Age=0';
+  appendSetCookie(res, parts.join('; '));
+}
+
+function ensureCsrfCookie(req, res) {
+  const token = parseCookieHeader(req.headers.cookie)[CSRF_COOKIE];
+  if (verifyCsrfToken(token)) return token;
+  return setCsrfCookie(req, res);
+}
+
+function requireCsrf(req, res, next) {
+  if (CSRF_SAFE_METHODS.has(req.method)) return next();
+  if (CSRF_EXEMPT_PATHS.has(req.path)) return next();
+
+  const cookies = parseCookieHeader(req.headers.cookie);
+  const cookieToken = cookies[CSRF_COOKIE];
+  const headerToken = req.get('x-csrf-token') || req.get('x-xsrf-token') || req.body?._csrf;
+  if (!verifyCsrfToken(cookieToken) || !headerToken || headerToken !== cookieToken) {
+    return res.status(403).json({ error: 'csrf required' });
+  }
+  next();
 }
 
 function getAuthUsernameFromCookie(cookieHeader) {
@@ -618,6 +699,14 @@ function enforceRateLimit(req, res, scope, subject, max, windowMs) {
   res.status(429).json({ error: 'too many requests' });
   return false;
 }
+
+const rateCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateBuckets.entries()) {
+    if (!bucket || now > bucket.resetAt) rateBuckets.delete(key);
+  }
+}, 60 * 1000);
+if (typeof rateCleanupTimer.unref === 'function') rateCleanupTimer.unref();
 
 function cleanUsername(username) {
   return String(username || '').trim();
@@ -2523,6 +2612,62 @@ async function saveUsers() {
 // ========== ЗАГРУЗКА ФАЙЛОВ ==========
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
+function startsWithBytes(buf, bytes, offset = 0) {
+  if (!Buffer.isBuffer(buf) || buf.length < offset + bytes.length) return false;
+  return bytes.every((b, i) => buf[offset + i] === b);
+}
+
+function readAscii(buf, start, len) {
+  if (!Buffer.isBuffer(buf) || buf.length < start + len) return '';
+  return buf.subarray(start, start + len).toString('ascii');
+}
+
+function detectUploadSignature(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 4) return { kind: 'unknown', mime: '' };
+  if (startsWithBytes(buf, [0xff, 0xd8, 0xff])) return { kind: 'image', mime: 'image/jpeg' };
+  if (startsWithBytes(buf, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { kind: 'image', mime: 'image/png' };
+  if (readAscii(buf, 0, 6) === 'GIF87a' || readAscii(buf, 0, 6) === 'GIF89a') return { kind: 'image', mime: 'image/gif' };
+  if (readAscii(buf, 0, 4) === 'RIFF' && readAscii(buf, 8, 4) === 'WEBP') return { kind: 'image', mime: 'image/webp' };
+  if (readAscii(buf, 0, 2) === 'BM') return { kind: 'image', mime: 'image/bmp' };
+  if (startsWithBytes(buf, [0x00, 0x00, 0x01, 0x00])) return { kind: 'image', mime: 'image/x-icon' };
+  if (startsWithBytes(buf, [0x49, 0x49, 0x2a, 0x00]) || startsWithBytes(buf, [0x4d, 0x4d, 0x00, 0x2a])) return { kind: 'image', mime: 'image/tiff' };
+  if (readAscii(buf, 4, 4) === 'ftyp') {
+    const brand = readAscii(buf, 8, 16).toLowerCase();
+    if (/avif|avis|heic|heix|hevc|hevx|mif1|msf1/.test(brand)) return { kind: 'image', mime: brand.includes('avif') ? 'image/avif' : 'image/heic' };
+    return { kind: 'av', mime: 'video/mp4' };
+  }
+  if (startsWithBytes(buf, [0x1a, 0x45, 0xdf, 0xa3])) return { kind: 'av', mime: 'video/webm' };
+  if (readAscii(buf, 0, 4) === 'RIFF' && readAscii(buf, 8, 4) === 'AVI ') return { kind: 'video', mime: 'video/x-msvideo' };
+  if (readAscii(buf, 0, 3) === 'FLV') return { kind: 'video', mime: 'video/x-flv' };
+  if (readAscii(buf, 0, 4) === 'OggS') return { kind: 'av', mime: 'audio/ogg' };
+  if (readAscii(buf, 0, 4) === 'RIFF' && readAscii(buf, 8, 4) === 'WAVE') return { kind: 'audio', mime: 'audio/wav' };
+  if (readAscii(buf, 0, 4) === 'fLaC') return { kind: 'audio', mime: 'audio/flac' };
+  if (readAscii(buf, 0, 3) === 'ID3' || (buf[0] === 0xff && [0xfb, 0xf3, 0xf2].includes(buf[1]))) return { kind: 'audio', mime: 'audio/mpeg' };
+  if (buf[0] === 0xff && [0xf1, 0xf9].includes(buf[1])) return { kind: 'audio', mime: 'audio/aac' };
+  if (startsWithBytes(buf, [0x30, 0x26, 0xb2, 0x75])) return { kind: 'av', mime: 'video/x-ms-asf' };
+  return { kind: 'unknown', mime: '' };
+}
+
+function hasActiveWebPayload(buf) {
+  const head = Buffer.isBuffer(buf) ? buf.subarray(0, 1024).toString('utf8').trimStart().toLowerCase() : '';
+  return /^(<!doctype\s+html|<html[\s>]|<script[\s>]|<svg[\s>]|<\?xml[\s>])/.test(head);
+}
+
+function validateUploadPayload(file, mimeType, fileType) {
+  const ext = (file.originalname || '').split('.').pop().toLowerCase();
+  const dangerousExt = new Set(['svg', 'html', 'htm', 'xhtml', 'xml', 'js', 'mjs']);
+  const activeMime = /^(text\/html|image\/svg\+xml|application\/javascript|text\/javascript|application\/xhtml\+xml|application\/xml|text\/xml)$/i;
+  if (dangerousExt.has(ext) || activeMime.test(mimeType || '') || hasActiveWebPayload(file.buffer)) {
+    return 'Active web files are not allowed';
+  }
+
+  const sig = detectUploadSignature(file.buffer);
+  if (fileType === 'image' && sig.kind !== 'image') return 'Image signature mismatch';
+  if (fileType === 'audio' && !['audio', 'av'].includes(sig.kind)) return 'Audio signature mismatch';
+  if (fileType === 'video' && !['video', 'av'].includes(sig.kind)) return 'Video signature mismatch';
+  return null;
+}
+
 app.use(attachUser);
 app.use(express.static('public'));
 
@@ -2594,7 +2739,10 @@ app.get('/api/dl/:f', requireAuth, async (req, res) => handleDownloadProxy(req, 
 // Стримим файл через сервер — браузер не идёт на B2 напрямую (нет CORS проблем)
 app.get('/api/dl', requireAuth, async (req, res) => handleDownloadProxy(req, res, req.query.f));
 
-app.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
+app.post('/upload', requireAuth, requireCsrf, (req, res, next) => {
+  if (!enforceRateLimit(req, res, 'upload', req.user.username, 60, 10 * 60 * 1000)) return;
+  next();
+}, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
 
@@ -2613,6 +2761,9 @@ app.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
     if (mimeType.startsWith('image/')) fileType = 'image';
     else if (mimeType.startsWith('audio/')) fileType = 'audio';
     else if (mimeType.startsWith('video/')) fileType = 'video';
+
+    const uploadError = validateUploadPayload(req.file, mimeType, fileType);
+    if (uploadError) return res.status(400).json({ error: uploadError });
 
     let prefix = '';
     if (fileType === 'image') prefix = 'photos/';
@@ -2788,10 +2939,6 @@ app.get('/api/ice-servers', requireAuth, async (req, res) => {
     { urls: 'turns:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
     { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
     // ── TURN: Metered public (хардкод credentials — живут долго) ─────────
-    { urls: 'turn:a.relay.metered.ca:80',                   username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
-    { urls: 'turn:a.relay.metered.ca:80?transport=tcp',     username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
-    { urls: 'turn:a.relay.metered.ca:443',                  username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
-    { urls: 'turns:a.relay.metered.ca:443?transport=tcp',   username: 'e8dd65f2619f30987d4b5d26', credential: 'uMuzmAi0GCQw5ypo' },
     // ── TURN: freeturn.net (проверен, работает) ───────────────────────────
     { urls: 'turn:freeturn.net:3478',                       username: 'free', credential: 'free' },
     { urls: 'turn:freeturn.net:5349',                       username: 'free', credential: 'free' },
@@ -2799,9 +2946,6 @@ app.get('/api/ice-servers', requireAuth, async (req, res) => {
     { urls: 'turn:freeturn.net:5349?transport=tcp',         username: 'free', credential: 'free' },
     { urls: 'turns:freeturn.tel:5349',                      username: 'free', credential: 'free' },
     // ── TURN: expressturn (бесплатный tier, 500MB/мес) ────────────────────
-    { urls: 'turn:relay1.expressturn.com:3478',             username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
-    { urls: 'turn:relay1.expressturn.com:3478?transport=tcp', username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
-    { urls: 'turn:relay1.expressturn.com:3480',             username: 'efQZ5ZJ9WFF4J0GFSD', credential: 'q5bxEFR0b4eFpj3j' },
     // ── TURN: relay.backups.cz ────────────────────────────────────────────
     { urls: 'turn:relay.backups.cz:3478',                   username: 'webrtc', credential: 'webrtc' },
     { urls: 'turn:relay.backups.cz:443?transport=tcp',      username: 'webrtc', credential: 'webrtc' },
@@ -2811,14 +2955,21 @@ app.get('/api/ice-servers', requireAuth, async (req, res) => {
 
 
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
+app.use(requireCsrf);
+app.use('/api', (req, res, next) => {
+  if (CSRF_SAFE_METHODS.has(req.method)) return next();
+  const subject = req.user?.username || cleanUsername(req.body?.username) || 'anon';
+  if (!enforceRateLimit(req, res, 'api-write', subject, 240, 5 * 60 * 1000)) return;
+  next();
+});
 
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 //  AI ЧАТ — Mistral с инструментами, памятью файлов и просмотром изображений
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
-const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || 'F6vBTTKWM8ZrNsFFU53EH2Uh8HxIQ40Q';
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || '';
 const OMNIROUTER_KEY  = process.env.OMNIROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '';
-const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || 'https://src-dakota-strip-con.trycloudflare.com/v1';
+const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || (process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1' : '');
 // MiniMax (Aura AI)
 const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || '';
 const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions';
@@ -2838,6 +2989,7 @@ async function callOmniRouter(modelKey, messages, onChunk, customBaseUrl) {
   if (!mdl) throw new Error('Неизвестная модель: ' + modelKey);
 
   const raw = String(customBaseUrl || OMNIROUTER_API_URL || '').trim();
+  if (!raw) throw new Error('OMNIROUTER_API_URL не задан в env');
   const noSlash = raw.replace(/\/+$/, '');
   const isLocalOmni = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(noSlash);
   if (!OMNIROUTER_KEY && !isLocalOmni) throw new Error('OMNIROUTER_API_KEY не задан в env');
@@ -6873,7 +7025,8 @@ app.post('/api/login', async (req, res) => {
       await saveUsers();
     }
     setSessionCookie(req, res, authName);
-    return res.json({ success: true, user: userPublicPayload(authName, userData) });
+    const csrfToken = setCsrfCookie(req, res);
+    return res.json({ success: true, csrfToken, user: userPublicPayload(authName, userData) });
   }
 
   if (action !== 'register') {
@@ -6909,8 +7062,10 @@ app.post('/api/login', async (req, res) => {
   }
 
   setSessionCookie(req, res, authName);
+  const csrfToken = setCsrfCookie(req, res);
   return res.json({
     success: true,
+    csrfToken,
     isNew: true,
     needsEmailVerify: !!email,
     user: userPublicPayload(authName, newUser)
@@ -6918,8 +7073,8 @@ app.post('/api/login', async (req, res) => {
   if (!username || username.trim() === '') {
     return res.status(400).json({ error: 'Имя не может быть пустым' });
   }
-  if (!password || password.trim().length < 4) {
-    return res.status(400).json({ error: 'Пароль должен быть не менее 4 символов' });
+  if (!password || password.trim().length < 8) {
+    return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
   }
   const cleanName = username.trim();
   const pwHash = hashPassword(password.trim());
@@ -7004,11 +7159,13 @@ app.get('/api/session', requireAuth, (req, res) => {
   const username = req.user.username;
   const userData = users.get(username);
   if (!userData) return res.status(401).json({ error: 'auth required' });
-  res.json({ success: true, user: userPublicPayload(username, userData) });
+  const csrfToken = ensureCsrfCookie(req, res);
+  res.json({ success: true, csrfToken, user: userPublicPayload(username, userData) });
 });
 
 app.post('/api/logout', (req, res) => {
   clearSessionCookie(req, res);
+  clearCsrfCookie(req, res);
   res.json({ success: true });
 });
 
@@ -7035,6 +7192,7 @@ app.post('/api/delete-account', requireAuth, async (req, res) => {
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   users.delete(username);
   clearSessionCookie(req, res);
+  clearCsrfCookie(req, res);
   await saveUsers();
   res.json({ success: true });
 });
@@ -7132,8 +7290,8 @@ app.post('/api/reset-password', async (req, res) => {
   if (!users.has(username)) {
     return res.status(404).json({ error: 'Пользователь не найден' });
   }
-  if (newPassword.trim().length < 4) {
-    return res.status(400).json({ error: 'Пароль должен быть не менее 4 символов' });
+  if (newPassword.trim().length < 8) {
+    return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
   }
 
   const recovery = recoveryCodes.get(username);

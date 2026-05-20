@@ -288,6 +288,50 @@ function _buildFileIconHtml(name, mime) {
 // в”Ђв”Ђ Socket (must be first) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 const socket = io({ reconnectionAttempts: Infinity, timeout: 20000, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
 
+let csrfToken = '';
+
+function readCookie(name) {
+  const prefix = `${name}=`;
+  return document.cookie
+    .split(';')
+    .map(v => v.trim())
+    .find(v => v.startsWith(prefix))
+    ?.slice(prefix.length) || '';
+}
+
+function setCsrfToken(token) {
+  csrfToken = token === undefined ? (readCookie('aura_csrf') || '') : (token || '');
+}
+
+function getCsrfToken() {
+  if (!csrfToken) setCsrfToken();
+  return csrfToken;
+}
+
+setCsrfToken();
+
+(function installCsrfFetchGuard() {
+  const nativeFetch = window.fetch.bind(window);
+  const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
+  window.fetch = (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input?.url || '';
+    const method = String(init.method || input?.method || 'GET').toUpperCase();
+    let path = '';
+    let sameOrigin = false;
+    try {
+      const parsed = new URL(url, window.location.href);
+      path = parsed.pathname;
+      sameOrigin = parsed.origin === window.location.origin;
+    } catch {}
+    if (sameOrigin && !safeMethods.has(method) && (path.startsWith('/api/') || path === '/upload')) {
+      const headers = new Headers(init.headers || input?.headers || undefined);
+      if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', getCsrfToken());
+      init = { ...init, headers };
+    }
+    return nativeFetch(input, init);
+  };
+})();
+
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // SPLASH / LOADING  ← КРАСОТА
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
@@ -598,7 +642,7 @@ async function doLogin() {
     errEl.textContent = _isRegisterMode ? 'Password must be at least 8 characters' : 'Password required';
     $('loginPassInput').focus();
     return;
-    errEl.textContent = 'Пароль должен быть не менее 4 символов';
+    errEl.textContent = 'Пароль должен быть не менее 8 символов';
     $('loginPassInput').focus();
     return;
   }
@@ -618,6 +662,7 @@ async function doLogin() {
       body: JSON.stringify({ username, password, email, mode: _isRegisterMode ? 'register' : 'login' })
     });
     const d = await r.json();
+    if (d.csrfToken) setCsrfToken(d.csrfToken);
     if (d.success) {
       localStorage.setItem('aura_user', d.user.username);
       localStorage.removeItem('aura_pass');
@@ -801,7 +846,7 @@ async function resetPassword() {
   const newPass = $('forgotNewPass')?.value?.trim();
   const err = $('forgotErr3');
   if (!newPass || newPass.length < 8) {
-    if (err) err.textContent = 'Пароль должен быть не менее 4 символов';
+    if (err) err.textContent = 'Пароль должен быть не менее 8 символов';
     return;
   }
   if (err) err.textContent = '';
@@ -945,6 +990,7 @@ localStorage.removeItem('aura_pass');
   .then(r => r.json())
   .then(d => {
     clearTimeout(restoreTimeout);
+    if (d.csrfToken) setCsrfToken(d.csrfToken);
     if (d.success) { startSession(d.user); }
     else {
       // Password changed or account deleted вЂ” show login
@@ -4291,7 +4337,7 @@ async function _aiPreviewFile(fileId, mainName) {
       <span style="font-size:12px;color:var(--text3)">Все связанные файлы подключены автоматически</span>
       <button onclick="this.closest('[style*=fixed]').remove()" style="margin-left:auto;background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 12px;border-radius:8px;cursor:pointer;font-family:inherit">✕ Закрыть</button>
     </div>
-    <iframe id="aiPreviewFrame" sandbox="allow-scripts allow-same-origin" style="flex:1;border:none;background:#fff"></iframe>`;
+    <iframe id="aiPreviewFrame" sandbox="allow-scripts allow-forms allow-popups" referrerpolicy="no-referrer" style="flex:1;border:none;background:#fff"></iframe>`;
   document.body.appendChild(modal);
 
   const iframe = modal.querySelector('#aiPreviewFrame');
@@ -8605,6 +8651,7 @@ function doLogout() {
   localStorage.removeItem('aura_pass');
   localStorage.removeItem('aura_last_room');
   fetch('/api/logout', { method: 'POST' }).catch(() => {});
+  setCsrfToken('');
   // Отключаемся от сокета
   socket.emit('logout', { username: currentUser });
   socket.disconnect();

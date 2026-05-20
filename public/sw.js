@@ -1,7 +1,7 @@
-// Aura Messenger — Service Worker v5
+// Aura Messenger — Service Worker v6
 // Network-first for JS/CSS (always fresh), cache-first for static assets
-const CACHE = 'aura-v5';
-const NETWORK_FIRST = ['/script.js', '/style.css', '/index.html'];
+const CACHE = 'aura-v6';
+const NETWORK_FIRST = ['/script.js', '/boot.js', '/style.css', '/index.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
