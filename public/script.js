@@ -321,7 +321,7 @@ function hideSplash() {
 socket.on('connect', () => {
   if (splashText) splashText.textContent = 'Подключено ✓';
   if (currentUser) {
-    socket.emit('identify', currentUser);
+    socket.emit('identify');
     if (currentRoom) socket.emit('join-room', currentRoom);
     loadUserData();
   }
@@ -335,7 +335,7 @@ document.addEventListener('visibilitychange', () => {
     if (!socket.connected) {
       socket.connect();
     } else {
-      socket.emit('identify', currentUser);
+      socket.emit('identify');
       if (currentRoom) socket.emit('join-room', currentRoom);
     }
     if (!_inCall) loadUserData();
@@ -343,7 +343,7 @@ document.addEventListener('visibilitychange', () => {
   } else {
     // Уходим на другую вкладку — явно говорим серверу что онлайн
     // (таймеры в фоне throttle-ятся, поэтому шлём identify сразу)
-    if (socket.connected) socket.emit('identify', currentUser);
+    if (socket.connected) socket.emit('identify');
   }
 });
 socket.on('connect_error', () => {
@@ -594,7 +594,10 @@ async function doLogin() {
     $('loginInput').focus();
     return;
   }
-  if (password.length < 4) {
+  if (!password || (_isRegisterMode && password.length < 8)) {
+    errEl.textContent = _isRegisterMode ? 'Password must be at least 8 characters' : 'Password required';
+    $('loginPassInput').focus();
+    return;
     errEl.textContent = 'Пароль должен быть не менее 4 символов';
     $('loginPassInput').focus();
     return;
@@ -617,7 +620,7 @@ async function doLogin() {
     const d = await r.json();
     if (d.success) {
       localStorage.setItem('aura_user', d.user.username);
-      localStorage.setItem('aura_pass', password);
+      localStorage.removeItem('aura_pass');
       if (d.isNew) {
         toast(`Добро пожаловать, ${d.user.username}!`, 'success');
         if (d.needsEmailVerify) {
@@ -797,7 +800,7 @@ function toggleForgotPass() {
 async function resetPassword() {
   const newPass = $('forgotNewPass')?.value?.trim();
   const err = $('forgotErr3');
-  if (!newPass || newPass.length < 4) {
+  if (!newPass || newPass.length < 8) {
     if (err) err.textContent = 'Пароль должен быть не менее 4 символов';
     return;
   }
@@ -844,7 +847,9 @@ function startSession(user) {
   app.style.display = 'flex';
   updateProfileUI();
   switchTab('friends'); // явно инициализируем таб без мигания
-  socket.emit('identify', currentUser);
+  if (socket.connected) socket.disconnect();
+  socket.connect();
+  socket.emit('identify');
   // Загружаем данные, затем восстанавливаем последний чат
   loadUserData().then(() => {
     const lastRoom = localStorage.getItem('aura_last_room');
@@ -932,14 +937,11 @@ function showPushNotification(title, body, tag) {
 
 // Auto-restore session
 const savedUser = localStorage.getItem('aura_user');
-const savedPass = localStorage.getItem('aura_pass');
-if (savedUser && savedPass) {
+localStorage.removeItem('aura_pass');
+{
   // Timeout: если B2 / сервер не отвечает за 4с — показываем логин
   const restoreTimeout = setTimeout(() => showLogin(), 4000);
-  fetch('/api/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: savedUser, password: savedPass })
-  })
+  fetch('/api/session')
   .then(r => r.json())
   .then(d => {
     clearTimeout(restoreTimeout);
@@ -954,8 +956,6 @@ if (savedUser && savedPass) {
     }
   })
   .catch(() => { clearTimeout(restoreTimeout); showLogin(); });
-} else {
-  showLogin();
 }
 
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
@@ -1942,25 +1942,49 @@ function plainMsgText(s) {
     .trim();
 }
 
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeLinkHref(raw) {
+  try {
+    const u = new URL(String(raw), location.origin);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : '';
+  } catch {
+    return '';
+  }
+}
+
 function renderMsgText(s) {
-  let t = String(s)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
-  t = t
-    .replace(/\*\*(.+?)\*\*/g,  '<strong>$1</strong>')
-    .replace(/~~(.+?)~~/g,         '<s>$1</s>')
+  let src = String(s ?? '');
+  const links = [];
+  const makeLink = (label, url) => {
+    const href = safeLinkHref(url);
+    if (!href) return String(label || '');
+    const html = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="msg-link">${escapeHtml(label || url)}</a>`;
+    const idx = links.push(html) - 1;
+    return `\u0000LINK${idx}\u0000`;
+  };
+
+  src = src
+    .replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^)\s"']{1,2048})\)/g, (_, label, url) => makeLink(label, url))
+    .replace(/\[([^\]\n]{1,120})\]\{(https?:\/\/[^}\s"']{1,2048})\}/g, (_, label, url) => makeLink(label, url))
+    .replace(/(^|[\s])(https?:\/\/[^\s<>"']{1,2048})/g, (_, prefix, url) => prefix + makeLink(url, url));
+
+  let t = escapeHtml(src)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/~~(.+?)~~/g, '<s>$1</s>')
     .replace(/(?<![_])__(?!_)(.+?)__(?![_])/g, '<u>$1</u>')
     .replace(/(?<![_*])_(?!_)(.+?)_(?![_*])/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code class="msg-code">$1</code>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
-             '<a href="$2" target="_blank" rel="noopener" class="msg-link">$1</a>')
-    .replace(/\[([^\]]+)\]\{(https?:\/\/[^}\s]+)\}/g,
-             '<a href="$2" target="_blank" rel="noopener" class="msg-link">$1</a>')
-    .replace(/(^|[\s])(https?:\/\/[^\s<"]+)/g,
-             '$1<a href="$2" target="_blank" rel="noopener" class="msg-link">$2</a>');
-  t = t.replace(/\n/g,'<br>');
-  return t;
+    .replace(/`([^`]+)`/g, '<code class="msg-code">$1</code>');
+
+  t = t.replace(/\u0000LINK(\d+)\u0000/g, (_, i) => links[Number(i)] || '');
+  return t.replace(/\n/g, '<br>');
 }
 
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
@@ -8580,8 +8604,10 @@ function doLogout() {
   localStorage.removeItem('aura_user');
   localStorage.removeItem('aura_pass');
   localStorage.removeItem('aura_last_room');
+  fetch('/api/logout', { method: 'POST' }).catch(() => {});
   // Отключаемся от сокета
   socket.emit('logout', { username: currentUser });
+  socket.disconnect();
   // Сбрасываем состояние
   currentUser = null;
   if (_inCall) endCall();

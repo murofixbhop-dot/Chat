@@ -10,6 +10,30 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), display-capture=(self), geolocation=()');
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
+    "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' data: blob: https:",
+    "connect-src 'self' https: wss:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+  ].join('; '));
+  if ((req.headers['x-forwarded-proto'] || '').includes('https')) {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
+  next();
+});
+
 // PeerJS не нужен — сигналинг через Socket.IO
 
 // ========== ХРАНИЛИЩЕ ФАЙЛОВ — мульти-провайдер ==========
@@ -478,6 +502,244 @@ const USERS_FILE = 'users.json';
 let users = new Map(); // username -> { nickname, avatar, theme, friends, friendRequests, groups, recoveryEmail }
 let recoveryCodes     = new Map(); // username -> { code, expiry, email }
 let emailVerifyCodes  = new Map(); // username -> { code, expiry, pendingEmail }
+const SESSION_COOKIE = 'aura_session';
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+if (!process.env.SESSION_SECRET) {
+  console.warn('[security] SESSION_SECRET is not set; sessions will reset after process restart.');
+}
+const rateBuckets = new Map();
+
+function b64url(input) {
+  return Buffer.from(input).toString('base64url');
+}
+
+function signSessionPayload(payload) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+}
+
+function createSessionToken(username) {
+  const payload = b64url(JSON.stringify({ u: username, exp: Date.now() + SESSION_TTL_MS }));
+  return `${payload}.${signSessionPayload(payload)}`;
+}
+
+function verifySessionToken(token) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  const [payload, sig] = token.split('.');
+  const expected = signSessionPayload(payload);
+  const sigBuf = Buffer.from(sig || '');
+  const expectedBuf = Buffer.from(expected);
+  if (!sig || sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data?.u || Date.now() > Number(data.exp || 0)) return null;
+    if (!users.has(data.u)) return null;
+    return String(data.u);
+  } catch {
+    return null;
+  }
+}
+
+function parseCookieHeader(header = '') {
+  const out = {};
+  String(header || '').split(';').forEach(part => {
+    const idx = part.indexOf('=');
+    if (idx < 0) return;
+    out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+  });
+  return out;
+}
+
+function cookieOptions(req) {
+  const secure = req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
+  return [
+    `${SESSION_COOKIE}=`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+    secure ? 'Secure' : ''
+  ].filter(Boolean);
+}
+
+function setSessionCookie(req, res, username) {
+  const token = createSessionToken(username);
+  const parts = cookieOptions(req);
+  parts[0] = `${SESSION_COOKIE}=${encodeURIComponent(token)}`;
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearSessionCookie(req, res) {
+  const parts = cookieOptions(req);
+  parts[0] = `${SESSION_COOKIE}=`;
+  parts[4] = 'Max-Age=0';
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function getAuthUsernameFromCookie(cookieHeader) {
+  const cookies = parseCookieHeader(cookieHeader);
+  return verifySessionToken(cookies[SESSION_COOKIE]);
+}
+
+function attachUser(req, res, next) {
+  const username = getAuthUsernameFromCookie(req.headers.cookie);
+  if (username) req.user = { username };
+  next();
+}
+
+function requireAuth(req, res, next) {
+  if (!req.user?.username) return res.status(401).json({ error: 'auth required' });
+  next();
+}
+
+function rateLimitKey(req, scope, subject = '') {
+  const ip = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'ip';
+  return `${scope}:${String(subject || '').toLowerCase()}:${String(ip).split(',')[0].trim()}`;
+}
+
+function checkRateLimit(key, max, windowMs) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return { ok: true, remaining: max - 1, retryAfter: 0 };
+  }
+  bucket.count += 1;
+  if (bucket.count > max) {
+    return { ok: false, remaining: 0, retryAfter: Math.ceil((bucket.resetAt - now) / 1000) };
+  }
+  return { ok: true, remaining: max - bucket.count, retryAfter: 0 };
+}
+
+function enforceRateLimit(req, res, scope, subject, max, windowMs) {
+  const result = checkRateLimit(rateLimitKey(req, scope, subject), max, windowMs);
+  if (result.ok) return true;
+  res.setHeader('Retry-After', String(result.retryAfter));
+  res.status(429).json({ error: 'too many requests' });
+  return false;
+}
+
+function cleanUsername(username) {
+  return String(username || '').trim();
+}
+
+function isValidUsername(username) {
+  const u = cleanUsername(username);
+  return u.length >= 3 && u.length <= 32 && !/[:\s]/.test(u);
+}
+
+function getClientUser(req) {
+  return req.user?.username || null;
+}
+
+function userPublicPayload(username, userData) {
+  return {
+    username,
+    nickname: userData.nickname || username,
+    avatar: userData.avatar || null,
+    theme: userData.theme || 'dark',
+    friends: userData.friends || [],
+    friendRequests: userData.friendRequests || [],
+    groups: userData.groups || []
+  };
+}
+
+function legacyPasswordHash(password) {
+  return crypto.createHash('sha256').update(password + 'aura_salt_2026').digest('hex');
+}
+
+function createPasswordHash(password) {
+  const salt = crypto.randomBytes(16).toString('base64url');
+  const iterations = 210000;
+  const hash = crypto.pbkdf2Sync(String(password), salt, iterations, 32, 'sha256').toString('base64url');
+  return `pbkdf2$${iterations}$${salt}$${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash) return false;
+  if (String(storedHash).startsWith('pbkdf2$')) {
+    try {
+      const [, iterStr, salt, hash] = String(storedHash).split('$');
+      const calc = crypto.pbkdf2Sync(String(password), salt, Number(iterStr), 32, 'sha256').toString('base64url');
+      const calcBuf = Buffer.from(calc);
+      const hashBuf = Buffer.from(hash || '');
+      return calcBuf.length === hashBuf.length && crypto.timingSafeEqual(calcBuf, hashBuf);
+    } catch {
+      return false;
+    }
+  }
+  return legacyPasswordHash(password) === storedHash;
+}
+
+function maybeUpgradePasswordHash(userData, password) {
+  if (!String(userData.passwordHash || '').startsWith('pbkdf2$')) {
+    userData.passwordHash = createPasswordHash(password);
+    return true;
+  }
+  return false;
+}
+
+function sanitizeAvatarUrl(avatar) {
+  if (avatar === null || avatar === '') return avatar;
+  const value = String(avatar || '').trim();
+  if (!value) return '';
+  if (value.startsWith('/api/dl')) return value;
+  if (value.startsWith('data:image/')) return value.length <= 750000 ? value : '';
+  const allowedOrigins = [SB_URL, R2_PUBLIC, process.env.PUBLIC_BASE_URL]
+    .filter(Boolean)
+    .map(u => {
+      try { return new URL(u).origin; } catch { return null; }
+    })
+    .filter(Boolean);
+  try {
+    const u = new URL(value);
+    if (u.protocol !== 'https:') return '';
+    return allowedOrigins.includes(u.origin) ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+function getGroupForUser(username, groupId) {
+  const user = users.get(username);
+  return (user?.groups || []).find(g => g.id === groupId) || null;
+}
+
+function canAccessRoom(username, room) {
+  if (!username || !room) return false;
+  const r = String(room);
+  if (r.startsWith('private:')) {
+    const parts = r.split(':').slice(1);
+    if (parts.length !== 2 || !parts.includes(username) || !parts.every(u => users.has(u) || isHumanBotUsername(u))) return false;
+    const other = parts.find(u => u !== username);
+    if (isHumanBotUsername(other)) return true;
+    return !!users.get(username)?.friends?.includes(other);
+  }
+  if (r.startsWith('group:')) {
+    const groupId = r.slice(6);
+    return !!getGroupForUser(username, groupId);
+  }
+  return false;
+}
+
+function canSignalUser(from, to, data = {}) {
+  if (!from || !to || from === to) return false;
+  if (isHumanBotUsername(to)) return true;
+  if (data.groupId) {
+    const group = getGroupForUser(from, data.groupId);
+    return !!group && (group.members || []).includes(to);
+  }
+  const fromUser = users.get(from);
+  return !!fromUser?.friends?.includes(to);
+}
+
+function requireRoomAccess(req, res, room) {
+  if (!canAccessRoom(req.user?.username, room)) {
+    res.status(403).json({ error: 'room forbidden' });
+    return false;
+  }
+  return true;
+}
 const HUMAN_BOT_USERNAME = 'mira_ai';
 const HUMAN_BOT_MALE_USERNAME = 'max_ai';
 const HUMAN_BOTS = {
@@ -2261,6 +2523,7 @@ async function saveUsers() {
 // ========== ЗАГРУЗКА ФАЙЛОВ ==========
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
+app.use(attachUser);
 app.use(express.static('public'));
 
 // в”Ђв”Ђ РџСЂРѕРєСЃРё РґР»СЏ СЃРєР°С‡РёРІР°РЅРёСЏ С„Р°Р№Р»РѕРІ СЃ B2 в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -2326,22 +2589,26 @@ async function handleDownloadProxy(req, res, rawF) {
   }
 }
 
-app.get('/api/dl/:f', async (req, res) => handleDownloadProxy(req, res, req.params.f));
+app.get('/api/dl/:f', requireAuth, async (req, res) => handleDownloadProxy(req, res, req.params.f));
 
 // Стримим файл через сервер — браузер не идёт на B2 напрямую (нет CORS проблем)
-app.get('/api/dl', async (req, res) => handleDownloadProxy(req, res, req.query.f));
+app.get('/api/dl', requireAuth, async (req, res) => handleDownloadProxy(req, res, req.query.f));
 
-app.post('/upload', upload.single('file'), async (req, res) => {
+app.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
 
     // Если браузер прислал octet-stream — определяем тип по расширению файла
     let mimeType = req.file.mimetype;
     const _ext = (req.file.originalname || '').split('.').pop().toLowerCase();
+    if (_ext === 'svg' || mimeType === 'image/svg+xml') {
+      return res.status(400).json({ error: 'SVG uploads are not allowed' });
+    }
     if (!mimeType || mimeType === 'application/octet-stream') {
-      const _M = { mp4:'video/mp4',webm:'video/webm',mov:'video/quicktime',avi:'video/x-msvideo',mkv:'video/x-matroska',flv:'video/x-flv',wmv:'video/x-ms-wmv',m4v:'video/mp4',ogv:'video/ogg','3gp':'video/3gpp',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',avif:'image/avif',heic:'image/heic',heif:'image/heif',svg:'image/svg+xml',bmp:'image/bmp',tif:'image/tiff',tiff:'image/tiff',ico:'image/x-icon',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',flac:'audio/flac',aac:'audio/aac',m4a:'audio/mp4',opus:'audio/opus',wma:'audio/x-ms-wma' };
+      const _M = { mp4:'video/mp4',webm:'video/webm',mov:'video/quicktime',avi:'video/x-msvideo',mkv:'video/x-matroska',flv:'video/x-flv',wmv:'video/x-ms-wmv',m4v:'video/mp4',ogv:'video/ogg','3gp':'video/3gpp',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',avif:'image/avif',heic:'image/heic',heif:'image/heif',bmp:'image/bmp',tif:'image/tiff',tiff:'image/tiff',ico:'image/x-icon',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',flac:'audio/flac',aac:'audio/aac',m4a:'audio/mp4',opus:'audio/opus',wma:'audio/x-ms-wma' };
       mimeType = _M[_ext] || mimeType;
     }
+    if (!mimeType) mimeType = 'application/octet-stream';
     let fileType = 'file';
     if (mimeType.startsWith('image/')) fileType = 'image';
     else if (mimeType.startsWith('audio/')) fileType = 'audio';
@@ -2409,7 +2676,7 @@ function getMeteredKeys() {
   return raw.split(',').map(k => k.trim()).filter(Boolean);
 }
 
-app.get('/api/ice-servers', async (req, res) => {
+app.get('/api/ice-servers', requireAuth, async (req, res) => {
   // Отдаём из кэша если свежий
   if (_iceCache && (Date.now() - _iceCacheTime) < ICE_CACHE_TTL) {
     return res.json(_iceCache);
@@ -5448,8 +5715,9 @@ async function callMiniMax(messages, onChunk) {
 }
 
 // в”Ђв”Ђ GET AI chat history в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-app.get('/api/ai-history/:username', (req, res) => {
-  const { username } = req.params;
+app.get('/api/ai-history/:username', requireAuth, (req, res) => {
+  if (req.params.username !== req.user.username) return res.status(403).json({ error: 'forbidden' });
+  const username = req.user.username;
   const sess = aiConversations.get(username);
   const files = aiUserFiles.get(username) || [];
   if (!sess) return res.json({ history: [], files: [] });
@@ -5461,8 +5729,9 @@ app.get('/api/ai-history/:username', (req, res) => {
 });
 
 // в”Ђв”Ђ /api/ai-settings вЂ” РїРµСЂРµРєР»СЋС‡РµРЅРёРµ СЂРµР¶РёРјРѕРІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-app.post('/api/ai-settings', (req, res) => {
-  const { username, thinking, multiagent } = req.body;
+app.post('/api/ai-settings', requireAuth, (req, res) => {
+  const username = req.user.username;
+  const { thinking, multiagent } = req.body;
   if (!username) return res.status(400).json({ error: 'no username' });
   const sess = aiGetSession(username);
   if (thinking   !== undefined) sess.thinking   = !!thinking;
@@ -5470,15 +5739,17 @@ app.post('/api/ai-settings', (req, res) => {
   res.json({ ok: true, thinking: sess.thinking, multiagent: sess.multiagent });
 });
 
-app.get('/api/ai-settings/:username', (req, res) => {
-  const username = req.params.username;
+app.get('/api/ai-settings/:username', requireAuth, (req, res) => {
+  if (req.params.username !== req.user.username) return res.status(403).json({ error: 'forbidden' });
+  const username = req.user.username;
   if (!username) return res.status(400).json({ error: 'no username' });
   const sess = aiGetSession(username);
   res.json({ ok: true, thinking: !!sess.thinking, multiagent: !!sess.multiagent });
 });
 
-app.post('/api/ai-chat', async (req, res) => {
-  const { username, message, imageData, imageType, fileName, fileContent, model: selectedModel, omniUrl } = req.body;
+app.post('/api/ai-chat', requireAuth, async (req, res) => {
+  const username = req.user.username;
+  const { message, imageData, imageType, fileName, fileContent, model: selectedModel, omniUrl } = req.body;
   const useAuraAI = selectedModel === 'minimax';
   const useOR     = selectedModel && OR_MODELS[selectedModel]; // OmniRouter модель
   const omniBaseUrl = String(omniUrl || OMNIROUTER_API_URL || '').trim();
@@ -6123,8 +6394,9 @@ app.post('/api/ai-chat', async (req, res) => {
 });
 
 // в”Ђв”Ђ РЎРєР°С‡Р°С‚СЊ С„Р°Р№Р» РёР· Р±Р°Р·С‹ AI в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-app.get('/api/ai-file/:username/:fileId', (req, res) => {
-  const files = aiUserFiles.get(req.params.username) || [];
+app.get('/api/ai-file/:username/:fileId', requireAuth, (req, res) => {
+  if (req.params.username !== req.user.username) return res.status(403).send('forbidden');
+  const files = aiUserFiles.get(req.user.username) || [];
   const file  = files.find(f => f.id === req.params.fileId);
   if (!file) return res.status(404).send('Файл не найден или истёк срок хранения');
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.name)}"`);
@@ -6133,8 +6405,9 @@ app.get('/api/ai-file/:username/:fileId', (req, res) => {
 });
 
 // в”Ђв”Ђ РЎРєР°С‡Р°С‚СЊ РЅРµСЃРєРѕР»СЊРєРѕ С„Р°Р№Р»РѕРІ РєР°Рє ZIP в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-app.post('/api/ai-files-zip', (req, res) => {
-  const { username, fileIds } = req.body;
+app.post('/api/ai-files-zip', requireAuth, (req, res) => {
+  const username = req.user.username;
+  const { fileIds } = req.body;
   if (!username || !fileIds?.length) return res.status(400).json({ error: 'Нет данных' });
 
   const userFiles = aiUserFiles.get(username) || [];
@@ -6234,8 +6507,9 @@ function crc32(buf) {
 // ── SSE стриминг для AI (прогресс инструментов + итоговый ответ) ──────────────
 const aiSseClients = new Map(); // username -> res
 
-app.get('/api/ai-stream/:username', (req, res) => {
-  const { username } = req.params;
+app.get('/api/ai-stream/:username', requireAuth, (req, res) => {
+  if (req.params.username !== req.user.username) return res.status(403).end();
+  const username = req.user.username;
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -6284,8 +6558,9 @@ function getDailyLimitInfo(username) {
 }
 
 // ── Прямая генерация изображения (обходит Mistral) ───────────────────────────
-app.post('/api/generate-image', async (req, res) => {
-  const { username, prompt, style } = req.body;
+app.post('/api/generate-image', requireAuth, async (req, res) => {
+  const username = req.user.username;
+  const { prompt, style } = req.body;
   if (!username || !prompt) return res.status(400).json({ error: 'Нет данных' });
 
   const limitErr = checkDailyLimit(username, 'image');
@@ -6357,8 +6632,9 @@ app.post('/api/generate-image', async (req, res) => {
 });
 
 // ── Генерация видео — async через SSE (6 кадров + canvas плеер) ─────────────
-app.post('/api/generate-video', async (req, res) => {
-  const { username, prompt } = req.body;
+app.post('/api/generate-video', requireAuth, async (req, res) => {
+  const username = req.user.username;
+  const { prompt } = req.body;
   if (!username || !prompt) return res.status(400).json({ error: 'Нет данных' });
   const limitErr = checkDailyLimit(username, 'video');
   if (limitErr) return res.json({ error: limitErr });
@@ -6516,8 +6792,9 @@ setTimeout(tog,600);
   });
 });
 
-app.get('/api/ai-files/:username', (req, res) => {
-  const files = (aiUserFiles.get(req.params.username) || []).map(f => ({
+app.get('/api/ai-files/:username', requireAuth, (req, res) => {
+  if (req.params.username !== req.user.username) return res.status(403).json({ error: 'forbidden' });
+  const files = (aiUserFiles.get(req.user.username) || []).map(f => ({
     id: f.id, name: f.name, ttl: f.ttl,
     size: f.content?.length || 0,
     description: f.description || '',
@@ -6528,8 +6805,9 @@ app.get('/api/ai-files/:username', (req, res) => {
 });
 
 // в”Ђв”Ђ Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ С„Р°Р№Р» РІ Р±Р°Р·Рµ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-app.post('/api/ai-file-edit', (req, res) => {
-  const { username, fileId, content, name } = req.body;
+app.post('/api/ai-file-edit', requireAuth, (req, res) => {
+  const username = req.user.username;
+  const { fileId, content, name } = req.body;
   if (!username || !fileId) return res.status(400).json({ error: 'Нет данных' });
   const files = aiUserFiles.get(username) || [];
   const idx   = files.findIndex(f => f.id === fileId);
@@ -6542,8 +6820,9 @@ app.post('/api/ai-file-edit', (req, res) => {
 });
 
 // ── Удалить файл из базы ──────────────────────────────────────────────────────
-app.post('/api/ai-file-delete', (req, res) => {
-  const { username, fileId } = req.body;
+app.post('/api/ai-file-delete', requireAuth, (req, res) => {
+  const username = req.user.username;
+  const { fileId } = req.body;
   if (!username || !fileId) return res.status(400).json({ error: 'Нет данных' });
   const files = (aiUserFiles.get(username) || []).filter(f => f.id !== fileId);
   if (files.length) aiUserFiles.set(username, files);
@@ -6552,20 +6831,90 @@ app.post('/api/ai-file-delete', (req, res) => {
 });
 
 // в”Ђв”Ђ РЎР±СЂРѕСЃРёС‚СЊ РёСЃС‚РѕСЂРёСЋ AI-С‡Р°С‚Р° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-app.post('/api/ai-clear', (req, res) => {
-  const { username } = req.body;
-  if (username) { aiConversations.delete(username); aiUserFiles.delete(username); }
+app.post('/api/ai-clear', requireAuth, (req, res) => {
+  const username = req.user.username;
+  aiConversations.delete(username);
+  aiUserFiles.delete(username);
   res.json({ success: true });
 });
 
 // Хэш пароля (простой SHA-256 без внешних зависимостей)
 function hashPassword(password) {
-  return crypto.createHash('sha256').update(password + 'aura_salt_2026').digest('hex');
+  return createPasswordHash(password);
 }
 
 // Вход/регистрация с паролем
 app.post('/api/login', async (req, res) => {
   const { username, password, email, mode } = req.body; // mode: 'login' | 'register'
+  const action = mode === 'register' ? 'register' : 'login';
+  const authName = cleanUsername(username);
+  const plainPassword = String(password || '').trim();
+
+  if (!enforceRateLimit(req, res, 'login', authName || 'unknown', 8, 10 * 60 * 1000)) return;
+  if (!isValidUsername(authName)) {
+    return res.status(400).json({ error: 'Bad username' });
+  }
+  if (!plainPassword) {
+    return res.status(400).json({ error: 'Password required' });
+  }
+  if (isHumanBotUsername(authName)) {
+    return res.status(403).json({ error: 'This account is managed by Aura.' });
+  }
+
+  if (users.has(authName)) {
+    if (action === 'register') return res.status(409).json({ error: 'User already exists' });
+    const userData = users.get(authName);
+    if (!userData.passwordHash || !verifyPassword(plainPassword, userData.passwordHash)) {
+      return res.status(401).json({ error: 'Bad username or password' });
+    }
+    const upgraded = maybeUpgradePasswordHash(userData, plainPassword);
+    if (upgraded) {
+      users.set(authName, userData);
+      await saveUsers();
+    }
+    setSessionCookie(req, res, authName);
+    return res.json({ success: true, user: userPublicPayload(authName, userData) });
+  }
+
+  if (action !== 'register') {
+    return res.status(401).json({ error: 'Bad username or password' });
+  }
+  if (plainPassword.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Bad email' });
+  }
+
+  const newUser = {
+    nickname: authName,
+    passwordHash: createPasswordHash(plainPassword),
+    avatar: null,
+    theme: 'dark',
+    friends: [],
+    friendRequests: [],
+    sentFriendRequests: [],
+    groups: [],
+    recoveryEmail: null,
+    emailVerified: false,
+  };
+  users.set(authName, newUser);
+  await saveUsers();
+
+  if (email) {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = Date.now() + 15 * 60 * 1000;
+    emailVerifyCodes.set(authName, { code, expiry, pendingEmail: email, attempts: 0 });
+    sendVerifyEmail(email, code).catch(e => console.warn('Verify email send failed:', e.message));
+  }
+
+  setSessionCookie(req, res, authName);
+  return res.json({
+    success: true,
+    isNew: true,
+    needsEmailVerify: !!email,
+    user: userPublicPayload(authName, newUser)
+  });
   if (!username || username.trim() === '') {
     return res.status(400).json({ error: 'Имя не может быть пустым' });
   }
@@ -6651,23 +7000,41 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Обновление профиля
-app.post('/api/update-profile', async (req, res) => {
-  const { username, nickname, avatar, theme } = req.body;
+app.get('/api/session', requireAuth, (req, res) => {
+  const username = req.user.username;
+  const userData = users.get(username);
+  if (!userData) return res.status(401).json({ error: 'auth required' });
+  res.json({ success: true, user: userPublicPayload(username, userData) });
+});
+
+app.post('/api/logout', (req, res) => {
+  clearSessionCookie(req, res);
+  res.json({ success: true });
+});
+
+app.post('/api/update-profile', requireAuth, async (req, res) => {
+  const { nickname, avatar, theme } = req.body;
+  const username = req.user.username;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   const user = users.get(username);
-  if (nickname !== undefined) user.nickname = nickname;
-  if (avatar !== undefined) user.avatar = avatar;
-  if (theme !== undefined) user.theme = theme;
+  if (nickname !== undefined) user.nickname = String(nickname).trim().slice(0, 40) || username;
+  if (avatar !== undefined) {
+    const cleanAvatar = sanitizeAvatarUrl(avatar);
+    if (avatar && !cleanAvatar) return res.status(400).json({ error: 'Bad avatar URL' });
+    user.avatar = cleanAvatar || null;
+  }
+  if (theme !== undefined) user.theme = String(theme).slice(0, 24);
   users.set(username, user);
   await saveUsers();
   res.json({ success: true, user: { nickname: user.nickname, avatar: user.avatar, theme: user.theme } });
 });
 
 // Удаление аккаунта
-app.post('/api/delete-account', async (req, res) => {
-  const { username } = req.body;
+app.post('/api/delete-account', requireAuth, async (req, res) => {
+  const username = req.user.username;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   users.delete(username);
+  clearSessionCookie(req, res);
   await saveUsers();
   res.json({ success: true });
 });
@@ -6675,6 +7042,24 @@ app.post('/api/delete-account', async (req, res) => {
 // Запросить сброс пароля
 app.post('/api/request-password-reset', async (req, res) => {
   const { username } = req.body;
+  const resetName = cleanUsername(username);
+  const generic = { success: true, message: 'If the account exists, a code was sent' };
+  if (!enforceRateLimit(req, res, 'password-reset-request', resetName || 'unknown', 5, 15 * 60 * 1000)) return;
+  if (!resetName || !users.has(resetName)) return res.json(generic);
+  const resetUserData = users.get(resetName);
+  if (!resetUserData.recoveryEmail) return res.json(generic);
+
+  const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const resetExpiry = Date.now() + 15 * 60 * 1000;
+  recoveryCodes.set(resetName, { code: resetCode, expiry: resetExpiry, email: resetUserData.recoveryEmail, attempts: 0 });
+
+  try {
+    await sendRecoveryEmail(resetUserData.recoveryEmail, resetCode);
+  } catch (err) {
+    console.warn('[password-reset] send failed:', err.message);
+  }
+  return res.json(generic);
+
   if (!username || !users.has(username)) {
     // Не раскрываем существование аккаунта
     return res.json({ success: true, message: 'Если аккаунт существует, код отправлен на email' });
@@ -6707,6 +7092,40 @@ app.post('/api/request-password-reset', async (req, res) => {
 // Подтвердить сброс пароля
 app.post('/api/reset-password', async (req, res) => {
   const { username, code, newPassword } = req.body;
+  const resetName = cleanUsername(username);
+  if (!enforceRateLimit(req, res, 'password-reset-confirm', resetName || 'unknown', 8, 15 * 60 * 1000)) return;
+  if (!resetName || !code || !newPassword) {
+    return res.status(400).json({ error: 'Missing data' });
+  }
+  if (!users.has(resetName)) {
+    return res.status(400).json({ error: 'Bad or expired code' });
+  }
+  if (String(newPassword).trim().length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  const resetRecovery = recoveryCodes.get(resetName);
+  if (!resetRecovery || Date.now() > resetRecovery.expiry) {
+    recoveryCodes.delete(resetName);
+    return res.status(400).json({ error: 'Bad or expired code' });
+  }
+  resetRecovery.attempts = (resetRecovery.attempts || 0) + 1;
+  if (resetRecovery.attempts > 5) {
+    recoveryCodes.delete(resetName);
+    return res.status(429).json({ error: 'Too many attempts' });
+  }
+  if (resetRecovery.code !== String(code)) {
+    recoveryCodes.set(resetName, resetRecovery);
+    return res.status(400).json({ error: 'Bad or expired code' });
+  }
+
+  const resetUser = users.get(resetName);
+  resetUser.passwordHash = createPasswordHash(String(newPassword).trim());
+  users.set(resetName, resetUser);
+  recoveryCodes.delete(resetName);
+  await saveUsers();
+  return res.json({ success: true, message: 'Password changed' });
+
   if (!username || !code || !newPassword) {
     return res.status(400).json({ error: 'Не все данные указаны' });
   }
@@ -6734,8 +7153,9 @@ app.post('/api/reset-password', async (req, res) => {
 
 // Обновить email для восстановления
 // Шаг 1: Отправить код подтверждения на новый email
-app.post('/api/update-recovery-email', async (req, res) => {
-  const { username, email } = req.body;
+app.post('/api/update-recovery-email', requireAuth, async (req, res) => {
+  const { email } = req.body;
+  const username = req.user.username;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   if (!email) {
     // Удаление email — без подтверждения
@@ -6752,7 +7172,7 @@ app.post('/api/update-recovery-email', async (req, res) => {
 
   const code   = Math.floor(100000 + Math.random() * 900000).toString();
   const expiry = Date.now() + 15 * 60 * 1000;
-  emailVerifyCodes.set(username, { code, expiry, pendingEmail: email });
+  emailVerifyCodes.set(username, { code, expiry, pendingEmail: email, attempts: 0 });
 
   try {
     await sendVerifyEmail(email, code);
@@ -6768,13 +7188,27 @@ app.post('/api/update-recovery-email', async (req, res) => {
 });
 
 // Шаг 2: Подтвердить код
-app.post('/api/verify-email-code', async (req, res) => {
-  const { username, code } = req.body;
+app.post('/api/verify-email-code', requireAuth, async (req, res) => {
+  const { code } = req.body;
+  const username = req.user.username;
   if (!username || !code) return res.status(400).json({ error: 'Нет данных' });
   if (!users.has(username))  return res.status(404).json({ error: 'Пользователь не найден' });
 
   const pending = emailVerifyCodes.get(username);
-  if (!pending || pending.code !== code || Date.now() > pending.expiry) {
+  if (!pending || Date.now() > pending.expiry) {
+    emailVerifyCodes.delete(username);
+    return res.status(400).json({ error: 'Bad or expired code' });
+  }
+  pending.attempts = (pending.attempts || 0) + 1;
+  if (pending.attempts > 5) {
+    emailVerifyCodes.delete(username);
+    return res.status(429).json({ error: 'Too many attempts' });
+  }
+  if (pending.code !== String(code)) {
+    emailVerifyCodes.set(username, pending);
+    return res.status(400).json({ error: 'Bad or expired code' });
+  }
+  if (!pending || pending.code !== String(code) || Date.now() > pending.expiry) {
     return res.status(400).json({ error: 'Неверный или просроченный код' });
   }
 
@@ -6789,10 +7223,11 @@ app.post('/api/verify-email-code', async (req, res) => {
 });
 
 // Поиск пользователей по nickname
-app.post('/api/search-users', async (req, res) => {
-  const { query, requester } = req.body;
+app.post('/api/search-users', requireAuth, async (req, res) => {
+  const { query } = req.body;
+  const requester = req.user.username;
   ensureHumanBotAccount();
-  if (!query || query.trim().length < 1) {
+  if (!query || query.trim().length < 2) {
     return res.json({ users: [] });
   }
   const q = query.toLowerCase().trim();
@@ -6853,9 +7288,10 @@ app.post('/api/search-users', async (req, res) => {
 });
 
 // Отправить заявку в друзья
-app.post('/api/send-friend-request', async (req, res) => {
+app.post('/api/send-friend-request', requireAuth, async (req, res) => {
   ensureHumanBotAccount();
-  const { from, to } = req.body;
+  const { to } = req.body;
+  const from = req.user.username;
   if (!from || !to) return res.status(400).json({ error: 'Не указаны имена' });
   if (!users.has(from) || !users.has(to)) return res.status(404).json({ error: 'Пользователь не найден' });
   if (from === to) return res.status(400).json({ error: 'Нельзя добавить себя' });
@@ -6906,8 +7342,9 @@ app.post('/api/send-friend-request', async (req, res) => {
 });
 
 // Принять заявку
-app.post('/api/accept-friend-request', async (req, res) => {
-  const { username, requester } = req.body;
+app.post('/api/accept-friend-request', requireAuth, async (req, res) => {
+  const { requester } = req.body;
+  const username = req.user.username;
   if (!username || !requester) return res.status(400).json({ error: 'Не указаны имена' });
   if (!users.has(username) || !users.has(requester)) return res.status(404).json({ error: 'Пользователь не найден' });
 
@@ -6944,8 +7381,9 @@ app.post('/api/accept-friend-request', async (req, res) => {
 });
 
 // Отклонить заявку
-app.post('/api/reject-friend-request', async (req, res) => {
-  const { username, requester } = req.body;
+app.post('/api/reject-friend-request', requireAuth, async (req, res) => {
+  const { requester } = req.body;
+  const username = req.user.username;
   if (!username || !requester) return res.status(400).json({ error: 'Не указаны имена' });
   if (!users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
 
@@ -6966,8 +7404,9 @@ app.post('/api/reject-friend-request', async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/cancel-friend-request', async (req, res) => {
-  const { from, to } = req.body;
+app.post('/api/cancel-friend-request', requireAuth, async (req, res) => {
+  const { to } = req.body;
+  const from = req.user.username;
   if (!from || !to) return res.status(400).json({ error: 'Не указаны имена' });
   if (!users.has(from) || !users.has(to)) return res.status(404).json({ error: 'Пользователь не найден' });
   const fromUser = users.get(from);
@@ -6983,9 +7422,9 @@ app.post('/api/cancel-friend-request', async (req, res) => {
 });
 
 // Получить данные пользователя
-app.post('/api/get-user-data', (req, res) => {
+app.post('/api/get-user-data', requireAuth, (req, res) => {
   ensureHumanBotAccount();
-  const { username } = req.body;
+  const username = req.user.username;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
   const userData = users.get(username);
   res.json({
@@ -6999,7 +7438,7 @@ app.post('/api/get-user-data', (req, res) => {
 });
 
 // Получить аватарку пользователя
-app.post('/api/get-avatar', (req, res) => {
+app.post('/api/get-avatar', requireAuth, (req, res) => {
   ensureHumanBotAccount();
   const { username } = req.body;
   if (!username || !users.has(username)) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -7011,14 +7450,20 @@ app.post('/api/get-avatar', (req, res) => {
 });
 
 // Создать группу (упрощённо)
-app.post('/api/create-group', async (req, res) => {
+app.post('/api/create-group', requireAuth, async (req, res) => {
   ensureHumanBotAccount();
-  const { creator, name, members } = req.body;
+  const { name, members } = req.body;
+  const creator = req.user.username;
   if (!creator || !name) return res.status(400).json({ error: 'Не указаны данные' });
   if (!users.has(creator)) return res.status(404).json({ error: 'Создатель не найден' });
 
+  const creatorData = users.get(creator);
+  const friendSet = new Set(creatorData?.friends || []);
+  const safeMembers = [...new Set((Array.isArray(members) ? members : [])
+    .filter(m => m !== creator && users.has(m) && (friendSet.has(m) || isHumanBotUsername(m))))];
+
   const groupId = `group_${Date.now()}`;
-  const group = { id: groupId, name, creator, avatar: null, members: [creator, ...(members || [])] };
+  const group = { id: groupId, name: String(name).slice(0, 60), creator, avatar: null, members: [creator, ...safeMembers] };
   for (const member of group.members) {
     if (users.has(member)) {
       const user = users.get(member);
@@ -7028,17 +7473,25 @@ app.post('/api/create-group', async (req, res) => {
     }
   }
   await saveUsers();
-  [...(members || []), creator].forEach(m => {
+  [...safeMembers, creator].forEach(m => {
     const sid = userSockets.get(m);
-    if (sid) io.to(sid).emit('group-created', { groupId, name, creator });
+    if (sid) io.to(sid).emit('group-created', { groupId, name: group.name, creator });
   });
   res.json({ success: true, groupId });
 });
 
 // Обновить название группы (только создатель)
-app.post('/api/update-group', async (req, res) => {
-  const { username, groupId, name, avatar } = req.body;
+app.post('/api/update-group', requireAuth, async (req, res) => {
+  const { groupId, name, avatar } = req.body;
+  const username = req.user.username;
   if (!username || !groupId) return res.status(400).json({ error: 'Нет данных' });
+
+  const requesterGroup = getGroupForUser(username, groupId);
+  if (!requesterGroup) return res.status(404).json({ error: 'Group not found' });
+  if (requesterGroup.creator !== username) return res.status(403).json({ error: 'Only creator can edit group' });
+  const nextName = name !== undefined ? String(name).trim().slice(0, 60) : undefined;
+  const nextAvatar = avatar !== undefined ? sanitizeAvatarUrl(avatar) : undefined;
+  if (avatar && !nextAvatar) return res.status(400).json({ error: 'Bad avatar URL' });
 
   let updated = false;
   let groupData = null;
@@ -7054,8 +7507,8 @@ app.post('/api/update-group', async (req, res) => {
       return res.status(403).json({ error: 'Только создатель может редактировать группу' });
     }
 
-    if (name !== undefined)   userData.groups[idx].name   = name;
-    if (avatar !== undefined) userData.groups[idx].avatar = avatar;
+    if (nextName !== undefined)   userData.groups[idx].name   = nextName;
+    if (avatar !== undefined) userData.groups[idx].avatar = nextAvatar || null;
     groupData = userData.groups[idx];
     users.set(uname, userData);
     updated = true;
@@ -7076,8 +7529,9 @@ app.post('/api/update-group', async (req, res) => {
 });
 
 // Удалить группу (только создатель)
-app.post('/api/delete-group', async (req, res) => {
-  const { username, groupId } = req.body;
+app.post('/api/delete-group', requireAuth, async (req, res) => {
+  const { groupId } = req.body;
+  const username = req.user.username;
   if (!username || !groupId) return res.status(400).json({ error: 'Нет данных' });
 
   let members = [];
@@ -7115,8 +7569,9 @@ let messageHistory = [];
 
 // Удаление сообщения
 // в”Ђв”Ђ РћС‡РёСЃС‚РєР° РёСЃС‚РѕСЂРёРё РіСЂСѓРїРїС‹ (С‚РѕР»СЊРєРѕ СЃРѕР·РґР°С‚РµР»СЊ) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-app.post('/api/clear-group', async (req, res) => {
-  const { groupId, username } = req.body;
+app.post('/api/clear-group', requireAuth, async (req, res) => {
+  const { groupId } = req.body;
+  const username = req.user.username;
   if (!groupId || !username) return res.status(400).json({ error: 'Нет данных' });
 
   // Ищем группу в данных пользователя
@@ -7138,14 +7593,16 @@ app.post('/api/clear-group', async (req, res) => {
   res.json({ success: true, deleted });
 });
 
-app.post('/api/delete-message', async (req, res) => {
-  const { messageId, username, forAll } = req.body;
+app.post('/api/delete-message', requireAuth, async (req, res) => {
+  const { messageId, forAll } = req.body;
+  const username = req.user.username;
   if (!messageId || !username) return res.status(400).json({ error: 'Нет данных' });
 
   const idx = messageHistory.findIndex(m => String(m.id) === String(messageId));
   if (idx === -1) return res.status(404).json({ error: 'Сообщение не найдено' });
 
   const msg = messageHistory[idx];
+  if (!canAccessRoom(username, msg.room)) return res.status(403).json({ error: 'forbidden' });
 
   if (forAll) {
     // Удаление у всех — только автор
@@ -7294,9 +7751,10 @@ function getGroupSnapshotForUser(username, groupId) {
 }
 
 io.on('connection', (socket) => {
-  let currentUser = null;
+  let currentUser = getAuthUsernameFromCookie(socket.handshake.headers.cookie);
 
-  socket.on('identify', (username) => {
+  function registerSocketUser(username) {
+    if (!username || !users.has(username)) return;
     currentUser = username;
     onlineUsers.set(socket.id, { username, lastSeen: Date.now() });
     // Рассылаем обновлённый список
@@ -7340,10 +7798,19 @@ io.on('connection', (socket) => {
         socket.emit('missed-calls', { calls: fresh });
       }
     }
+  }
+
+  socket.on('identify', () => {
+    const username = getAuthUsernameFromCookie(socket.handshake.headers.cookie);
+    if (!username) return socket.emit('auth-error', { error: 'auth required' });
+    registerSocketUser(username);
   });
+
+  if (currentUser) registerSocketUser(currentUser);
 
   socket.on('join-room', (room) => {
     if (!currentUser) return;
+    if (!canAccessRoom(currentUser, room)) return socket.emit('room-error', { error: 'forbidden' });
     const rooms = [...socket.rooms];
     rooms.forEach(r => {
       if (r !== socket.id) socket.leave(r);
@@ -7380,16 +7847,19 @@ io.on('connection', (socket) => {
 
   socket.on('message', (data) => {
     if (!currentUser) return;
+    data = data || {};
     const { text, room, replyTo } = data;
+    const targetRoom = room || 'general';
+    if (!canAccessRoom(currentUser, targetRoom)) return;
     const msg = {
       id: Date.now() + Math.random(),
       user: currentUser,
-      text,
+      text: String(text || '').slice(0, 5000),
       type: 'text',
       time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
       date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
       ts:   Date.now(),
-      room: room || 'general',
+      room: targetRoom,
       replyTo: replyTo || undefined,
       forwarded: data.forwarded || undefined,
       fwdFrom:   data.fwdFrom   || undefined,
@@ -7442,6 +7912,7 @@ io.on('connection', (socket) => {
     if (idx < 0) return;
     const msg = messageHistory[idx];
     if (!msg || msg.user !== currentUser) return;
+    if (!canAccessRoom(currentUser, msg.room)) return;
     if ((msg.type || 'text') !== 'text') return;
 
     msg.text = newText;
@@ -7459,19 +7930,25 @@ io.on('connection', (socket) => {
     });
   });
   socket.on('media-message', (data) => {
+    data = data || {};
     const { mediaData, room } = data;
     if (!currentUser) return;
+    if (!mediaData?.url) return;
+    const targetRoom = room || 'general';
+    if (!canAccessRoom(currentUser, targetRoom)) return;
+    const cleanMediaUrl = sanitizeAvatarUrl(mediaData.url);
+    if (!cleanMediaUrl) return;
     const msg = {
       id: Date.now() + Math.random(),
       user: currentUser,
-      text: mediaData.text || '',
-      type: mediaData.type,
-      url: mediaData.url,
-      fileName: mediaData.fileName,
+      text: String(mediaData.text || '').slice(0, 1000),
+      type: String(mediaData.type || 'file').slice(0, 32),
+      url: cleanMediaUrl,
+      fileName: String(mediaData.fileName || '').slice(0, 180),
       time: new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' }),
       date: new Date().toLocaleDateString('ru-RU', { day:'numeric', month:'long', timeZone:'Europe/Moscow' }),
       ts:   Date.now(),
-      room: room || 'general',
+      room: targetRoom,
       replyTo:   data.replyTo           || undefined,
       forwarded: mediaData.forwarded    || undefined,
       fwdFrom:   mediaData.fwdFrom      || undefined,
@@ -7515,27 +7992,38 @@ io.on('connection', (socket) => {
   });
 
   // Обработчик обновления аватара
-  socket.on('avatar-updated', ({ username, avatar }) => {
+  socket.on('avatar-updated', ({ avatar } = {}) => {
+    const username = currentUser;
     if (!username || !users.has(username)) return;
+    const cleanAvatar = sanitizeAvatarUrl(avatar);
+    if (avatar && !cleanAvatar) return;
     const user = users.get(username);
-    user.avatar = avatar;
+    user.avatar = cleanAvatar || null;
     users.set(username, user);
     saveUsers();
     // Рассылаем всем, чтобы обновились аватары в интерфейсе
-    io.emit('avatar-updated', { username, avatar });
+    io.emit('avatar-updated', { username, avatar: user.avatar });
   });
 
   // PeerJS ID registration
-  socket.on('peer-id', ({ username, peerId }) => {
+  socket.on('peer-id', ({ peerId } = {}) => {
+    const username = currentUser;
     if (!username || !peerId) return;
     console.log(`[PeerID] ${username} в†’ ${peerId}`);
     peerIdRegistry.set(username, peerId);
-    // Broadcast to everyone so they can update their registry
-    socket.broadcast.emit('peer-id', { username, peerId });
+    const recipients = new Set(users.get(username)?.friends || []);
+    for (const g of users.get(username)?.groups || []) {
+      (g.members || []).forEach(m => { if (m !== username) recipients.add(m); });
+    }
+    recipients.forEach(name => {
+      const sid = userSockets.get(name);
+      if (sid) io.to(sid).emit('peer-id', { username, peerId });
+    });
   });
 
   // Someone wants to call a specific user вЂ” request their latest peerId
-  socket.on('get-peer-id', ({ target }) => {
+  socket.on('get-peer-id', ({ target } = {}) => {
+    if (!currentUser || !canSignalUser(currentUser, target)) return;
     const pid = peerIdRegistry.get(target);
     if (pid) {
       socket.emit('peer-id', { username: target, peerId: pid });
@@ -7549,8 +8037,11 @@ io.on('connection', (socket) => {
 
   // в”Ђв”Ђ CALL RELAY в”Ђв”Ђ forward call signals between users
   function relayTo(event, data) {
+    if (!currentUser) return;
+    data = { ...(data || {}), from: currentUser };
     const target = data.to;
     if (!target) return;
+    if (!canSignalUser(currentUser, target, data)) return;
     if (event === 'call-invite' && data.groupId && !data.group) {
       data = { ...data, group: getGroupSnapshotForUser(target, data.groupId) };
     }
@@ -7569,6 +8060,10 @@ io.on('connection', (socket) => {
     }
   }
   socket.on('call-invite', data => {
+    if (!currentUser) return;
+    data = { ...(data || {}), from: currentUser };
+    if (data.groupId) data.group = getGroupSnapshotForUser(currentUser, data.groupId);
+    if (!canSignalUser(currentUser, data.to, data)) return;
     if (isHumanBotUsername(data?.to)) {
       const botUsername = data.to;
       const caller = data.from;
@@ -7634,7 +8129,8 @@ io.on('connection', (socket) => {
   socket.on('call-offer',        data => relayTo('call-offer',        data));
   socket.on('call-answer',       data => relayTo('call-answer',       data));
   socket.on('call-ice',          data => relayTo('call-ice',          data));
-  socket.on('call-bot-accept', ({ to, from, room }) => {
+  socket.on('call-bot-accept', ({ to, room } = {}) => {
+    const from = currentUser;
     if (!isHumanBotUsername(to) || !from) return;
     const resolvedRoom = room || humanBotCallRoom({ from, room }, to);
     humanBotSetCallSession(to, from, {
@@ -7645,13 +8141,16 @@ io.on('connection', (socket) => {
     });
     setHumanBotActivity(to, 60000);
   });
-  socket.on('call-bot-decline', ({ to, from }) => {
+  socket.on('call-bot-decline', ({ to } = {}) => {
+    const from = currentUser;
     if (!isHumanBotUsername(to) || !from) return;
     humanBotClearCallSession(to, from);
   });
   // в”Ђв”Ђ Р—Р°РїРёСЃСЊ Рѕ Р·РІРѕРЅРєРµ в†’ РІ РёСЃС‚РѕСЂРёСЋ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-  socket.on('save-call-record', async ({ room, from, to, isVid, isCaller, connected, dur, missed, timestamp }) => {
+  socket.on('save-call-record', async ({ room, to, isVid, isCaller, connected, dur, missed, timestamp }) => {
+    const from = currentUser;
     if (!room || !from) return;
+    if (!canAccessRoom(from, room)) return;
     const now  = new Date(timestamp || Date.now());
     const ts   = now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Moscow' });
     const ds   = now.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
@@ -7706,8 +8205,10 @@ io.on('connection', (socket) => {
   });
 
   // в”Ђв”Ђ Read receipts в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-  socket.on('messages-read', ({ room, by }) => {
+  socket.on('messages-read', ({ room } = {}) => {
+    const by = currentUser;
     if (!room || !by) return;
+    if (!canAccessRoom(by, room)) return;
     // Помечаем все сообщения комнаты как прочитанные пользователем by
     let changed = false;
     messageHistory.forEach(msg => {
@@ -7726,6 +8227,7 @@ io.on('connection', (socket) => {
 
   socket.on('human-bot-heard', ({ room, text, final, alternatives }) => {
     if (!currentUser || !room || !text) return;
+    if (!canAccessRoom(currentUser, room)) return;
     const clean = humanBotNormalizeCallTranscript(text);
     const normalizedAlternatives = Array.isArray(alternatives)
       ? alternatives.map(a => humanBotNormalizeCallTranscript(a)).filter(Boolean).slice(0, 3)
@@ -7760,6 +8262,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('call-end', data => {
+    if (!currentUser) return;
+    data = { ...(data || {}), from: currentUser };
+    if (data?.to && !canSignalUser(currentUser, data.to, data)) return;
     if (isHumanBotUsername(data?.to) && data?.groupId) {
       const room = `group:${data.groupId}`;
       humanBotClearGroupCallSession(data.to, room);
@@ -7789,6 +8294,9 @@ io.on('connection', (socket) => {
     if (fromId) io.to(fromId).emit('call-end', data);
   });
   socket.on('call-decline', data => {
+    if (!currentUser) return;
+    data = { ...(data || {}), from: currentUser };
+    if (data?.to && !canSignalUser(currentUser, data.to, data)) return;
     if (isHumanBotUsername(data?.to) && data?.groupId) {
       const room = `group:${data.groupId}`;
       humanBotClearGroupCallSession(data.to, room);
@@ -7806,6 +8314,9 @@ io.on('connection', (socket) => {
     if (toId) io.to(toId).emit('call-decline', { from: data.from, groupId: data.groupId });
   });
   socket.on('call-answer-ready', data => {
+    if (!currentUser) return;
+    data = { ...(data || {}), from: currentUser };
+    if (data?.to && !canSignalUser(currentUser, data.to, data)) return;
     // Callee answered вЂ” clear active call
     activeCalls.delete(data.from);
     relayTo('call-answer-ready', data);
