@@ -1,6 +1,6 @@
-// Aura Messenger — Service Worker v16
+// Aura Messenger — Service Worker v17
 // Network-first for app shell files, cache-first for icons/static.
-const CACHE = 'aura-v20';
+const CACHE = 'aura-v21';
 const NETWORK_FIRST = [
   '/',
   '/index.html',
@@ -9,6 +9,7 @@ const NETWORK_FIRST = [
   '/landing.js',
   '/i18n.js',
   '/boot.js',
+  '/critical-icons.css',
   '/style.css',
   '/script.js',
   '/manifest.json'
@@ -17,7 +18,7 @@ const NETWORK_FIRST = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE)
-      .then((cache) => cache.addAll(['/manifest.json', '/favicon.svg', '/aura-logo.svg', '/i18n.js', '/vendor/tabler-icons/tabler-icons.min.css', '/vendor/tabler-icons/fonts/tabler-icons.woff2', '/vendor/tabler-icons/fonts/tabler-icons.woff', '/vendor/tabler-icons/fonts/tabler-icons.ttf', '/feature-icons/chat.png', '/feature-icons/voice.png', '/feature-icons/call.png', '/feature-icons/ai.png', '/feature-icons/squares.png', '/feature-icons/browser.png']).catch(() => {}))
+      .then((cache) => cache.addAll(['/manifest.json', '/favicon.svg', '/aura-logo.svg', '/i18n.js', '/critical-icons.css', '/vendor/tabler-icons/tabler-icons.min.css', '/vendor/tabler-icons/fonts/tabler-icons.woff2', '/vendor/tabler-icons/fonts/tabler-icons.woff', '/vendor/tabler-icons/fonts/tabler-icons.ttf', '/feature-icons/chat.png', '/feature-icons/voice.png', '/feature-icons/call.png', '/feature-icons/ai.png', '/feature-icons/squares.png', '/feature-icons/browser.png']).catch(() => {}))
       .then(() => self.skipWaiting())
   );
 });

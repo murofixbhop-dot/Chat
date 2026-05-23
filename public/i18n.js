@@ -515,11 +515,11 @@
     ['.platform-strip span:nth-child(2)', 'platform.simple'],
     ['.platform-strip span:nth-child(3)', 'platform.online'],
     ['.hero-app', 'preview.aria', 'aria-label'],
-    ['.channel-title:nth-of-type(1)', 'preview.textChannels'],
-    ['.channel-title:nth-of-type(2)', 'preview.voice'],
-    ['.channel[data-preview-channel]:nth-of-type(1)', 'preview.general'],
-    ['.channel[data-preview-channel]:nth-of-type(2)', 'preview.projects'],
-    ['.channel[data-preview-channel]:nth-of-type(3)', 'preview.ideas'],
+    ['.channels-panel .channel-title:nth-of-type(2)', 'preview.textChannels'],
+    ['.channels-panel .channel-title:nth-of-type(6)', 'preview.voice'],
+    ['.channels-panel .channel[data-preview-channel]:nth-of-type(3)', 'preview.general'],
+    ['.channels-panel .channel[data-preview-channel]:nth-of-type(4)', 'preview.projects'],
+    ['.channels-panel .channel[data-preview-channel]:nth-of-type(5)', 'preview.ideas'],
     ['.voice-card strong', 'preview.voiceRoom'],
     ['[data-voice-status]', 'preview.voiceStatus'],
     ['[data-preview-title]', 'preview.general'],
@@ -1126,12 +1126,9 @@
         .aura-lang-select:hover{border-color:rgba(255,255,255,.24);background-color:rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 38px rgba(0,0,0,.24);transform:translateY(-1px)}
         .aura-lang-select:focus-visible{border-color:rgba(196,181,253,.72);box-shadow:0 0 0 3px rgba(99,102,241,.24),0 16px 38px rgba(0,0,0,.24)}
         .aura-lang-select option{background:#111526;color:#fff}
-        .login-card .aura-lang-wrap{position:absolute;right:18px;top:18px;z-index:3}
-        .login-card .aura-lang-select{height:36px;min-width:104px;padding-left:36px;background-color:rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
-        .login-card .aura-lang-icon{left:12px}
         html[dir="rtl"] .aura-lang-icon{left:auto;right:13px}
         html[dir="rtl"] .aura-lang-select{padding:0 38px 0 34px;background-position:18px 18px,13px 18px,0 0}
-        @media (max-width:760px){.nav-links .aura-lang-wrap{width:100%;margin:2px 0 6px}.nav-links .aura-lang-select{width:100%;min-width:0}.login-card .aura-lang-wrap{right:14px;top:14px}.login-card .aura-lang-select{min-width:94px}}
+        @media (max-width:760px){.nav-links .aura-lang-wrap{width:100%;margin:2px 0 6px}.nav-links .aura-lang-select{width:100%;min-width:0}}
       `;
       document.head.appendChild(style);
     }
@@ -1143,10 +1140,6 @@
       nav.insertBefore(wrap, pill || null);
     }
 
-    const loginCard = document.querySelector('.login-card');
-    if (loginCard && !loginCard.querySelector('[data-aura-language]')) {
-      loginCard.appendChild(createLanguageControl());
-    }
   };
 
   const updateTicker = () => {
