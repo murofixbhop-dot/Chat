@@ -190,6 +190,7 @@
     'app.register': 'Register',
     'app.loginLink': 'Sign in',
     'app.theme': 'Theme:',
+    'app.themeName': 'Theme',
     'app.settings': '<i class="ti ti-settings-2"></i> Settings',
     'app.profile': '<i class="ti ti-user"></i>Profile',
     'app.sound': '<i class="ti ti-headphones"></i>Sound',
@@ -260,10 +261,31 @@
       'meta.description': 'Aura Messenger - современный мессенджер для проектов, команд и друзей. Чаты, голосовые, звонки, медиа, AI и быстрый запуск в браузере.',
       'meta.ogTitle': 'Aura Messenger - общение для ваших проектов',
       'meta.ogDescription': 'Создавайте пространства, общайтесь в чатах, отправляйте медиа, запускайте звонки и открывайте Aura прямо в браузере.',
+      'nav.menu': 'Открыть меню',
+      'platform.genericLabel': 'Скачать приложение',
+      'platform.genericPill': 'Ваше устройство определено',
+      'preview.reply.default': 'Вот так выглядят ваши сообщения в Aura: исходящее сообщение выделяется цветом, а ответы команды остаются в общем стиле мессенджера.',
+      'preview.reply.question': 'Да, именно так выглядит ответ в Aura: ваше сообщение выделено цветом, а сообщения собеседника выглядят отдельно.',
+      'preview.reply.call': 'Звонок запускается из чата в один клик, когда нужно быстро перейти к разговору.',
+      'preview.reply.ai': 'AI-помощник в Aura помогает быстрее отвечать, собирать идеи и структурировать обсуждение.',
+      'preview.reply.projects': 'В проектном чате решения, файлы и ответы остаются в одной понятной ленте.',
+      'preview.reply.ideas': 'Идеи можно быстро обсудить в отдельном канале и сохранить контекст для всей команды.',
       'install.defaultSteps': 'Откройте Aura в браузере.|Найдите в адресной строке кнопку установки приложения.|Подтвердите установку и запустите Aura как обычное приложение.',
       'install.iosSteps': 'Откройте сайт в Safari.|Нажмите кнопку «Поделиться».|Выберите «На экран Домой» и подтвердите добавление.',
       'install.androidSteps': 'Откройте сайт в Chrome или другом браузере.|Нажмите «Установить приложение» или меню.|Выберите «Добавить на главный экран» / «Установить приложение».',
-      'install.desktopSteps': 'Откройте сайт в Chrome, Edge или похожем браузере.|Нажмите иконку установки в адресной строке или меню браузера.|Подтвердите установку - ярлык Aura появится на рабочем столе.'
+      'install.desktopSteps': 'Откройте сайт в Chrome, Edge или похожем браузере.|Нажмите иконку установки в адресной строке или меню браузера.|Подтвердите установку - ярлык Aura появится на рабочем столе.',
+      'install.ok': 'Понятно',
+      'toast.installReady': 'Aura готова к установке на {device}.',
+      'toast.installAccepted': 'Aura устанавливается на ваше устройство.',
+      'toast.installDismissed': 'Установку можно запустить позже этой же кнопкой.',
+      'toast.installed': 'Aura установлена. Запускайте её как обычное приложение.',
+      'app.connected': 'Подключено',
+      'app.connectionError': 'Ошибка соединения...',
+      'app.loginButton': 'Войти <i class="ti ti-arrow-right"></i>',
+      'app.registerButton': 'Зарегистрироваться <i class="ti ti-user-plus"></i>',
+      'app.forgot': '<i class="ti ti-lock-open"></i>Забыли пароль?',
+      'app.register': 'Регистрация',
+      'app.loginLink': 'Войти'
     },
     es: {
       'page.title': 'Aura Messenger - descargar o abrir en el navegador',
@@ -405,6 +427,7 @@
     applying: false,
     observerTimer: 0
   };
+  const russianDefaults = new Map();
 
   const LANDING_TARGETS = [
     ['.menu-btn', 'nav.menu', 'aria-label'],
@@ -521,7 +544,7 @@
     ['.notif-pref-check span', 'app.browserNotifications'],
     ['.notif-pref-row .btn-secondary', 'app.hide', 'html'],
     ['#st_theme > .lbl:nth-of-type(1)', 'app.accentColor'],
-    ['#st_theme > .lbl:nth-of-type(2)', 'app.themeTab'],
+    ['#st_theme > .lbl:nth-of-type(2)', 'app.themeName'],
     ['#thDark', 'app.darkTheme', 'html'],
     ['#thLight', 'app.lightTheme', 'html'],
     ['#st_account .acct-row .sub-text', 'app.yourLogin'],
@@ -571,9 +594,27 @@
 
   const TICKER_KEYS = ['ticker.chats', 'ticker.voice', 'ticker.video', 'ticker.media', 'ticker.ai', 'ticker.pwa', 'ticker.browser', 'ticker.teams'];
 
-  const get = (key, fallbackText) => {
+  const defaultId = (key, mode = 'text') => `${key}::${mode || 'text'}`;
+
+  const rememberRussianDefault = (key, value, mode = 'text') => {
+    const text = String(value || '').trim();
+    if (!key || !text) return;
+    const exact = defaultId(key, mode);
+    if (!russianDefaults.has(exact)) russianDefaults.set(exact, value);
+    const generic = defaultId(key, 'text');
+    if (!russianDefaults.has(generic) && mode !== 'html') russianDefaults.set(generic, value);
+  };
+
+  const get = (key, fallbackText, mode = 'text') => {
     const dict = dictionaries[state.lang] || dictionaries.en;
-    return dict[key] ?? base[key] ?? dictionaries.ru[key] ?? fallbackText ?? key;
+    if (dict[key] !== undefined) return dict[key];
+    if (state.lang === 'ru') {
+      const exact = russianDefaults.get(defaultId(key, mode));
+      if (exact !== undefined) return exact;
+      const generic = russianDefaults.get(defaultId(key, 'text'));
+      if (generic !== undefined) return generic;
+    }
+    return base[key] ?? fallbackText ?? key;
   };
 
   const getOwn = (key) => {
@@ -634,7 +675,7 @@
 
   const setContent = (selector, key, mode = 'text') => {
     document.querySelectorAll(selector).forEach((node) => {
-      const value = getDynamicValue(key, readCurrent(node, mode));
+      const value = getDynamicValue(key, readCurrent(node, mode), mode);
       if (mode === 'html') {
         if (node.innerHTML !== value) node.innerHTML = value;
       } else if (mode === 'placeholder') {
@@ -649,19 +690,21 @@
     });
   };
 
-  const getDynamicValue = (key, fallbackText) => {
+  const getDynamicValue = (key, fallbackText, mode = 'text') => {
     if (key === 'platform.label') {
       const platformKey = getPlatformKey('Label');
-      return getOwn(platformKey) || getOwn('cta.download') || get(platformKey, fallbackText);
+      const captured = get(key, '', mode);
+      return getOwn(platformKey) || getOwn('cta.download') || (captured && captured !== key ? captured : get(platformKey, fallbackText, mode));
     }
     if (key === 'platform.pill') {
       const platformKey = getPlatformKey('Pill');
-      return getOwn(platformKey) || getOwn('platform.genericPill') || get(platformKey, fallbackText);
+      const captured = get(key, '', mode);
+      return getOwn(platformKey) || getOwn('platform.genericPill') || (captured && captured !== key ? captured : get(platformKey, fallbackText, mode));
     }
     if (key === 'install.text') {
-      return get(getInstallModeKey('Text'), fallbackText);
+      return get(getInstallModeKey('Text'), fallbackText, mode);
     }
-    return get(key, fallbackText);
+    return get(key, fallbackText, mode);
   };
 
   const readCurrent = (node, mode) => {
@@ -702,13 +745,13 @@
   };
 
   const updateMeta = () => {
-    document.title = get('page.title', document.title);
+    document.title = get('page.title', document.title, 'meta');
     const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) metaDescription.setAttribute('content', get('meta.description', metaDescription.getAttribute('content') || ''));
+    if (metaDescription) metaDescription.setAttribute('content', get('meta.description', metaDescription.getAttribute('content') || '', 'meta'));
     const ogTitle = document.querySelector('meta[property="og:title"]');
-    if (ogTitle) ogTitle.setAttribute('content', get('meta.ogTitle', ogTitle.getAttribute('content') || ''));
+    if (ogTitle) ogTitle.setAttribute('content', get('meta.ogTitle', ogTitle.getAttribute('content') || '', 'meta'));
     const ogDescription = document.querySelector('meta[property="og:description"]');
-    if (ogDescription) ogDescription.setAttribute('content', get('meta.ogDescription', ogDescription.getAttribute('content') || ''));
+    if (ogDescription) ogDescription.setAttribute('content', get('meta.ogDescription', ogDescription.getAttribute('content') || '', 'meta'));
   };
 
   const updateLanguageControls = () => {
@@ -726,37 +769,55 @@
     });
   };
 
+  const createLanguageControl = () => {
+    const wrap = document.createElement('div');
+    wrap.className = 'aura-lang-wrap';
+    wrap.innerHTML = `
+      <span class="aura-lang-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path d="M3 12h18M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18M4.5 7.5h15M4.5 16.5h15"/>
+          <circle cx="12" cy="12" r="9"/>
+        </svg>
+      </span>
+      <select class="aura-lang-select" data-aura-language></select>
+    `;
+    return wrap;
+  };
+
   const ensureLanguageControls = () => {
     if (!document.querySelector('[data-aura-language-style]')) {
       const style = document.createElement('style');
       style.dataset.auraLanguageStyle = '1';
       style.textContent = `
-        .aura-lang-wrap{display:flex;align-items:center;gap:7px}
-        .aura-lang-select{height:38px;min-width:92px;padding:0 30px 0 12px;border:1px solid rgba(255,255,255,.14);border-radius:999px;color:#fff;background:rgba(255,255,255,.08);font:700 13px/1 inherit;outline:none;cursor:pointer;appearance:none;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 17px) 16px,calc(100% - 12px) 16px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+        .aura-lang-wrap{position:relative;display:inline-flex;align-items:center;flex:0 0 auto}
+        .nav-links .aura-lang-wrap{margin-left:4px;margin-right:4px}
+        .aura-lang-icon{position:absolute;left:13px;top:50%;z-index:1;width:16px;height:16px;transform:translateY(-50%);color:rgba(248,251,255,.78);pointer-events:none}
+        .aura-lang-icon svg{display:block;width:16px;height:16px}
+        .aura-lang-icon path,.aura-lang-icon circle{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+        .aura-lang-select{height:42px;min-width:122px;padding:0 34px 0 38px;border:1px solid rgba(255,255,255,.13);border-radius:999px;color:#fff;background:linear-gradient(180deg,rgba(255,255,255,.105),rgba(255,255,255,.055));box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 12px 34px rgba(0,0,0,.18);font:800 13px/1 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;outline:none;cursor:pointer;appearance:none;transition:border-color .2s ease,background .2s ease,box-shadow .2s ease,transform .2s ease;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%),linear-gradient(180deg,rgba(255,255,255,.105),rgba(255,255,255,.055));background-position:calc(100% - 18px) 18px,calc(100% - 13px) 18px,0 0;background-size:5px 5px,5px 5px,100% 100%;background-repeat:no-repeat}
+        .aura-lang-select:hover{border-color:rgba(255,255,255,.24);background-color:rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 38px rgba(0,0,0,.24);transform:translateY(-1px)}
+        .aura-lang-select:focus-visible{border-color:rgba(196,181,253,.72);box-shadow:0 0 0 3px rgba(99,102,241,.24),0 16px 38px rgba(0,0,0,.24)}
         .aura-lang-select option{background:#111526;color:#fff}
         .login-card .aura-lang-wrap{position:absolute;right:18px;top:18px;z-index:3}
-        .login-card .aura-lang-select{height:34px;min-width:84px;background:rgba(255,255,255,.07)}
-        html[dir="rtl"] .aura-lang-select{padding:0 12px 0 30px;background-position:17px 16px,12px 16px}
-        @media (max-width:760px){.topbar>.aura-lang-wrap{margin-left:auto}.topbar .nav-links .aura-lang-wrap{display:none}.aura-lang-select{min-width:84px}}
+        .login-card .aura-lang-select{height:36px;min-width:104px;padding-left:36px;background-color:rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+        .login-card .aura-lang-icon{left:12px}
+        html[dir="rtl"] .aura-lang-icon{left:auto;right:13px}
+        html[dir="rtl"] .aura-lang-select{padding:0 38px 0 34px;background-position:18px 18px,13px 18px,0 0}
+        @media (max-width:760px){.nav-links .aura-lang-wrap{width:100%;margin:2px 0 6px}.nav-links .aura-lang-select{width:100%;min-width:0}.login-card .aura-lang-wrap{right:14px;top:14px}.login-card .aura-lang-select{min-width:94px}}
       `;
       document.head.appendChild(style);
     }
 
-    const topbar = document.querySelector('.topbar');
-    if (topbar && !topbar.querySelector('[data-aura-language]')) {
-      const wrap = document.createElement('div');
-      wrap.className = 'aura-lang-wrap';
-      wrap.innerHTML = '<select class="aura-lang-select" data-aura-language></select>';
-      const menuButton = topbar.querySelector('[data-menu-toggle]');
-      topbar.insertBefore(wrap, menuButton || topbar.lastElementChild);
+    const nav = document.querySelector('.nav-links');
+    if (nav && !nav.querySelector('[data-aura-language]')) {
+      const wrap = createLanguageControl();
+      const pill = nav.querySelector('.nav-pill');
+      nav.insertBefore(wrap, pill || null);
     }
 
     const loginCard = document.querySelector('.login-card');
     if (loginCard && !loginCard.querySelector('[data-aura-language]')) {
-      const wrap = document.createElement('div');
-      wrap.className = 'aura-lang-wrap';
-      wrap.innerHTML = '<select class="aura-lang-select" data-aura-language></select>';
-      loginCard.appendChild(wrap);
+      loginCard.appendChild(createLanguageControl());
     }
   };
 
@@ -806,6 +867,39 @@
     });
   };
 
+  const captureRussianDefaults = () => {
+    rememberRussianDefault('page.title', document.title, 'meta');
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) rememberRussianDefault('meta.description', metaDescription.getAttribute('content') || '', 'meta');
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) rememberRussianDefault('meta.ogTitle', ogTitle.getAttribute('content') || '', 'meta');
+    const ogDescription = document.querySelector('meta[property="og:description"]');
+    if (ogDescription) rememberRussianDefault('meta.ogDescription', ogDescription.getAttribute('content') || '', 'meta');
+
+    [...LANDING_TARGETS, ...APP_TARGETS].forEach(([selector, key, mode = 'text']) => {
+      const node = document.querySelector(selector);
+      if (node) rememberRussianDefault(key, readCurrent(node, mode), mode);
+    });
+
+    document.querySelectorAll('.ticker-group:first-child span').forEach((node, index) => {
+      const key = TICKER_KEYS[index % TICKER_KEYS.length];
+      rememberRussianDefault(key, node.textContent || '', 'text');
+    });
+
+    const channelKeys = [
+      ['preview.general', 'preview.generalSub', 'preview.generalMessage'],
+      ['preview.projects', 'preview.projectsSub', 'preview.projectsMessage'],
+      ['preview.ideas', 'preview.ideasSub', 'preview.ideasMessage']
+    ];
+    document.querySelectorAll('[data-preview-channel]').forEach((node, index) => {
+      const keys = channelKeys[index];
+      if (!keys) return;
+      rememberRussianDefault(keys[0], node.dataset.title || node.textContent || '', 'text');
+      rememberRussianDefault(keys[1], node.dataset.subtitle || '', 'text');
+      rememberRussianDefault(keys[2], node.dataset.message || '', 'text');
+    });
+  };
+
   const updateLoginState = () => {
     if (!document.getElementById('loginScreen')) return;
     let isRegister = false;
@@ -819,10 +913,10 @@
     const btn = document.getElementById('loginBtn');
     const regText = document.getElementById('registerLinkText');
     const forgot = document.getElementById('forgotLink');
-    if (sub) sub.textContent = get(isRegister ? 'app.registerSub' : 'app.loginSub', sub.textContent);
-    if (btn) btn.innerHTML = get(isRegister ? 'app.registerButton' : 'app.loginButton', btn.innerHTML);
-    if (regText) regText.textContent = get(isRegister ? 'app.loginLink' : 'app.register', regText.textContent);
-    if (forgot) forgot.innerHTML = get('app.forgot', forgot.innerHTML);
+    if (sub) sub.textContent = get(isRegister ? 'app.registerSub' : 'app.loginSub', sub.textContent, 'text');
+    if (btn) btn.innerHTML = get(isRegister ? 'app.registerButton' : 'app.loginButton', btn.innerHTML, 'html');
+    if (regText) regText.textContent = get(isRegister ? 'app.loginLink' : 'app.register', regText.textContent, 'text');
+    if (forgot) forgot.innerHTML = get('app.forgot', forgot.innerHTML, 'html');
   };
 
   const applyTargets = () => {
@@ -868,6 +962,7 @@
   };
 
   const initialize = async () => {
+    captureRussianDefaults();
     const urlLang = detectUrlLanguage();
     const manualLang = window.localStorage?.getItem(MANUAL_KEY) ? normalizeLanguage(window.localStorage.getItem(STORAGE_KEY)) : '';
     const browserLang = detectBrowserLanguage();
