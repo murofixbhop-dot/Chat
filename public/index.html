@@ -1,556 +1,338 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark">
+<html lang="ru">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="theme-color" content="#6366f1"/>
+  <meta name="description" content="Aura Messenger — современный мессенджер для проектов, команд и друзей. Чаты, голосовые, звонки, медиа, AI и быстрый запуск в браузере."/>
+  <meta property="og:title" content="Aura Messenger — общение для ваших проектов"/>
+  <meta property="og:description" content="Создавайте пространства, общайтесь в чатах, отправляйте медиа, запускайте звонки и открывайте Aura прямо в браузере."/>
+  <meta property="og:type" content="website"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Aura"/>
-  <meta name="theme-color" content="#6366f1"/>
-  <meta name="description" content="Aura — современный мессенджер"/>
-  <!-- PWA Manifest -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <link rel="manifest" href="/manifest.json"/>
-  <!-- iOS icons -->
+  <link rel="icon" href="/aura-logo.svg" type="image/svg+xml"/>
   <link rel="apple-touch-icon" href="/icons/icon-192.svg"/>
-  <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.svg"/>
-  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.svg"/>
-  <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.svg"/>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='url(%23g)'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%25' stop-color='%236366f1'/><stop offset='100%25' stop-color='%238b5cf6'/></linearGradient></defs><path d='M7 21Q7 10 16 10Q25 10 25 16Q25 22 19 23L15 26L14 23Q7 22 7 21Z' fill='white'/><circle cx='13' cy='17' r='1.3' fill='%236366f1' opacity='.7'/><circle cx='16' cy='17' r='1.3' fill='%236366f1' opacity='.7'/><circle cx='19' cy='17' r='1.3' fill='%236366f1' opacity='.7'/></svg>"/>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
-  <link rel="shortcut icon" href="/favicon.svg"/>
-  <title>Aura · Messenger</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <!-- Tabler Icons: primary CDN -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.14.0/dist/tabler-icons.min.css" crossorigin="anonymous"/>
-  <!-- Tabler Icons: fallback CDN (загружается если первый не сработал) -->
-  <link rel="stylesheet" id="tablerFallback" href="" crossorigin="anonymous"/>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="/landing.css"/>
+  <title>Aura Messenger — скачать или открыть в браузере</title>
 </head>
 <body>
+  <canvas id="auroraCanvas" class="aurora-canvas" aria-hidden="true"></canvas>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="cursor-light" aria-hidden="true"></div>
 
-<!-- SPLASH -->
-<div id="loadingScreen" class="splash active">
-  <div class="splash-orb s1"></div><div class="splash-orb s2"></div>
-  <div class="splash-logo">
-    <svg width="44" height="44" viewBox="0 0 40 40" fill="none">
-      <rect width="40" height="40" rx="13" fill="url(#g0)"/>
-      <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white"/>
-      <defs><linearGradient id="g0" x1="0" y1="0" x2="40" y2="40"><stop stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent2)"/></linearGradient></defs>
-    </svg>
-  </div>
-  <p class="splash-label" id="loadingText">Подключение…</p>
-  <div class="splash-bar"><div class="splash-fill" id="splashFill"></div></div>
-</div>
+  <nav class="topbar" data-topbar>
+    <a class="brand" href="#top" aria-label="Aura Messenger">
+      <span class="brand-logo" aria-hidden="true">
+        <img src="/aura-logo.svg" alt=""/>
+      </span>
+      <span class="brand-copy">
+        <strong>Aura</strong>
+        <small>Messenger</small>
+      </span>
+    </a>
 
-<!-- TOASTS -->
-<div id="toastContainer" aria-live="polite"></div>
-
-<!-- DIALOG -->
-<div id="dialogOverlay" class="dialog-overlay">
-  <div class="dialog-box" id="dialogBox"></div>
-</div>
-
-<!-- CONTEXT MENU -->
-<div id="ctxMenu" class="ctx-menu" role="menu"></div>
-
-<!-- EMOJI PICKER -->
-<div id="emojiPicker" class="emoji-picker"></div>
-
-<!-- CALL MODAL -->
-<div id="callModal" class="call-modal">
-  <div class="call-bg"></div>
-  <div class="call-content">
-    <div class="call-ring"><div class="call-ava" id="callAvatar"></div></div>
-    <div class="call-name" id="callName"></div>
-    <div class="call-status" id="callStatus">Звонок…</div>
-    <div class="call-actions" id="callActions"></div>
-  </div>
-</div>
-
-<!-- CIRCLE RECORD -->
-<div id="circleOverlay" class="circle-overlay">
-  <div class="circle-card square-card">
-    <div class="square-preview-wrap">
-      <video id="circlePreview" autoplay muted playsinline></video>
-      <!-- Прогресс-рамка (квадратная SVG анимация) -->
-      <svg class="square-progress-svg" viewBox="0 0 220 220" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
-        <rect class="sq-bg" x="4" y="4" width="212" height="212" rx="20" ry="20"/>
-        <rect class="sq-fg" id="cFg" x="4" y="4" width="212" height="212" rx="20" ry="20"/>
-      </svg>
-      <div class="circle-badge"><span class="rec-dot"></span>REC</div>
-    </div>
-    <div class="circle-time" id="circleTimer">0:00</div>
-    <div class="circle-actions">
-      <button class="btn-ghost" onclick="cancelCircleRecord()"><i class="ti ti-x"></i> Отмена</button>
-      <button class="btn-primary" onclick="sendCircleRecord()"><i class="ti ti-send"></i> Отправить</button>
-    </div>
-  </div>
-</div>
-
-<!-- LOGIN -->
-<div id="loginScreen" class="login-screen">
-  <div class="login-orbs">
-    <div class="lorb l1"></div><div class="lorb l2"></div><div class="lorb l3"></div>
-  </div>
-  <div class="login-card">
-    <div class="login-logo-wrap" id="loginLogoWrap">
-      <svg width="52" height="52" viewBox="0 0 40 40" fill="none">
-        <rect width="40" height="40" rx="13" fill="var(--accent)"/>
-        <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white" opacity="0.97"/>
-        <circle cx="14.5" cy="18.5" r="1.8" fill="var(--accent)" opacity="0.7"/>
-        <circle cx="20" cy="18.5" r="1.8" fill="var(--accent)" opacity="0.7"/>
-        <circle cx="25.5" cy="18.5" r="1.8" fill="var(--accent)" opacity="0.7"/>
-      </svg>
-    </div>
-    <h1 class="login-h1">Добро пожаловать<br/>в <span class="grad">Aura</span></h1>
-    <p class="login-sub" id="loginSubText">Введите имя и пароль</p>
-    <div class="field-wrap">
-      <i class="ti ti-user field-ico"></i>
-      <input id="loginInput" class="field" type="text" placeholder="Имя пользователя…" autocomplete="username" maxlength="32"
-             onkeydown="if(event.key==='Enter')document.getElementById('loginPassInput').focus()"/>
-    </div>
-    <div class="field-wrap has-toggle" style="margin-top:10px">
-      <i class="ti ti-lock field-ico"></i>
-      <input id="loginPassInput" class="field" type="password" placeholder="Пароль (мин. 8 символов)…" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter')doLogin()"/>
-      <button class="pass-toggle" onclick="togglePassVisibility()" type="button" title="Показать пароль">
-        <i class="ti ti-eye" id="passEyeIcon"></i>
-      </button>
-    </div>
-    <!-- Email field for registration -->
-    <div id="loginEmailWrap" class="field-wrap" style="margin-top:10px; display:none">
-      <i class="ti ti-mail field-ico"></i>
-      <input id="loginEmailInput" class="field" type="email" placeholder="Email для восстановления пароля" autocomplete="email"
-             onkeydown="if(event.key==='Enter')doLogin()"/>
-    </div>
-    <div id="loginErr" class="login-err" aria-live="polite"></div>
-    <button id="loginBtn" class="btn-primary w-full" onclick="doLogin()">
-      Войти <i class="ti ti-arrow-right"></i>
+    <button class="menu-btn" type="button" data-menu-toggle aria-label="Открыть меню" aria-expanded="false">
+      <span></span><span></span>
     </button>
-    <div class="login-links">
-      <a class="login-link" id="forgotLink" onclick="openForgotPass()">
-        <i class="ti ti-lock-open"></i>Забыли пароль?
-      </a>
-      <span class="login-link-sep"></span>
-      <a class="login-link" id="registerLink" onclick="toggleRegisterMode()">
-        <i class="ti ti-user-plus"></i><span id="registerLinkText">Регистрация</span>
-      </a>
+
+    <div class="nav-links" data-menu>
+      <a href="#about">О продукте</a>
+      <a href="#features">Возможности</a>
+      <a href="#download">Скачать</a>
+      <a href="#browser">В браузере</a>
+      <a class="nav-pill" href="/app.html">Открыть Aura</a>
     </div>
-    <div class="palette-row">
-      <span class="pal-label">Тема:</span>
-      <button class="pal active" data-pal="violet" style="--pc:#6366f1" onclick="applyPalette('violet')" title="Violet"></button>
-      <button class="pal" data-pal="cyan"   style="--pc:#06b6d4" onclick="applyPalette('cyan')"   title="Cyan"></button>
-      <button class="pal" data-pal="rose"   style="--pc:#f43f5e" onclick="applyPalette('rose')"   title="Rose"></button>
-    </div>
-  </div>
-</div>
+  </nav>
 
-<!-- SETTINGS MODAL -->
-<div id="settingsModal" class="modal-bg">
-  <div class="modal-card settings-card">
-    <div class="modal-hd">
-      <h2><i class="ti ti-settings-2"></i> Настройки</h2>
-      <button class="icon-btn" onclick="closeSettings()"><i class="ti ti-x"></i></button>
-    </div>
-    <div class="modal-tabs">
-      <button class="mtab active" onclick="openStab('profile')"><i class="ti ti-user"></i>Профиль</button>
-      <button class="mtab" onclick="openStab('sound')"><i class="ti ti-headphones"></i>Звук</button>
-      <button class="mtab" onclick="openStab('theme')"><i class="ti ti-palette"></i>Тема</button>
-      <button class="mtab" onclick="openStab('account')"><i class="ti ti-shield-lock"></i>Аккаунт</button>
-    </div>
+  <header class="hero" id="top">
+    <section class="hero-text reveal">
+      <h1>
+        Пространство для общения,
+        <span>которое всегда под рукой.</span>
+      </h1>
+      <p class="hero-lead">
+        Aura Messenger объединяет команды, друзей и проекты в одном месте: чаты по темам,
+        голосовые сообщения, звонки, медиа, AI-помощник и мгновенный вход через браузер.
+      </p>
 
-    <div id="st_profile" class="stab-pane">
-      <div class="ava-center">
-        <div class="ava-rel">
-          <div class="avatar lg" id="settingsAvatar"></div>
-          <button class="ava-cam" onclick="document.getElementById('avaInput').click()"><i class="ti ti-camera"></i></button>
-        </div>
-        <input type="file" id="avaInput" accept="image/*" style="display:none"/>
-        <span class="sub-text">Нажмите для смены</span>
-      </div>
-      <label class="lbl">Отображаемое имя</label>
-      <input type="text" id="stNickname" class="field"/>
-      <button class="btn-primary w-full mt" onclick="saveProfile()"><i class="ti ti-check"></i> Сохранить</button>
-    </div>
-
-    <div id="st_sound" class="stab-pane hidden">
-      <label class="lbl"><i class="ti ti-microphone"></i> Микрофон</label>
-      <select id="micSel" class="field" onchange="saveSoundSettings()"><option value="default">По умолчанию</option></select>
-      <label class="lbl mt"><i class="ti ti-volume"></i> Динамики</label>
-      <select id="spkSel" class="field" onchange="saveSoundSettings()"><option value="default">По умолчанию</option></select>
-      <p id="spkHint" class="sub-text hidden"><i class="ti ti-info-circle"></i> Браузер не поддерживает выбор устройства вывода</p>
-      <label class="lbl mt"><i class="ti ti-adjustments-h"></i> Громкость — <b id="volLabel">100%</b></label>
-      <input type="range" id="volRange" min="0" max="100" value="100" class="range-slider" oninput="setVolume(this.value)"/>
-      <button class="btn-secondary w-full mt" onclick="testMic()"><i class="ti ti-microphone"></i> Тест микрофона</button>
-      <p id="micTestOut" class="sub-text mt hidden"></p>
-
-      <label class="lbl mt"><i class="ti ti-music"></i> Звук уведомления</label>
-      <div id="notifSoundWrap" style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
-        <div style="display:flex;gap:8px;align-items:center">
-          <div id="notifSoundName" style="flex:1;font-size:13px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Стандартный звук</div>
-          <button class="btn-secondary" style="flex-shrink:0;padding:6px 12px;font-size:12px" onclick="document.getElementById('notifSoundInput').click()">
-            <i class="ti ti-upload"></i> Загрузить
-          </button>
-          <button class="btn-secondary" id="notifSoundResetBtn" style="flex-shrink:0;padding:6px 10px;font-size:12px;display:none" onclick="resetNotifSound()">
-            <i class="ti ti-x"></i>
-          </button>
-        </div>
-        <input type="file" id="notifSoundInput" accept="audio/*" style="display:none" onchange="uploadNotifSound(this)">
-        <div style="display:flex;gap:8px">
-          <button class="btn-secondary" style="flex:1;font-size:12px" onclick="previewNotifSound()">
-            <i class="ti ti-player-play"></i> Прослушать
-          </button>
-        </div>
-        <div class="notif-pref-row">
-          <label class="notif-pref-check">
-            <input type="checkbox" id="notifBrowserToggle" onchange="saveNotificationPrefs()">
-            <span>Показывать браузерные уведомления</span>
-          </label>
-          <button class="btn-secondary" style="font-size:12px;padding:8px 12px" onclick="hideAllToasts()">
-            <i class="ti ti-eye-off"></i> Скрыть
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div id="st_theme" class="stab-pane hidden">
-      <label class="lbl">Акцентный цвет</label>
-      <div class="clr-grid">
-        <button class="clr active" style="--cc:#6366f1" data-accent="#6366f1" onclick="setAccent('#6366f1',this)"><i class="ti ti-check"></i></button>
-        <button class="clr" style="--cc:#06b6d4" data-accent="#06b6d4" onclick="setAccent('#06b6d4',this)"></button>
-        <button class="clr" style="--cc:#f43f5e" data-accent="#f43f5e" onclick="setAccent('#f43f5e',this)"></button>
-        <button class="clr" style="--cc:#10b981" data-accent="#10b981" onclick="setAccent('#10b981',this)"></button>
-        <button class="clr" style="--cc:#f59e0b" data-accent="#f59e0b" onclick="setAccent('#f59e0b',this)"></button>
-        <button class="clr" style="--cc:#ec4899" data-accent="#ec4899" onclick="setAccent('#ec4899',this)"></button>
-      </div>
-      <label class="lbl mt">Тема</label>
-      <div class="theme-toggle">
-        <button class="theme-opt active" id="thDark" onclick="selectTheme('dark')"><i class="ti ti-moon"></i> Тёмная</button>
-        <button class="theme-opt" id="thLight" onclick="selectTheme('light')"><i class="ti ti-sun"></i> Светлая</button>
-      </div>
-    </div>
-
-    <div id="st_account" class="stab-pane hidden">
-      <div class="acct-row">
-        <i class="ti ti-user-circle" style="font-size:2.2rem;color:var(--accent)"></i>
-        <div>
-          <p class="sub-text">Ваш логин</p>
-          <strong id="acLoginName" style="font-size:1.05rem"></strong>
-        </div>
-      </div>
-      <label class="lbl mt"><i class="ti ti-mail"></i> Email для восстановления</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="email" id="stRecoveryEmail" class="field" placeholder="email@example.com" style="flex:1"/>
-        <button class="btn-secondary" onclick="saveRecoveryEmail()" style="padding:12px 16px"><i class="ti ti-check"></i></button>
-      </div>
-      <div id="emailVerifiedBadge" style="display:none;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--success)">
-        <i class="ti ti-circle-check"></i> Email подтверждён
-      </div>
-      <p class="sub-text" style="margin-top:4px">Используется для восстановления пароля</p>
-      <button class="btn-secondary w-full mt" onclick="doLogout()" style="margin-top:8px"><i class="ti ti-logout"></i> Выйти из аккаунта</button>
-      <button class="btn-danger w-full mt" onclick="deleteAccount()"><i class="ti ti-trash"></i> Удалить аккаунт</button>
-    </div>
-  </div>
-</div>
-
-<!-- GROUP MODAL -->
-<div id="groupModal" class="modal-bg">
-  <div class="modal-card">
-    <div class="modal-hd">
-      <h2><i class="ti ti-users-group"></i> Создать группу</h2>
-      <button class="icon-btn" onclick="closeGroupModal()"><i class="ti ti-x"></i></button>
-    </div>
-    <label class="lbl">Название</label>
-    <input type="text" id="grpName" class="field" placeholder="Моя группа…"/>
-    <label class="lbl mt">Участники</label>
-    <div id="grpMembers" class="members-grid"></div>
-    <button class="btn-primary w-full mt" onclick="createGroup()"><i class="ti ti-check"></i> Создать</button>
-  </div>
-</div>
-
-<!-- ================================================================
-     MAIN APP
-================================================================ -->
-<div id="app" class="app hidden">
-
-  <!-- SIDEBAR -->
-  <aside id="sidebar" class="sidebar">
-
-    <div class="sb-top">
-      <div class="sb-brand">
-        <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
-          <rect width="40" height="40" rx="11" fill="url(#g2)"/>
-          <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white"/>
-          <defs><linearGradient id="g2" x1="0" y1="0" x2="40" y2="40"><stop stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent2)"/></linearGradient></defs>
-        </svg>
-        <span class="brand-name">Aura</span>
-      </div>
-      <div class="sb-hdr-actions">
-        <button class="icon-btn" title="Aura AI" onclick="openAiChat()"><i class="ti ti-robot"></i></button>
-        <button class="icon-btn" title="Настройки (⌘,)" onclick="openSettings()"><i class="ti ti-settings"></i></button>
-        
-      </div>
-    </div>
-
-    <!-- Search -->
-    <div class="sb-search">
-      <i class="ti ti-search sb-search-ico"></i>
-      <input id="searchBox" class="sb-search-input" type="search" placeholder="Поиск…"
-             oninput="filterChats(this.value)" autocomplete="off"/>
-      <kbd>⌘K</kbd>
-    </div>
-
-    <!-- Tabs -->
-    <div class="sb-tabs">
-      <button class="sb-tab active" id="stFriends" onclick="switchTab('friends')">
-        <i class="ti ti-message"></i>Чаты
-      </button>
-      <button class="sb-tab" id="stGroups" onclick="switchTab('groups')">
-        <i class="ti ti-users"></i>Группы
-      </button>
-      <button class="sb-tab" id="stReqs" onclick="switchTab('requests')">
-        <i class="ti ti-bell"></i>Заявки
-        <span class="nb" id="reqBadge"></span>
-      </button>
-    </div>
-
-    <!-- Friends pane -->
-    <div class="sb-pane" id="pFriends">
-      <button class="new-btn" onclick="openAddFriend()"><i class="ti ti-plus"></i> Добавить друга</button>
-      <ul id="friendsList" class="chat-list-ul"></ul>
-    </div>
-
-    <!-- Groups pane -->
-    <div class="sb-pane hidden" id="pGroups">
-      <button class="new-btn" onclick="openGroupModal()"><i class="ti ti-plus"></i> Создать группу</button>
-      <ul id="groupsList" class="chat-list-ul"></ul>
-    </div>
-
-    <!-- Requests pane -->
-    <div class="sb-pane hidden" id="pReqs">
-      <ul id="requestsList" class="chat-list-ul"></ul>
-    </div>
-
-    <!-- Profile strip -->
-    <div class="sb-profile" onclick="openSettings()">
-      <div class="avatar sm" id="profileAvatar"></div>
-      <div class="sb-pinfo">
-        <span class="sb-pname" id="profileNickname">—</span>
-        <span class="sb-psub" id="profileUsername"></span>
-      </div>
-      
-    </div>
-  </aside>
-
-  <!-- MAIN -->
-  <main class="main">
-
-    <!-- Header -->
-    <header class="chat-hdr" id="chatHdr">
-      <button class="icon-btn hamburger" id="hamburger" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
-      <div class="hdr-info">
-        <div class="avatar sm" id="roomAvatar"></div>
-        <div class="hdr-txt">
-          <span class="hdr-name" id="roomName">Общий чат</span>
-          <span class="hdr-sub" id="roomSub">Публичный чат</span>
-        </div>
-      </div>
-      <div class="hdr-right" id="hdrRight">
-        <div class="online-pill" id="onlinePill">
-          <span class="o-dot"></span>
-          <span id="onlineCount">0</span> онлайн
-        </div>
-      </div>
-    </header>
-
-    <!-- Drop zone overlay -->
-    <div id="dropZone" class="drop-zone">
-      <i class="ti ti-cloud-upload"></i>
-      <p>Перетащи файл</p>
-    </div>
-
-    <!-- Messages -->
-    <div class="msgs" id="messages" role="log" aria-live="polite">
-      <div class="msgs-empty" id="msgsEmpty">
-        <i class="ti ti-messages"></i>
-        <p>Начните разговор</p>
-      </div>
-    </div>
-
-    <!-- File preview bar -->
-    <div id="fpBar" class="fp-bar hidden"></div>
-
-    <!-- Recording bar -->
-    <div id="recBar" class="rec-bar hidden">
-      <span class="rec-dot"></span>
-      <span id="recTimer">0:00</span>
-      <span id="recType" class="rec-type-lbl">Голосовое</span>
-      <button class="icon-btn sm" onclick="cancelRecording()"><i class="ti ti-x"></i></button>
-    </div>
-
-    <!-- Input -->
-    <div class="input-zone">
-      <div class="input-row">
-        <button class="icon-btn attach" id="attachBtn" title="Прикрепить"><i class="ti ti-paperclip"></i></button>
-        <div class="input-box">
-          <textarea id="msgInput" class="msg-ta" placeholder="Сообщение…" rows="1"
-            oninput="autoGrow(this);refreshSendBtn()" onkeydown="onMsgKey(event)" autocomplete="off"
-            aria-label="Текст сообщения"></textarea>
-        </div>
-        <button class="send-fab" id="sendBtn" onclick="handleSend()" disabled aria-label="Отправить">
-          <i class="ti ti-send" id="sendIco"></i>
+      <div class="hero-actions">
+        <button class="btn btn-primary magnetic" type="button" data-install-button>
+          <span data-install-label>Скачать приложение</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
         </button>
+        <a class="btn btn-secondary magnetic" href="/app.html" data-open-browser>
+          <span>Открыть в браузере</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7m0 0H8m9 0v9"/></svg>
+        </a>
       </div>
-    </div>
+
+      <div class="platform-strip" aria-label="Преимущества">
+        <span data-platform-pill>Определяем устройство...</span>
+        <span>Без лишних шагов</span>
+        <span>Работает онлайн</span>
+      </div>
+    </section>
+
+    <section class="hero-app reveal delay-1" aria-label="Превью Aura Messenger">
+      <div class="app-window tilt-card" data-tilt data-preview-app>
+        <div class="window-bar">
+          <span></span><span></span><span></span>
+          <strong>aura://home</strong>
+        </div>
+
+        <div class="messenger-mockup">
+          <aside class="server-rail">
+            <div class="server-icon active" role="button" tabindex="0" data-preview-server>A</div>
+            <div class="server-icon" role="button" tabindex="0" data-preview-server>+</div>
+            <div class="server-icon mini" role="button" tabindex="0" data-preview-server></div>
+            <div class="server-icon mini" role="button" tabindex="0" data-preview-server></div>
+          </aside>
+
+          <aside class="channels-panel">
+            <div class="workspace">
+              <strong>Aura Hub</strong>
+              <small>online 24/7</small>
+            </div>
+            <div class="channel-title">Текстовые каналы</div>
+            <div class="channel active" role="button" tabindex="0" data-preview-channel data-title="# общий-чат" data-subtitle="быстрое общение без лишнего шума" data-message="Обсуждаем идеи, файлы и планы команды в одном месте."># общий-чат</div>
+            <div class="channel" role="button" tabindex="0" data-preview-channel data-title="# проекты" data-subtitle="задачи, релизы и решения" data-message="Собирайте обсуждения по проектам, чтобы ничего не терялось."># проекты</div>
+            <div class="channel" role="button" tabindex="0" data-preview-channel data-title="# идеи" data-subtitle="наброски, предложения и быстрые заметки" data-message="Записывайте идеи и превращайте их в понятные решения."># идеи</div>
+            <div class="channel-title">Голос</div>
+            <div class="voice-card" role="button" tabindex="0" data-preview-voice>
+              <span class="voice-wave"></span>
+              <div>
+                <strong>Комната команды</strong>
+                <small data-voice-status>4 участника</small>
+              </div>
+            </div>
+          </aside>
+
+          <main class="chat-panel">
+            <div class="chat-top">
+              <div>
+                <strong data-preview-title># общий-чат</strong>
+                <small data-preview-subtitle>быстрое общение без лишнего шума</small>
+              </div>
+              <button type="button" data-preview-join>Join</button>
+            </div>
+
+            <div class="chat-feed" data-preview-feed>
+              <div class="msg incoming">
+                <span class="avatar">M</span>
+                <div>
+                  <strong>Max</strong>
+                  <p data-preview-message>Обсуждаем идеи, файлы и планы команды в одном месте.</p>
+                </div>
+              </div>
+              <div class="msg outgoing">
+                <span class="avatar">A</span>
+                <div>
+                  <strong>Aura</strong>
+                  <p>Скачайте приложение или откройте мессенджер в браузере — оба варианта доступны сразу.</p>
+                </div>
+              </div>
+              <div class="media-row" data-preview-media>
+                <span role="button" tabindex="0"></span><span role="button" tabindex="0"></span><span role="button" tabindex="0"></span>
+              </div>
+            </div>
+
+            <div class="message-input" data-preview-compose>
+              <label class="sr-only" for="previewMessageInput">Сообщение</label>
+              <div class="message-editor" id="previewMessageInput" contenteditable="true" spellcheck="false" data-preview-editor data-placeholder="Написать сообщение..." aria-label="Написать сообщение"></div>
+              <button class="send-demo-btn" type="button" data-preview-send aria-label="Отправить сообщение">
+                <span></span>
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+  </header>
+
+  <main>
+    <section class="ticker" aria-label="Возможности Aura">
+      <div class="ticker-track">
+        <div class="ticker-group">
+          <span>Чаты</span><span>Голосовые</span><span>Видео</span><span>Медиа</span><span>AI</span><span>PWA</span><span>Браузер</span><span>Команды</span>
+        </div>
+        <div class="ticker-group" aria-hidden="true">
+          <span>Чаты</span><span>Голосовые</span><span>Видео</span><span>Медиа</span><span>AI</span><span>PWA</span><span>Браузер</span><span>Команды</span>
+        </div>
+        <div class="ticker-group" aria-hidden="true">
+          <span>Чаты</span><span>Голосовые</span><span>Видео</span><span>Медиа</span><span>AI</span><span>PWA</span><span>Браузер</span><span>Команды</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section split-section" id="about">
+      <div class="section-copy reveal">
+        <p class="section-kicker">О продукте</p>
+        <h2>Aura — мессенджер для проектов, где всё общение собрано в одном окне.</h2>
+        <p>
+          Создавайте пространство для команды или сообщества, разделяйте обсуждения по каналам,
+          отправляйте медиа, переходите к звонкам и подключайте AI-помощника для быстрых ответов.
+        </p>
+        <a class="text-link" href="/app.html">Попробовать без скачивания →</a>
+      </div>
+
+      <div class="info-stack">
+        <article class="info-card reveal delay-1">
+          <span>01</span>
+          <h3>Порядок в общении</h3>
+          <p>Каналы помогают держать темы, файлы и решения отдельно, чтобы команда быстрее находила нужное.</p>
+        </article>
+        <article class="info-card reveal delay-2">
+          <span>02</span>
+          <h3>Мгновенный вход</h3>
+          <p>Откройте Aura в браузере и начните общаться без установки, ожидания и лишних переходов.</p>
+        </article>
+        <article class="info-card reveal delay-3">
+          <span>03</span>
+          <h3>Приложение на устройстве</h3>
+          <p>Установите Aura как PWA на ПК или телефон, чтобы запускать мессенджер как обычное приложение.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="section-head reveal">
+        <p class="section-kicker">Возможности</p>
+        <h2>Всё для общения, работы и быстрых решений.</h2>
+        <p>Aura выглядит как полноценное приложение, но остаётся доступной по ссылке с любого устройства.</p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card reveal tilt-card" data-tilt>
+          <div class="feature-icon image-icon chat-icon"><img src="/feature-icons/chat.png" alt="Каналы и чаты"/></div>
+          <h3>Каналы и чаты</h3>
+          <p>Собирайте общение в понятные пространства: общий чат, проекты, идеи, поддержка и закрытые комнаты.</p>
+        </article>
+        <article class="feature-card reveal delay-1 tilt-card" data-tilt>
+          <div class="feature-icon image-icon voice-icon"><img src="/feature-icons/voice.png" alt="Голос и медиа"/></div>
+          <h3>Голос и медиа</h3>
+          <p>Отправляйте голосовые сообщения, файлы, фото и видео без переключения между сервисами.</p>
+        </article>
+        <article class="feature-card reveal delay-2 tilt-card" data-tilt>
+          <div class="feature-icon image-icon call-icon"><img src="/feature-icons/call.png" alt="Звонки"/></div>
+          <h3>Звонки</h3>
+          <p>Переходите из переписки в разговор, когда вопрос нужно решить прямо сейчас.</p>
+        </article>
+        <article class="feature-card reveal tilt-card" data-tilt>
+          <div class="feature-icon image-icon ai-icon"><img src="/feature-icons/ai.png" alt="Aura AI"/></div>
+          <h3>Aura AI</h3>
+          <p>Используйте встроенного помощника для идей, быстрых ответов и работы с сообщениями.</p>
+        </article>
+        <article class="feature-card reveal delay-1 tilt-card" data-tilt>
+          <div class="feature-icon image-icon squares-icon"><img src="/feature-icons/squares.png" alt="Квадраты"/></div>
+          <h3>Квадраты</h3>
+          <p>Записывайте короткие видео-квадраты, это как кружки в тг - только квадраты.</p>
+        </article>
+        <article class="feature-card reveal delay-2 tilt-card" data-tilt>
+          <div class="feature-icon image-icon browser-icon"><img src="/feature-icons/browser.png" alt="Вход без установки"/></div>
+          <h3>Вход без установки</h3>
+          <p>Открывайте веб-версию в один клик — удобно для первого запуска, гостевого входа и работы с любого устройства.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section download-section" id="download">
+      <div class="download-card reveal">
+        <div class="download-glow" aria-hidden="true"></div>
+        <div class="download-copy">
+          <p class="section-kicker">Скачать Aura</p>
+          <h2>Установите Aura на ПК или телефон — и запускайте как обычное приложение.</h2>
+          <p>
+            Aura поддерживает PWA-установку: браузер добавит мессенджер на рабочий стол или главный экран,
+            а кнопка скачивания покажет подходящий вариант для вашего устройства.
+          </p>
+        </div>
+
+        <div class="download-actions">
+          <button class="btn btn-primary big" type="button" data-install-button-secondary>
+            <span data-install-label-secondary>Скачать приложение</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
+          </button>
+          <a class="btn btn-dark big" href="/app.html">Открыть в браузере</a>
+        </div>
+
+        <div class="device-grid" aria-label="Устройства">
+          <div class="device-card">
+            <span>Windows / macOS / Linux</span>
+            <strong>Для компьютера</strong>
+            <small>Установка через Chrome, Edge или другой браузер с поддержкой PWA</small>
+          </div>
+          <div class="device-card">
+            <span>Android</span>
+            <strong>На главный экран</strong>
+            <small>Установка через кнопку Aura или меню браузера</small>
+          </div>
+          <div class="device-card">
+            <span>iPhone</span>
+            <strong>Добавить домой</strong>
+            <small>Safari → Поделиться → На экран «Домой»</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section browser-section" id="browser">
+      <div class="browser-copy reveal">
+        <p class="section-kicker">Браузерная версия</p>
+        <h2>Не хотите устанавливать? Откройте Aura прямо сейчас.</h2>
+        <p>
+          Веб-версия ведёт в тот же мессенджер и подходит для быстрого теста, гостевого входа или запуска с чужого устройства.
+        </p>
+        <a class="btn btn-primary" href="/app.html">Открыть Aura в браузере</a>
+      </div>
+      <div class="browser-panel reveal delay-1">
+        <div class="browser-line"></div>
+        <div class="browser-line short"></div>
+        <div class="browser-mini-chat">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="browser-url">https://your-site.com/app.html</div>
+      </div>
+    </section>
   </main>
-</div>
 
-<!-- Attach popup (portal) -->
-<div id="attachMenu" class="attach-popup" role="menu"></div>
+  <footer class="footer">
+    <div class="footer-brand">
+      <img class="footer-logo" src="/aura-logo.svg" alt="Aura"/>
+      <div>
+        <strong>Aura Messenger</strong>
+        <span>Единое пространство для чатов, медиа и командной работы.</span>
+      </div>
+    </div>
+    <div class="footer-links">
+      <a href="#top">Наверх</a>
+      <a href="/app.html">Открыть Aura</a>
+      <button type="button" data-install-footer>Скачать</button>
+    </div>
+  </footer>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="script.js"></script>
-<script src="boot.js"></script>
+  <div class="install-modal" data-install-modal aria-hidden="true">
+    <div class="install-backdrop" data-close-install></div>
+    <section class="install-dialog" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+      <button class="modal-close" type="button" data-close-install aria-label="Закрыть">×</button>
+      <div class="modal-icon" aria-hidden="true">↓</div>
+      <h2 id="installTitle">Установить Aura</h2>
+      <p data-install-instruction>
+        Откройте меню браузера и выберите установку приложения. После этого Aura появится на рабочем столе или главном экране.
+      </p>
+      <div class="modal-steps" data-install-steps></div>
+      <div class="modal-actions">
+        <a class="btn btn-primary" href="/app.html">Открыть в браузере</a>
+        <button class="btn btn-secondary" type="button" data-close-install>Понятно</button>
+      </div>
+    </section>
+  </div>
 
-<!-- FORGOT PASSWORD MODAL -->
-<div id="forgotModal" class="modal-bg">
-  <div class="modal-card" style="max-width:400px">
-    <div class="modal-hd">
-      <h2><i class="ti ti-lock-open"></i> Восстановление пароля</h2>
-      <button class="icon-btn" onclick="closeForgotPass()"><i class="ti ti-x"></i></button>
-    </div>
-    <div style="padding:20px 20px 24px">
-      <!-- Шаг 1: ввод логина -->
-      <div id="forgotStep1" class="forgot-step active">
-        <p class="sub-text" style="margin-bottom:12px">Введите ваш логин — отправим код на привязанный email.</p>
-        <div class="field-wrap">
-          <i class="ti ti-user field-ico"></i>
-          <input id="forgotUsername" class="field" type="text" placeholder="Имя пользователя…"
-                 onkeydown="if(event.key==='Enter')sendForgotCode()"/>
-        </div>
-        <div id="forgotErr1" class="login-err"></div>
-        <button class="btn-primary w-full" onclick="sendForgotCode()">
-          <i class="ti ti-send"></i> Отправить код
-        </button>
-      </div>
-      <!-- Шаг 2: ввод кода -->
-      <div id="forgotStep2" class="forgot-step">
-        <p class="sub-text" style="margin-bottom:16px;text-align:center">Введите 6-значный код из письма</p>
-        <div class="code-inputs">
-          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,0)" onkeydown="codeBack(event,this,0)"/>
-          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,1)" onkeydown="codeBack(event,this,1)"/>
-          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,2)" onkeydown="codeBack(event,this,2)"/>
-          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,3)" onkeydown="codeBack(event,this,3)"/>
-          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,4)" onkeydown="codeBack(event,this,4)"/>
-          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,5)" onkeydown="codeBack(event,this,5)"/>
-        </div>
-        <div id="forgotErr2" class="login-err" style="margin-top:8px"></div>
-        <button class="btn-primary w-full" onclick="verifyForgotCode()">
-          <i class="ti ti-check"></i> Подтвердить
-        </button>
-        <button class="btn-ghost w-full" style="margin-top:8px" onclick="sendForgotCode()">
-          <i class="ti ti-refresh"></i> Отправить снова
-        </button>
-      </div>
-      <!-- Шаг 3: новый пароль -->
-      <div id="forgotStep3" class="forgot-step">
-        <p class="sub-text" style="margin-bottom:12px">Придумайте новый пароль</p>
-        <div class="field-wrap has-toggle">
-          <i class="ti ti-lock field-ico"></i>
-          <input id="forgotNewPass" class="field" type="password" placeholder="Новый пароль (мин. 8 символов)…"/>
-          <button class="pass-toggle" onclick="toggleForgotPass()" type="button">
-            <i class="ti ti-eye" id="forgotEyeIco"></i>
-          </button>
-        </div>
-        <div id="forgotErr3" class="login-err"></div>
-        <button class="btn-primary w-full" onclick="resetPassword()">
-          <i class="ti ti-lock-check"></i> Сменить пароль
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- EMAIL VERIFY MODAL -->
-<div id="emailVerifyModal" class="modal-bg">
-  <div class="modal-card" style="max-width:380px">
-    <div class="modal-hd">
-      <h2><i class="ti ti-mail-check"></i> Подтверждение email</h2>
-      <button class="icon-btn" onclick="closeEmailVerifyModal()"><i class="ti ti-x"></i></button>
-    </div>
-    <div style="padding:20px 20px 24px;display:flex;flex-direction:column;gap:14px">
-      <p id="evHint" class="sub-text" style="text-align:center;font-size:13px;color:var(--text2)">Код отправлен на ваш email</p>
-      <div class="code-inputs">
-        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,0)" onkeydown="evBack(event,this,0)"/>
-        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,1)" onkeydown="evBack(event,this,1)"/>
-        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,2)" onkeydown="evBack(event,this,2)"/>
-        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,3)" onkeydown="evBack(event,this,3)"/>
-        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,4)" onkeydown="evBack(event,this,4)"/>
-        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,5)" onkeydown="evBack(event,this,5)"/>
-      </div>
-      <div id="evErr" class="login-err" style="margin:0;text-align:center"></div>
-      <button id="evConfirmBtn" class="btn-primary w-full" onclick="confirmEmailCode()">
-        <i class="ti ti-check"></i> Подтвердить
-      </button>
-      <button class="btn-ghost w-full" style="font-size:13px" onclick="resendEmailVerify()">
-        <i class="ti ti-refresh"></i> Отправить снова
-      </button>
-    </div>
-  </div>
-</div>
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
 
-<!-- AI CHAT MODAL -->
-<div id="aiChatModal" class="modal-bg">
-  <div class="modal-card" style="max-width:540px;height:72vh;display:flex;flex-direction:column;padding:0;overflow:hidden;position:relative">
-    <div class="modal-hd" style="padding:14px 16px;flex-shrink:0;border-bottom:1px solid var(--border)">
-      <h2><i class="ti ti-robot"></i> Aura AI</h2>
-      <div style="display:flex;gap:4px;align-items:center">
-        <span id="aiDebugIndicator" style="display:none;align-items:center;gap:4px;font-size:10px;background:var(--danger);color:#fff;padding:2px 8px;border-radius:99px;margin-right:4px"></span>
-        <button id="aiFilesBtn" class="icon-btn sm" title="База файлов" onclick="toggleAiFilePanel()" style="position:relative">
-          <i class="ti ti-files"></i>
-        </button>
-        <button class="icon-btn sm" title="Очистить историю" onclick="aiClearHistory()"><i class="ti ti-trash"></i></button>
-        <button class="icon-btn sm" onclick="closeAiChat()"><i class="ti ti-x"></i></button>
-      </div>
-    </div>
-    <div id="aiMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px">
-      <div class="ai-welcome">
-        <i class="ti ti-robot" style="font-size:40px;color:var(--accent);display:block;text-align:center;margin-bottom:10px"></i>
-        <p style="text-align:center;font-weight:700;font-size:15px;margin-bottom:6px">Aura AI</p>
-        <p style="text-align:center;color:var(--text2);font-size:13px;line-height:1.6">Поиск в интернете · Погода · Курсы валют<br>Криптовалюты · Генерация файлов · Код<br>Анализ изображений · Wikipedia и многое другое</p>
-      </div>
-    </div>
-    <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0">
-      <div class="input-box" style="display:flex;align-items:flex-end;gap:8px;background:var(--surface3);border-radius:16px;padding:6px 6px 6px 14px">
-        <button class="icon-btn sm" onclick="aiAttach()" title="Прикрепить фото или файл" style="flex-shrink:0;margin-right:2px">
-          <i class="ti ti-paperclip"></i>
-        </button>
-        <textarea id="aiInput" class="msg-ta" placeholder="Спросите что-нибудь…" rows="1"
-          style="background:transparent;border:none;box-shadow:none;padding:6px 0;min-height:32px"
-          oninput="autoGrow(this)"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend()}"></textarea>
-        <button id="aiSendBtn" class="send-fab" style="width:36px;height:36px;border-radius:10px;flex-shrink:0" onclick="aiSend()">
-          <i class="ti ti-send"></i>
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="consolePanel" style="display:none;position:fixed;inset:0;z-index:19999;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);flex-direction:column">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0">
-    <span style="color:var(--accent);font-weight:700;font-size:13px">Консоль</span>
-    <button onclick="document.getElementById('consolePanel').style.display='none'" style="background:none;border:none;color:#aaa;cursor:pointer;font-size:20px;line-height:1">×</button>
-  </div>
-  <div id="consoleOutput" style="flex:1;overflow-y:auto;padding:10px 14px;font-size:12px;color:#ccc;line-height:1.6"></div>
-  <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid rgba(255,255,255,.08);flex-shrink:0">
-    <span style="color:var(--accent)">›</span>
-    <input id="consoleInput" type="text" placeholder="Sudo HACK delete-group [id] | Sudo HACK enable-media" 
-      autocomplete="off" spellcheck="false"
-      style="flex:1;background:transparent;border:none;color:#e8e8f2;font-family:monospace;font-size:12px;outline:none"
-      onkeydown="if(event.key==='Enter')runConsoleCmd()"/>
-  </div>
-</div>
+  <script src="/landing.js" defer></script>
+  <script src="/i18n.js" defer></script>
 </body>
 </html>

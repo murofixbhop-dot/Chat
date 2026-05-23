@@ -1,74 +1,88 @@
-// Aura Messenger — Service Worker v6
-// Network-first for JS/CSS (always fresh), cache-first for static assets
-const CACHE = 'aura-v6';
-const NETWORK_FIRST = ['/script.js', '/boot.js', '/style.css', '/index.html'];
+// Aura Messenger — Service Worker v14
+// Network-first for app shell files, cache-first for icons/static.
+const CACHE = 'aura-v18';
+const NETWORK_FIRST = [
+  '/',
+  '/index.html',
+  '/app.html',
+  '/landing.css',
+  '/landing.js',
+  '/i18n.js',
+  '/boot.js',
+  '/style.css',
+  '/script.js',
+  '/manifest.json'
+];
 
-self.addEventListener('install', e => {
-  e.waitUntil(
+self.addEventListener('install', (event) => {
+  event.waitUntil(
     caches.open(CACHE)
-      .then(c => c.add(new Request('/manifest.json', { credentials: 'same-origin' })))
-      .catch(() => {})
+      .then((cache) => cache.addAll(['/manifest.json', '/favicon.svg', '/aura-logo.svg', '/i18n.js', '/vendor/tabler-icons/tabler-icons.min.css', '/vendor/tabler-icons/fonts/tabler-icons.woff2', '/vendor/tabler-icons/fonts/tabler-icons.woff', '/vendor/tabler-icons/fonts/tabler-icons.ttf', '/feature-icons/chat.png', '/feature-icons/voice.png', '/feature-icons/call.png', '/feature-icons/ai.png', '/feature-icons/squares.png', '/feature-icons/browser.png']).catch(() => {}))
       .then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
   if (
+    event.request.method !== 'GET' ||
     url.pathname.startsWith('/socket.io') ||
     url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/upload') ||
-    e.request.method !== 'GET'
-  ) return;
+    url.pathname.startsWith('/upload')
+  ) {
+    return;
+  }
 
-  const path = url.pathname;
+  const shouldNetworkFirst = NETWORK_FIRST.includes(url.pathname);
 
-  // Network-first for all app files — always fresh, fall back to cache
-  if (NETWORK_FIRST.some(p => path === p) || path === '/') {
-    e.respondWith(
-      fetch(e.request)
-        .then(res => {
-          if (res && res.status === 200) {
-            const toCache = res.clone(); // clone BEFORE returning original
-            caches.open(CACHE).then(c => c.put(e.request, toCache));
+  if (shouldNetworkFirst) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
           }
-          return res;
+          return response;
         })
-        .catch(() => caches.match(e.request))
+        .catch(() => caches.match(event.request))
     );
     return;
   }
 
-  // Cache-first for everything else (icons etc)
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      const net = fetch(e.request).then(res => {
-        if (res && res.status === 200) {
-          const toCache = res.clone(); // clone BEFORE returning
-          caches.open(CACHE).then(c => c.put(e.request, toCache));
-        }
-        return res;
-      }).catch(() => null);
-      return cached || net;
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      const network = fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => null);
+
+      return cached || network;
     })
   );
 });
 
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      const w = list.find(c => c.url.includes(self.location.origin));
-      if (w) return w.focus();
-      return clients.openWindow('/');
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const existing = list.find((client) => client.url.includes(self.location.origin));
+      if (existing) return existing.focus();
+      return clients.openWindow('/app.html');
     })
   );
 });

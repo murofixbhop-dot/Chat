@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Aura"/>
+  <meta name="theme-color" content="#6366f1"/>
+  <meta name="description" content="Aura — современный мессенджер"/>
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json"/>
+  <!-- iOS icons -->
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg"/>
+  <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.svg"/>
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.svg"/>
+  <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.svg"/>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='url(%23g)'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%25' stop-color='%236366f1'/><stop offset='100%25' stop-color='%238b5cf6'/></linearGradient></defs><path d='M7 21Q7 10 16 10Q25 10 25 16Q25 22 19 23L15 26L14 23Q7 22 7 21Z' fill='white'/><circle cx='13' cy='17' r='1.3' fill='%236366f1' opacity='.7'/><circle cx='16' cy='17' r='1.3' fill='%236366f1' opacity='.7'/><circle cx='19' cy='17' r='1.3' fill='%236366f1' opacity='.7'/></svg>"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+  <link rel="shortcut icon" href="/favicon.svg"/>
+  <title>Aura · Messenger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <!-- Tabler Icons: local bundle -->
+  <link rel="preload" href="/vendor/tabler-icons/fonts/tabler-icons.woff2" as="font" type="font/woff2" crossorigin/>
+  <link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="loadingScreen" class="splash active">
+  <div class="splash-orb s1"></div><div class="splash-orb s2"></div>
+  <div class="splash-logo">
+    <svg width="44" height="44" viewBox="0 0 40 40" fill="none">
+      <rect width="40" height="40" rx="13" fill="url(#g0)"/>
+      <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white"/>
+      <defs><linearGradient id="g0" x1="0" y1="0" x2="40" y2="40"><stop stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent2)"/></linearGradient></defs>
+    </svg>
+  </div>
+  <p class="splash-label" id="loadingText">Подключение…</p>
+  <div class="splash-bar"><div class="splash-fill" id="splashFill"></div></div>
+</div>
+
+<!-- TOASTS -->
+<div id="toastContainer" aria-live="polite"></div>
+
+<!-- DIALOG -->
+<div id="dialogOverlay" class="dialog-overlay">
+  <div class="dialog-box" id="dialogBox"></div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div id="ctxMenu" class="ctx-menu" role="menu"></div>
+
+<!-- EMOJI PICKER -->
+<div id="emojiPicker" class="emoji-picker"></div>
+
+<!-- CALL MODAL -->
+<div id="callModal" class="call-modal">
+  <div class="call-bg"></div>
+  <div class="call-content">
+    <div class="call-ring"><div class="call-ava" id="callAvatar"></div></div>
+    <div class="call-name" id="callName"></div>
+    <div class="call-status" id="callStatus">Звонок…</div>
+    <div class="call-actions" id="callActions"></div>
+  </div>
+</div>
+
+<!-- CIRCLE RECORD -->
+<div id="circleOverlay" class="circle-overlay">
+  <div class="circle-card square-card">
+    <div class="square-preview-wrap">
+      <video id="circlePreview" autoplay muted playsinline></video>
+      <!-- Прогресс-рамка (квадратная SVG анимация) -->
+      <svg class="square-progress-svg" viewBox="0 0 220 220" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
+        <rect class="sq-bg" x="4" y="4" width="212" height="212" rx="20" ry="20"/>
+        <rect class="sq-fg" id="cFg" x="4" y="4" width="212" height="212" rx="20" ry="20"/>
+      </svg>
+      <div class="circle-badge"><span class="rec-dot"></span>REC</div>
+    </div>
+    <div class="circle-time" id="circleTimer">0:00</div>
+    <div class="circle-actions">
+      <button class="btn-ghost" onclick="cancelCircleRecord()"><i class="ti ti-x"></i> Отмена</button>
+      <button class="btn-primary" onclick="sendCircleRecord()"><i class="ti ti-send"></i> Отправить</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-orbs">
+    <div class="lorb l1"></div><div class="lorb l2"></div><div class="lorb l3"></div>
+  </div>
+  <div class="login-card">
+    <div class="login-logo-wrap" id="loginLogoWrap">
+      <svg class="login-logo-svg" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="loginLogoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--accent)"/>
+            <stop offset="100%" stop-color="var(--accent2)"/>
+          </linearGradient>
+          <linearGradient id="loginLogoShine" x1="0%" y1="0%" x2="40%" y2="100%">
+            <stop offset="0%" stop-color="rgba(255,255,255,0.22)"/>
+            <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+          </linearGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="276" ry="276" fill="url(#loginLogoBg)"/>
+        <rect width="1024" height="532.5" rx="276" ry="276" fill="url(#loginLogoShine)"/>
+        <path d="M245.76,675.84 Q215.04,337.92 512.00,337.92 Q808.96,337.92 808.96,522.24 Q808.96,706.56 593.92,727.04 L491.52,849.92 L481.28,727.04 Q245.76,706.56 245.76,675.84Z" fill="white"/>
+        <circle cx="368.6" cy="532.5" r="41.0" fill="var(--accent)" opacity="0.7"/>
+        <circle cx="512.0" cy="532.5" r="41.0" fill="var(--accent)" opacity="0.7"/>
+        <circle cx="655.4" cy="532.5" r="41.0" fill="var(--accent)" opacity="0.7"/>
+      </svg>
+    </div>
+    <h1 class="login-h1">Добро пожаловать<br/>в <span class="grad">Aura</span></h1>
+    <p class="login-sub" id="loginSubText">Введите имя и пароль</p>
+    <div class="field-wrap">
+      <i class="ti ti-user field-ico"></i>
+      <input id="loginInput" class="field" type="text" placeholder="Имя пользователя…" autocomplete="username" maxlength="32"
+             onkeydown="if(event.key==='Enter')document.getElementById('loginPassInput').focus()"/>
+    </div>
+    <div class="field-wrap has-toggle" style="margin-top:10px">
+      <i class="ti ti-lock field-ico"></i>
+      <input id="loginPassInput" class="field" type="password" placeholder="Пароль (мин. 8 символов)…" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()"/>
+      <button class="pass-toggle" onclick="togglePassVisibility()" type="button" title="Показать пароль">
+        <i class="ti ti-eye" id="passEyeIcon"></i>
+      </button>
+    </div>
+    <!-- Email field for registration -->
+    <div id="loginEmailWrap" class="field-wrap" style="margin-top:10px; display:none">
+      <i class="ti ti-mail field-ico"></i>
+      <input id="loginEmailInput" class="field" type="email" placeholder="Email для восстановления пароля" autocomplete="email"
+             onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <div id="loginErr" class="login-err" aria-live="polite"></div>
+    <button id="loginBtn" class="btn-primary w-full" onclick="doLogin()">
+      Войти <i class="ti ti-arrow-right"></i>
+    </button>
+    <div class="login-links">
+      <a class="login-link" id="forgotLink" onclick="openForgotPass()">
+        <i class="ti ti-lock-open"></i>Забыли пароль?
+      </a>
+      <span class="login-link-sep"></span>
+      <a class="login-link" id="registerLink" onclick="toggleRegisterMode()">
+        <i class="ti ti-user-plus"></i><span id="registerLinkText">Регистрация</span>
+      </a>
+    </div>
+    <div class="palette-row">
+      <span class="pal-label">Тема:</span>
+      <button class="pal active" data-pal="violet" style="--pc:#6366f1" onclick="applyPalette('violet')" title="Violet"></button>
+      <button class="pal" data-pal="cyan"   style="--pc:#06b6d4" onclick="applyPalette('cyan')"   title="Cyan"></button>
+      <button class="pal" data-pal="rose"   style="--pc:#f43f5e" onclick="applyPalette('rose')"   title="Rose"></button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settingsModal" class="modal-bg">
+  <div class="modal-card settings-card">
+    <div class="modal-hd">
+      <h2><i class="ti ti-settings-2"></i> Настройки</h2>
+      <button class="icon-btn" onclick="closeSettings()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-tabs">
+      <button class="mtab active" onclick="openStab('profile')"><i class="ti ti-user"></i>Профиль</button>
+      <button class="mtab" onclick="openStab('sound')"><i class="ti ti-headphones"></i>Звук</button>
+      <button class="mtab" onclick="openStab('theme')"><i class="ti ti-palette"></i>Тема</button>
+      <button class="mtab" onclick="openStab('account')"><i class="ti ti-shield-lock"></i>Аккаунт</button>
+    </div>
+
+    <div id="st_profile" class="stab-pane">
+      <div class="ava-center">
+        <div class="ava-rel">
+          <div class="avatar lg" id="settingsAvatar"></div>
+          <button class="ava-cam" onclick="document.getElementById('avaInput').click()"><i class="ti ti-camera"></i></button>
+        </div>
+        <input type="file" id="avaInput" accept="image/*" style="display:none"/>
+        <span class="sub-text">Нажмите для смены</span>
+      </div>
+      <label class="lbl">Отображаемое имя</label>
+      <input type="text" id="stNickname" class="field"/>
+      <button class="btn-primary w-full mt" onclick="saveProfile()"><i class="ti ti-check"></i> Сохранить</button>
+    </div>
+
+    <div id="st_sound" class="stab-pane hidden">
+      <label class="lbl"><i class="ti ti-microphone"></i> Микрофон</label>
+      <select id="micSel" class="field" onchange="saveSoundSettings()"><option value="default">По умолчанию</option></select>
+      <label class="lbl mt"><i class="ti ti-volume"></i> Динамики</label>
+      <select id="spkSel" class="field" onchange="saveSoundSettings()"><option value="default">По умолчанию</option></select>
+      <p id="spkHint" class="sub-text hidden"><i class="ti ti-info-circle"></i> Браузер не поддерживает выбор устройства вывода</p>
+      <label class="lbl mt"><i class="ti ti-adjustments-h"></i> Громкость — <b id="volLabel">100%</b></label>
+      <input type="range" id="volRange" min="0" max="100" value="100" class="range-slider" oninput="setVolume(this.value)"/>
+      <button class="btn-secondary w-full mt" onclick="testMic()"><i class="ti ti-microphone"></i> Тест микрофона</button>
+      <p id="micTestOut" class="sub-text mt hidden"></p>
+
+      <label class="lbl mt"><i class="ti ti-music"></i> Звук уведомления</label>
+      <div id="notifSoundWrap" style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="notifSoundName" style="flex:1;font-size:13px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Стандартный звук</div>
+          <button class="btn-secondary" style="flex-shrink:0;padding:6px 12px;font-size:12px" onclick="document.getElementById('notifSoundInput').click()">
+            <i class="ti ti-upload"></i> Загрузить
+          </button>
+          <button class="btn-secondary" id="notifSoundResetBtn" style="flex-shrink:0;padding:6px 10px;font-size:12px;display:none" onclick="resetNotifSound()">
+            <i class="ti ti-x"></i>
+          </button>
+        </div>
+        <input type="file" id="notifSoundInput" accept="audio/*" style="display:none" onchange="uploadNotifSound(this)">
+        <div style="display:flex;gap:8px">
+          <button class="btn-secondary" style="flex:1;font-size:12px" onclick="previewNotifSound()">
+            <i class="ti ti-player-play"></i> Прослушать
+          </button>
+        </div>
+        <div class="notif-pref-row">
+          <label class="notif-pref-check">
+            <input type="checkbox" id="notifBrowserToggle" onchange="saveNotificationPrefs()">
+            <span>Показывать браузерные уведомления</span>
+          </label>
+          <button class="btn-secondary" style="font-size:12px;padding:8px 12px" onclick="hideAllToasts()">
+            <i class="ti ti-eye-off"></i> Скрыть
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="st_theme" class="stab-pane hidden">
+      <label class="lbl">Акцентный цвет</label>
+      <div class="clr-grid">
+        <button class="clr active" style="--cc:#6366f1" data-accent="#6366f1" onclick="setAccent('#6366f1',this)"><i class="ti ti-check"></i></button>
+        <button class="clr" style="--cc:#06b6d4" data-accent="#06b6d4" onclick="setAccent('#06b6d4',this)"></button>
+        <button class="clr" style="--cc:#f43f5e" data-accent="#f43f5e" onclick="setAccent('#f43f5e',this)"></button>
+        <button class="clr" style="--cc:#10b981" data-accent="#10b981" onclick="setAccent('#10b981',this)"></button>
+        <button class="clr" style="--cc:#f59e0b" data-accent="#f59e0b" onclick="setAccent('#f59e0b',this)"></button>
+        <button class="clr" style="--cc:#ec4899" data-accent="#ec4899" onclick="setAccent('#ec4899',this)"></button>
+      </div>
+      <label class="lbl mt">Тема</label>
+      <div class="theme-toggle">
+        <button class="theme-opt active" id="thDark" onclick="selectTheme('dark')"><i class="ti ti-moon"></i> Тёмная</button>
+        <button class="theme-opt" id="thLight" onclick="selectTheme('light')"><i class="ti ti-sun"></i> Светлая</button>
+      </div>
+    </div>
+
+    <div id="st_account" class="stab-pane hidden">
+      <div class="acct-row">
+        <i class="ti ti-user-circle" style="font-size:2.2rem;color:var(--accent)"></i>
+        <div>
+          <p class="sub-text">Ваш логин</p>
+          <strong id="acLoginName" style="font-size:1.05rem"></strong>
+        </div>
+      </div>
+      <label class="lbl mt"><i class="ti ti-mail"></i> Email для восстановления</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="email" id="stRecoveryEmail" class="field" placeholder="email@example.com" style="flex:1"/>
+        <button class="btn-secondary" onclick="saveRecoveryEmail()" style="padding:12px 16px"><i class="ti ti-check"></i></button>
+      </div>
+      <div id="emailVerifiedBadge" style="display:none;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--success)">
+        <i class="ti ti-circle-check"></i> Email подтверждён
+      </div>
+      <p class="sub-text" style="margin-top:4px">Используется для восстановления пароля</p>
+      <button class="btn-secondary w-full mt" onclick="doLogout()" style="margin-top:8px"><i class="ti ti-logout"></i> Выйти из аккаунта</button>
+      <button class="btn-danger w-full mt" onclick="deleteAccount()"><i class="ti ti-trash"></i> Удалить аккаунт</button>
+    </div>
+  </div>
+</div>
+
+<!-- GROUP MODAL -->
+<div id="groupModal" class="modal-bg">
+  <div class="modal-card">
+    <div class="modal-hd">
+      <h2><i class="ti ti-users-group"></i> Создать группу</h2>
+      <button class="icon-btn" onclick="closeGroupModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <label class="lbl">Название</label>
+    <input type="text" id="grpName" class="field" placeholder="Моя группа…"/>
+    <label class="lbl mt">Участники</label>
+    <div id="grpMembers" class="members-grid"></div>
+    <button class="btn-primary w-full mt" onclick="createGroup()"><i class="ti ti-check"></i> Создать</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     MAIN APP
+================================================================ -->
+<div id="app" class="app hidden">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="sidebar">
+
+    <div class="sb-top">
+      <div class="sb-brand">
+        <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="11" fill="url(#g2)"/>
+          <path d="M10 26Q10 14 20 14Q30 14 30 20Q30 26 22 27L18 32L17 27Q10 26 10 26Z" fill="white"/>
+          <defs><linearGradient id="g2" x1="0" y1="0" x2="40" y2="40"><stop stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent2)"/></linearGradient></defs>
+        </svg>
+        <span class="brand-name">Aura</span>
+      </div>
+      <div class="sb-hdr-actions">
+        <button class="icon-btn" title="Aura AI" onclick="openAiChat()"><i class="ti ti-robot"></i></button>
+        <button class="icon-btn" title="Настройки (⌘,)" onclick="openSettings()"><i class="ti ti-settings"></i></button>
+        
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="sb-search">
+      <i class="ti ti-search sb-search-ico"></i>
+      <input id="searchBox" class="sb-search-input" type="search" placeholder="Поиск…"
+             oninput="filterChats(this.value)" autocomplete="off"/>
+      <kbd>⌘K</kbd>
+    </div>
+
+    <!-- Tabs -->
+    <div class="sb-tabs">
+      <button class="sb-tab active" id="stFriends" onclick="switchTab('friends')">
+        <i class="ti ti-message"></i>Чаты
+      </button>
+      <button class="sb-tab" id="stGroups" onclick="switchTab('groups')">
+        <i class="ti ti-users"></i>Группы
+      </button>
+      <button class="sb-tab" id="stReqs" onclick="switchTab('requests')">
+        <i class="ti ti-bell"></i>Заявки
+        <span class="nb" id="reqBadge"></span>
+      </button>
+    </div>
+
+    <!-- Friends pane -->
+    <div class="sb-pane" id="pFriends">
+      <button class="new-btn" onclick="openAddFriend()"><i class="ti ti-plus"></i> Добавить друга</button>
+      <ul id="friendsList" class="chat-list-ul"></ul>
+    </div>
+
+    <!-- Groups pane -->
+    <div class="sb-pane hidden" id="pGroups">
+      <button class="new-btn" onclick="openGroupModal()"><i class="ti ti-plus"></i> Создать группу</button>
+      <ul id="groupsList" class="chat-list-ul"></ul>
+    </div>
+
+    <!-- Requests pane -->
+    <div class="sb-pane hidden" id="pReqs">
+      <ul id="requestsList" class="chat-list-ul"></ul>
+    </div>
+
+    <!-- Profile strip -->
+    <div class="sb-profile" onclick="openSettings()">
+      <div class="avatar sm" id="profileAvatar"></div>
+      <div class="sb-pinfo">
+        <span class="sb-pname" id="profileNickname">—</span>
+        <span class="sb-psub" id="profileUsername"></span>
+      </div>
+      
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Header -->
+    <header class="chat-hdr" id="chatHdr">
+      <button class="icon-btn hamburger" id="hamburger" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
+      <div class="hdr-info">
+        <div class="avatar sm" id="roomAvatar"></div>
+        <div class="hdr-txt">
+          <span class="hdr-name" id="roomName">Общий чат</span>
+          <span class="hdr-sub" id="roomSub">Публичный чат</span>
+        </div>
+      </div>
+      <div class="hdr-right" id="hdrRight">
+        <div class="online-pill" id="onlinePill">
+          <span class="o-dot"></span>
+          <span id="onlineCount">0</span> онлайн
+        </div>
+      </div>
+    </header>
+
+    <!-- Drop zone overlay -->
+    <div id="dropZone" class="drop-zone">
+      <i class="ti ti-cloud-upload"></i>
+      <p>Перетащи файл</p>
+    </div>
+
+    <!-- Messages -->
+    <div class="msgs" id="messages" role="log" aria-live="polite">
+      <div class="msgs-empty" id="msgsEmpty">
+        <i class="ti ti-messages"></i>
+        <p>Начните разговор</p>
+      </div>
+    </div>
+
+    <!-- File preview bar -->
+    <div id="fpBar" class="fp-bar hidden"></div>
+
+    <!-- Recording bar -->
+    <div id="recBar" class="rec-bar hidden">
+      <span class="rec-dot"></span>
+      <span id="recTimer">0:00</span>
+      <span id="recType" class="rec-type-lbl">Голосовое</span>
+      <button class="icon-btn sm" onclick="cancelRecording()"><i class="ti ti-x"></i></button>
+    </div>
+
+    <!-- Input -->
+    <div class="input-zone">
+      <div class="input-row">
+        <button class="icon-btn attach" id="attachBtn" title="Прикрепить"><i class="ti ti-paperclip"></i></button>
+        <div class="input-box">
+          <textarea id="msgInput" class="msg-ta" placeholder="Сообщение…" rows="1"
+            oninput="autoGrow(this);refreshSendBtn()" onkeydown="onMsgKey(event)" autocomplete="off"
+            aria-label="Текст сообщения"></textarea>
+        </div>
+        <button class="send-fab" id="sendBtn" onclick="handleSend()" disabled aria-label="Отправить">
+          <i class="ti ti-send" id="sendIco"></i>
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Attach popup (portal) -->
+<div id="attachMenu" class="attach-popup" role="menu"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="script.js"></script>
+<script src="boot.js"></script>
+<script src="i18n.js"></script>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div id="forgotModal" class="modal-bg">
+  <div class="modal-card" style="max-width:400px">
+    <div class="modal-hd">
+      <h2><i class="ti ti-lock-open"></i> Восстановление пароля</h2>
+      <button class="icon-btn" onclick="closeForgotPass()"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:20px 20px 24px">
+      <!-- Шаг 1: ввод логина -->
+      <div id="forgotStep1" class="forgot-step active">
+        <p class="sub-text" style="margin-bottom:12px">Введите ваш логин — отправим код на привязанный email.</p>
+        <div class="field-wrap">
+          <i class="ti ti-user field-ico"></i>
+          <input id="forgotUsername" class="field" type="text" placeholder="Имя пользователя…"
+                 onkeydown="if(event.key==='Enter')sendForgotCode()"/>
+        </div>
+        <div id="forgotErr1" class="login-err"></div>
+        <button class="btn-primary w-full" onclick="sendForgotCode()">
+          <i class="ti ti-send"></i> Отправить код
+        </button>
+      </div>
+      <!-- Шаг 2: ввод кода -->
+      <div id="forgotStep2" class="forgot-step">
+        <p class="sub-text" style="margin-bottom:16px;text-align:center">Введите 6-значный код из письма</p>
+        <div class="code-inputs">
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,0)" onkeydown="codeBack(event,this,0)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,1)" onkeydown="codeBack(event,this,1)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,2)" onkeydown="codeBack(event,this,2)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,3)" onkeydown="codeBack(event,this,3)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,4)" onkeydown="codeBack(event,this,4)"/>
+          <input class="code-digit" maxlength="1" type="text" inputmode="numeric" oninput="codeDigit(this,5)" onkeydown="codeBack(event,this,5)"/>
+        </div>
+        <div id="forgotErr2" class="login-err" style="margin-top:8px"></div>
+        <button class="btn-primary w-full" onclick="verifyForgotCode()">
+          <i class="ti ti-check"></i> Подтвердить
+        </button>
+        <button class="btn-ghost w-full" style="margin-top:8px" onclick="sendForgotCode()">
+          <i class="ti ti-refresh"></i> Отправить снова
+        </button>
+      </div>
+      <!-- Шаг 3: новый пароль -->
+      <div id="forgotStep3" class="forgot-step">
+        <p class="sub-text" style="margin-bottom:12px">Придумайте новый пароль</p>
+        <div class="field-wrap has-toggle">
+          <i class="ti ti-lock field-ico"></i>
+          <input id="forgotNewPass" class="field" type="password" placeholder="Новый пароль (мин. 8 символов)…"/>
+          <button class="pass-toggle" onclick="toggleForgotPass()" type="button">
+            <i class="ti ti-eye" id="forgotEyeIco"></i>
+          </button>
+        </div>
+        <div id="forgotErr3" class="login-err"></div>
+        <button class="btn-primary w-full" onclick="resetPassword()">
+          <i class="ti ti-lock-check"></i> Сменить пароль
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- EMAIL VERIFY MODAL -->
+<div id="emailVerifyModal" class="modal-bg">
+  <div class="modal-card" style="max-width:380px">
+    <div class="modal-hd">
+      <h2><i class="ti ti-mail-check"></i> Подтверждение email</h2>
+      <button class="icon-btn" onclick="closeEmailVerifyModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:20px 20px 24px;display:flex;flex-direction:column;gap:14px">
+      <p id="evHint" class="sub-text" style="text-align:center;font-size:13px;color:var(--text2)">Код отправлен на ваш email</p>
+      <div class="code-inputs">
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,0)" onkeydown="evBack(event,this,0)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,1)" onkeydown="evBack(event,this,1)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,2)" onkeydown="evBack(event,this,2)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,3)" onkeydown="evBack(event,this,3)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,4)" onkeydown="evBack(event,this,4)"/>
+        <input class="code-digit ev-digit" maxlength="1" type="text" inputmode="numeric" oninput="evDigit(this,5)" onkeydown="evBack(event,this,5)"/>
+      </div>
+      <div id="evErr" class="login-err" style="margin:0;text-align:center"></div>
+      <button id="evConfirmBtn" class="btn-primary w-full" onclick="confirmEmailCode()">
+        <i class="ti ti-check"></i> Подтвердить
+      </button>
+      <button class="btn-ghost w-full" style="font-size:13px" onclick="resendEmailVerify()">
+        <i class="ti ti-refresh"></i> Отправить снова
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- AI CHAT MODAL -->
+<div id="aiChatModal" class="modal-bg">
+  <div class="modal-card" style="max-width:540px;height:72vh;display:flex;flex-direction:column;padding:0;overflow:hidden;position:relative">
+    <div class="modal-hd" style="padding:14px 16px;flex-shrink:0;border-bottom:1px solid var(--border)">
+      <h2><i class="ti ti-robot"></i> Aura AI</h2>
+      <div style="display:flex;gap:4px;align-items:center">
+        <span id="aiDebugIndicator" style="display:none;align-items:center;gap:4px;font-size:10px;background:var(--danger);color:#fff;padding:2px 8px;border-radius:99px;margin-right:4px"></span>
+        <button id="aiFilesBtn" class="icon-btn sm" title="База файлов" onclick="toggleAiFilePanel()" style="position:relative">
+          <i class="ti ti-files"></i>
+        </button>
+        <button class="icon-btn sm" title="Очистить историю" onclick="aiClearHistory()"><i class="ti ti-trash"></i></button>
+        <button class="icon-btn sm" onclick="closeAiChat()"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+    <div id="aiMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="ai-welcome">
+        <i class="ti ti-robot" style="font-size:40px;color:var(--accent);display:block;text-align:center;margin-bottom:10px"></i>
+        <p style="text-align:center;font-weight:700;font-size:15px;margin-bottom:6px">Aura AI</p>
+        <p style="text-align:center;color:var(--text2);font-size:13px;line-height:1.6">Поиск в интернете · Погода · Курсы валют<br>Криптовалюты · Генерация файлов · Код<br>Анализ изображений · Wikipedia и многое другое</p>
+      </div>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0">
+      <div class="input-box" style="display:flex;align-items:flex-end;gap:8px;background:var(--surface3);border-radius:16px;padding:6px 6px 6px 14px">
+        <button class="icon-btn sm" onclick="aiAttach()" title="Прикрепить фото или файл" style="flex-shrink:0;margin-right:2px">
+          <i class="ti ti-paperclip"></i>
+        </button>
+        <textarea id="aiInput" class="msg-ta" placeholder="Спросите что-нибудь…" rows="1"
+          style="background:transparent;border:none;box-shadow:none;padding:6px 0;min-height:32px"
+          oninput="autoGrow(this)"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend()}"></textarea>
+        <button id="aiSendBtn" class="send-fab" style="width:36px;height:36px;border-radius:10px;flex-shrink:0" onclick="aiSend()">
+          <i class="ti ti-send"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="consolePanel" style="display:none;position:fixed;inset:0;z-index:19999;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);flex-direction:column">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0">
+    <span style="color:var(--accent);font-weight:700;font-size:13px">Консоль</span>
+    <button onclick="document.getElementById('consolePanel').style.display='none'" style="background:none;border:none;color:#aaa;cursor:pointer;font-size:20px;line-height:1">×</button>
+  </div>
+  <div id="consoleOutput" style="flex:1;overflow-y:auto;padding:10px 14px;font-size:12px;color:#ccc;line-height:1.6"></div>
+  <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid rgba(255,255,255,.08);flex-shrink:0">
+    <span style="color:var(--accent)">›</span>
+    <input id="consoleInput" type="text" placeholder="Sudo HACK delete-group [id] | Sudo HACK enable-media" 
+      autocomplete="off" spellcheck="false"
+      style="flex:1;background:transparent;border:none;color:#e8e8f2;font-family:monospace;font-size:12px;outline:none"
+      onkeydown="if(event.key==='Enter')runConsoleCmd()"/>
+  </div>
+</div>
+</body>
+</html>

@@ -512,17 +512,23 @@ option { background: var(--surface2); color: var(--text); }
 }
 .login-logo-wrap {
   width: 84px; height: 84px; border-radius: 26px;
-  background: var(--accent);
+  background: transparent;
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 24px;
   box-shadow: 0 12px 40px var(--accent-glow);
   position: relative; overflow: hidden;
   transition: background .3s, box-shadow .3s;
 }
+.login-logo-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
 .login-card .field-wrap { width: 100%; }
 .login-card .field { font-size: 15px; padding-top: 14px; padding-bottom: 14px; }
 .login-card .btn-primary { margin-top: 10px; padding: 15px; font-size: 15px; letter-spacing: .02em; }
-.login-logo-wrap::after { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(255,255,255,.22) 0%,transparent 55%); pointer-events:none; }
+.login-logo-wrap::after { display: none; }
 .login-h1 { font-size: 26px; font-weight: 800; line-height: 1.25; margin-bottom: 8px; letter-spacing: -.3px; color: var(--text); }
 .login-sub { font-size: 14px; color: var(--text2); margin-bottom: 24px; line-height: 1.5; }
 .login-err { font-size: 13px; color: var(--danger); min-height: 20px; margin-bottom: 4px; width: 100%; text-align: center; animation: fadeIn .2s ease; }
@@ -1555,9 +1561,59 @@ kbd { background: var(--surface3); border: 1px solid var(--border2); border-radi
   background: none; border: none; cursor: pointer;
   color: var(--text3, #9898b0);
   font-size: 16px; padding: 4px;
+  display: flex; align-items: center; justify-content: center;
   transition: color .15s; z-index: 1;
 }
 .pass-toggle:hover { color: var(--accent, #6366f1); }
+.pass-toggle .ti-eye,
+.pass-toggle .ti-eye-off {
+  width: 18px;
+  height: 18px;
+  display: block;
+  font-size: 0;
+  background: currentColor;
+  -webkit-mask: var(--local-toggle-icon) center / contain no-repeat;
+  mask: var(--local-toggle-icon) center / contain no-repeat;
+}
+.pass-toggle .ti-eye::before,
+.pass-toggle .ti-eye-off::before {
+  content: '' !important;
+}
+.pass-toggle .ti-eye {
+  --local-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0'/%3E%3Cpath d='M3 12c2.4 -4 5.4 -6 9 -6s6.6 2 9 6c-2.4 4 -5.4 6 -9 6s-6.6 -2 -9 -6z'/%3E%3C/g%3E%3C/svg%3E");
+}
+.pass-toggle .ti-eye-off {
+  --local-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.6 10.7a2 2 0 0 0 2.7 2.7'/%3E%3Cpath d='M9.4 5.4a9.4 9.4 0 0 1 2.6 -0.4c3.6 0 6.6 2 9 6a16 16 0 0 1 -3.1 3.7'/%3E%3Cpath d='M6.5 6.5c-1.3 .9 -2.5 2.1 -3.5 3.5c2.4 4 5.4 6 9 6c1.4 0 2.7 -0.3 3.9 -0.9'/%3E%3Cpath d='M3 3l18 18'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.login-card .btn-primary .ti-arrow-right,
+.login-card .btn-primary .ti-user-plus,
+.login-links .ti-lock-open,
+.login-links .ti-user-plus {
+  width: 1em;
+  height: 1em;
+  font-size: 1em;
+  flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: var(--local-login-icon) center / contain no-repeat;
+  mask: var(--local-login-icon) center / contain no-repeat;
+}
+.login-card .btn-primary .ti-arrow-right::before,
+.login-card .btn-primary .ti-user-plus::before,
+.login-links .ti-lock-open::before,
+.login-links .ti-user-plus::before {
+  content: '' !important;
+}
+.login-card .btn-primary .ti-arrow-right {
+  --local-login-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3Cpath d='M13 6l6 6l-6 6'/%3E%3C/g%3E%3C/svg%3E");
+}
+.login-card .btn-primary .ti-user-plus,
+.login-links .ti-user-plus {
+  --local-login-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0'/%3E%3Cpath d='M16 19h6'/%3E%3Cpath d='M19 16v6'/%3E%3Cpath d='M6 21v-2a4 4 0 0 1 4 -4h4'/%3E%3C/g%3E%3C/svg%3E");
+}
+.login-links .ti-lock-open {
+  --local-login-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='11' width='14' height='10' rx='2'/%3E%3Cpath d='M9 11v-4a3 3 0 0 1 5.6 -1.5'/%3E%3C/g%3E%3C/svg%3E");
+}
 
 /* ── PWA install button in sidebar ── */
 .pwa-install-btn {
