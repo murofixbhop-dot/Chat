@@ -1,8 +1,8 @@
 (() => {
   const STORAGE_KEY = 'aura:language';
   const MANUAL_KEY = 'aura:language:manual';
-  const SUPPORTED = ['ru', 'en', 'es', 'pt', 'fr', 'de', 'it', 'tr', 'uk', 'pl', 'ar', 'zh', 'ja', 'ko', 'hi', 'id'];
-  const RTL = new Set(['ar']);
+  const SUPPORTED = ['ru', 'en', 'es', 'pt', 'fr', 'de', 'it', 'tr', 'uk', 'pl', 'ar', 'zh', 'ja', 'ko', 'hi', 'id', 'nl', 'sv', 'no', 'da', 'fi', 'cs', 'ro', 'hu', 'vi', 'th', 'he', 'fa'];
+  const RTL = new Set(['ar', 'he', 'fa']);
 
   const LANGUAGE_NAMES = {
     ru: 'Русский',
@@ -20,7 +20,19 @@
     ja: '日本語',
     ko: '한국어',
     hi: 'हिन्दी',
-    id: 'Indonesia'
+    id: 'Indonesia',
+    nl: 'Nederlands',
+    sv: 'Svenska',
+    no: 'Norsk',
+    da: 'Dansk',
+    fi: 'Suomi',
+    cs: 'Čeština',
+    ro: 'Română',
+    hu: 'Magyar',
+    vi: 'Tiếng Việt',
+    th: 'ไทย',
+    he: 'עברית',
+    fa: 'فارسی'
   };
 
   const COUNTRY_LANGUAGE = {
@@ -39,6 +51,18 @@
     KR: 'ko',
     IN: 'hi',
     ID: 'id',
+    NL: 'nl',
+    SE: 'sv',
+    NO: 'no',
+    DK: 'da',
+    FI: 'fi',
+    CZ: 'cs',
+    RO: 'ro',
+    HU: 'hu',
+    VN: 'vi',
+    TH: 'th',
+    IL: 'he',
+    IR: 'fa',
     SA: 'ar', AE: 'ar', EG: 'ar', MA: 'ar', DZ: 'ar', TN: 'ar', LY: 'ar', JO: 'ar', LB: 'ar', IQ: 'ar', KW: 'ar', QA: 'ar', BH: 'ar', OM: 'ar', YE: 'ar', PS: 'ar', SD: 'ar', SY: 'ar'
   };
 
@@ -428,6 +452,53 @@
     observerTimer: 0
   };
   const russianDefaults = new Map();
+  const textOriginals = new WeakMap();
+  const textTranslated = new WeakMap();
+  const attrOriginals = new WeakMap();
+  const attrTranslated = new WeakMap();
+  const memoryByLang = new Map();
+  const pendingTranslations = new Map();
+  const TRANSLATABLE_ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+  const AUTO_SKIP_SELECTOR = [
+    'script',
+    'style',
+    'noscript',
+    'template',
+    'svg',
+    'canvas',
+    'code',
+    'pre',
+    'select',
+    'option',
+    '[contenteditable="true"]',
+    '[data-aura-no-translate]',
+    '[data-no-translate]',
+    '.aura-lang-wrap',
+    '.brand',
+    '.brand-name',
+    '.brand-copy',
+    '.browser-url',
+    '.avatar',
+    '.msg-ava',
+    '.msg-text',
+    '.msg-file-name',
+    '#messages .msg',
+    '#messages .msg *',
+    '#aiMessages .msg',
+    '#aiMessages .msg *',
+    '#consoleOutput',
+    '#consoleInput',
+    '#profileNickname',
+    '#profileUsername',
+    '#acLoginName',
+    '#roomName',
+    '#aiModelLabel',
+    '.fi-title',
+    '.ci-title',
+    '.sb-pname',
+    '.sb-psub',
+    '.code-digit'
+  ].join(',');
 
   const LANDING_TARGETS = [
     ['.menu-btn', 'nav.menu', 'aria-label'],
@@ -534,7 +605,9 @@
     ['label[for="stNickname"], #st_profile .lbl', 'app.displayName'],
     ['#st_profile .btn-primary', 'app.save', 'html'],
     ['#st_sound .lbl:nth-of-type(1)', 'app.microphone', 'html'],
+    ['#micSel option[value="default"]', 'app.default'],
     ['#st_sound .lbl:nth-of-type(2)', 'app.speakers', 'html'],
+    ['#spkSel option[value="default"]', 'app.default'],
     ['#st_sound .lbl:nth-of-type(3)', 'app.volume', 'html'],
     ['#st_sound .btn-secondary.w-full', 'app.testMic', 'html'],
     ['#st_sound .lbl:nth-of-type(4)', 'app.notificationSound', 'html'],
@@ -713,6 +786,261 @@
     if (mode === 'title') return node.getAttribute('title') || '';
     if (mode === 'aria-label') return node.getAttribute('aria-label') || '';
     return node.textContent || '';
+  };
+
+  const getMemory = (lang = state.lang) => {
+    if (!memoryByLang.has(lang)) {
+      try {
+        memoryByLang.set(lang, JSON.parse(window.localStorage?.getItem(`aura:i18n:auto:${lang}`) || '{}'));
+      } catch {
+        memoryByLang.set(lang, {});
+      }
+    }
+    return memoryByLang.get(lang);
+  };
+
+  const saveMemorySoon = (() => {
+    let timer = 0;
+    return (lang) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        try {
+          const memory = getMemory(lang);
+          const entries = Object.entries(memory).slice(-900);
+          window.localStorage?.setItem(`aura:i18n:auto:${lang}`, JSON.stringify(Object.fromEntries(entries)));
+        } catch {
+          // localStorage may be disabled or full; translation still works for this session.
+        }
+      }, 500);
+    };
+  })();
+
+  const normalizeForTranslation = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
+  const preserveOuterWhitespace = (source, translated) => {
+    const raw = String(source || '');
+    const prefix = raw.match(/^\s*/)?.[0] || '';
+    const suffix = raw.match(/\s*$/)?.[0] || '';
+    return `${prefix}${translated}${suffix}`;
+  };
+
+  const shouldSkipElement = (element) => {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) return true;
+    return !!element.closest(AUTO_SKIP_SELECTOR);
+  };
+
+  const isProbablyUserOrCode = (text) => {
+    const value = normalizeForTranslation(text);
+    if (!value || value.length < 2 || value.length > 520) return true;
+    if (/^[\d\s.,:;!?()[\]{}+\-*/=#%<>|"'`~@\\]+$/.test(value)) return true;
+    if (/^(https?:\/\/|www\.|\/[\w.-]|#[\w-]+$|@[\w.-]+$)/i.test(value)) return true;
+    if (/^[A-Z0-9_./:-]{2,}$/.test(value)) return true;
+    if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(value)) return true;
+    return !/[A-Za-zА-Яа-яЁёІіЇїЄєҐґÀ-žĀ-žΑ-ω\u0590-\u05ff\u0600-\u06ff\u0900-\u097f\u0E00-\u0E7F\u3040-\u30ff\u3400-\u9fff]/u.test(value);
+  };
+
+  const googleLanguage = (lang) => {
+    if (lang === 'zh') return 'zh-CN';
+    if (lang === 'he') return 'he';
+    return lang;
+  };
+
+  const translateViaNetwork = async (text, lang) => {
+    const url = new URL('https://translate.googleapis.com/translate_a/single');
+    url.searchParams.set('client', 'gtx');
+    url.searchParams.set('sl', 'auto');
+    url.searchParams.set('tl', googleLanguage(lang));
+    url.searchParams.set('dt', 't');
+    url.searchParams.set('q', text);
+    const response = await fetch(url.toString(), { cache: 'force-cache' });
+    if (!response.ok) throw new Error(`translate ${response.status}`);
+    const data = await response.json();
+    const translated = Array.isArray(data?.[0])
+      ? data[0].map((part) => part?.[0] || '').join('')
+      : '';
+    return translated.trim() || text;
+  };
+
+  const translateText = (text, lang = state.lang) => {
+    const source = normalizeForTranslation(text);
+    if (!source || lang === 'ru') return Promise.resolve(source);
+    const memory = getMemory(lang);
+    if (memory[source]) return Promise.resolve(memory[source]);
+    const pendingKey = `${lang}\n${source}`;
+    if (pendingTranslations.has(pendingKey)) return pendingTranslations.get(pendingKey);
+
+    const task = translateViaNetwork(source, lang)
+      .then((translated) => {
+        memory[source] = translated;
+        saveMemorySoon(lang);
+        return translated;
+      })
+      .catch(() => source)
+      .finally(() => pendingTranslations.delete(pendingKey));
+
+    pendingTranslations.set(pendingKey, task);
+    return task;
+  };
+
+  const rememberTextNodeOriginal = (node) => {
+    const current = node.nodeValue || '';
+    const previousTranslation = textTranslated.get(node);
+    if (!textOriginals.has(node) || (previousTranslation && current !== previousTranslation && current !== textOriginals.get(node))) {
+      textOriginals.set(node, current);
+    }
+    return textOriginals.get(node) || current;
+  };
+
+  const rememberAttrOriginal = (node, attr) => {
+    let attrMap = attrOriginals.get(node);
+    if (!attrMap) {
+      attrMap = {};
+      attrOriginals.set(node, attrMap);
+    }
+    let translatedMap = attrTranslated.get(node);
+    if (!translatedMap) {
+      translatedMap = {};
+      attrTranslated.set(node, translatedMap);
+    }
+    const current = node.getAttribute(attr) || '';
+    if (!attrMap[attr] || (translatedMap[attr] && current !== translatedMap[attr] && current !== attrMap[attr])) {
+      attrMap[attr] = current;
+    }
+    return attrMap[attr] || current;
+  };
+
+  const processTextNode = (node) => {
+    const parent = node.parentElement;
+    if (!parent || shouldSkipElement(parent)) return;
+    const original = rememberTextNodeOriginal(node);
+    if (isProbablyUserOrCode(original)) return;
+
+    if (state.lang === 'ru') {
+      if (node.nodeValue !== original) node.nodeValue = original;
+      textTranslated.delete(node);
+      return;
+    }
+
+    const langAtRequest = state.lang;
+    translateText(original, langAtRequest).then((translated) => {
+      if (state.lang !== langAtRequest) return;
+      if (textOriginals.get(node) !== original) return;
+      const value = preserveOuterWhitespace(original, translated);
+      if (node.nodeValue !== value) {
+        node.nodeValue = value;
+        textTranslated.set(node, value);
+      }
+    });
+  };
+
+  const processElementAttributes = (node) => {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE || shouldSkipElement(node)) return;
+    TRANSLATABLE_ATTRS.forEach((attr) => {
+      if (!node.hasAttribute(attr)) return;
+      const original = rememberAttrOriginal(node, attr);
+      if (isProbablyUserOrCode(original)) return;
+
+      if (state.lang === 'ru') {
+        if (node.getAttribute(attr) !== original) node.setAttribute(attr, original);
+        const translatedMap = attrTranslated.get(node);
+        if (translatedMap) delete translatedMap[attr];
+        return;
+      }
+
+      const langAtRequest = state.lang;
+      translateText(original, langAtRequest).then((translated) => {
+        if (state.lang !== langAtRequest) return;
+        const attrMap = attrOriginals.get(node);
+        if (!attrMap || attrMap[attr] !== original) return;
+        if (node.getAttribute(attr) !== translated) {
+          node.setAttribute(attr, translated);
+          let translatedMap = attrTranslated.get(node);
+          if (!translatedMap) {
+            translatedMap = {};
+            attrTranslated.set(node, translatedMap);
+          }
+          translatedMap[attr] = translated;
+        }
+      });
+    });
+  };
+
+  const walkTranslatableNodes = (rootNode) => {
+    if (!rootNode) return;
+    if (rootNode.nodeType === Node.TEXT_NODE) {
+      processTextNode(rootNode);
+      return;
+    }
+    if (rootNode.nodeType !== Node.ELEMENT_NODE && rootNode.nodeType !== Node.DOCUMENT_NODE) return;
+    const rootElement = rootNode.nodeType === Node.ELEMENT_NODE ? rootNode : rootNode.documentElement;
+    if (rootElement && rootElement.nodeType === Node.ELEMENT_NODE) processElementAttributes(rootElement);
+    if (rootElement && rootElement.nodeType === Node.ELEMENT_NODE && shouldSkipElement(rootElement)) return;
+
+    const walker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+      acceptNode(node) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          return shouldSkipElement(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+        const parent = node.parentElement;
+        if (!parent || shouldSkipElement(parent)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    let node = walker.currentNode;
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE) processTextNode(node);
+      else if (node.nodeType === Node.ELEMENT_NODE) processElementAttributes(node);
+      node = walker.nextNode();
+    }
+  };
+
+  const translateDynamicUi = () => {
+    walkTranslatableNodes(document.body);
+  };
+
+  const captureOriginalNodes = (rootNode) => {
+    if (!rootNode) return;
+    const captureElement = (node) => {
+      if (!node || node.nodeType !== Node.ELEMENT_NODE || shouldSkipElement(node)) return;
+      let attrMap = attrOriginals.get(node);
+      if (!attrMap) {
+        attrMap = {};
+        attrOriginals.set(node, attrMap);
+      }
+      TRANSLATABLE_ATTRS.forEach((attr) => {
+        if (node.hasAttribute(attr) && !attrMap[attr]) attrMap[attr] = node.getAttribute(attr) || '';
+      });
+    };
+
+    const captureText = (node) => {
+      const parent = node.parentElement;
+      if (!parent || shouldSkipElement(parent)) return;
+      if (!textOriginals.has(node)) textOriginals.set(node, node.nodeValue || '');
+    };
+
+    if (rootNode.nodeType === Node.TEXT_NODE) {
+      captureText(rootNode);
+      return;
+    }
+
+    const walker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+      acceptNode(node) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          return shouldSkipElement(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+        const parent = node.parentElement;
+        if (!parent || shouldSkipElement(parent)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    let node = walker.currentNode;
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE) captureText(node);
+      else if (node.nodeType === Node.ELEMENT_NODE) captureElement(node);
+      node = walker.nextNode();
+    }
   };
 
   const getPlatform = () => {
@@ -942,6 +1270,7 @@
     applyTargets();
     updateAppLinks();
     updateLanguageControls();
+    translateDynamicUi();
     state.applying = false;
 
     window.dispatchEvent(new CustomEvent('aura:languagechange', { detail: { lang: normalized, reason } }));
@@ -955,6 +1284,7 @@
         state.applying = true;
         applyTargets();
         updateAppLinks();
+        translateDynamicUi();
         state.applying = false;
       }, 40);
     });
@@ -962,6 +1292,7 @@
   };
 
   const initialize = async () => {
+    captureOriginalNodes(document.body);
     captureRussianDefaults();
     const urlLang = detectUrlLanguage();
     const manualLang = window.localStorage?.getItem(MANUAL_KEY) ? normalizeLanguage(window.localStorage.getItem(STORAGE_KEY)) : '';
