@@ -332,7 +332,7 @@ async function selfUpload(fileName, buffer, contentType) {
 
 async function selfDownload(fileName) {
   const url = `${SELF_URL}/f?p=${encodeURIComponent(fileName)}`;
-  return { url, token: null, authHeader: `Bearer ${SELF_TOKEN}` };
+  return { url, token: null, authHeader: `Bearer ${SELF_TOKEN}`, self: true };
 }
 
 async function selfReadJson(fileName) {
@@ -2813,8 +2813,21 @@ async function handleDownloadProxy(req, res, rawF) {
     const dl = await storageDownload(fileName);
     // Supabase и R2 с публичным URL — редиректим напрямую
     if (USE_SB || (USE_R2 && R2_PUBLIC)) return res.redirect(302, dl.url);
-    const dlH = dl.authHeader ? { Authorization: dl.authHeader, ...(dl.extraHeaders||{}) } : dl.token ? { Authorization: dl.token } : {};
-    const b2Response = await axios.get(dl.url, { responseType:'stream', timeout:30000, headers: { ...dlH, ...(req.headers.range?{Range:req.headers.range}:{}) } });
+
+    let b2Response;
+    if (dl.self) {
+      // SELF — через устойчивый канал (IPv4 + fallback CDN IP)
+      b2Response = await selfAxios('get', fileName, {
+        cfg: {
+          headers: { 'Authorization': `Bearer ${SELF_TOKEN}`, ...(req.headers.range ? { Range: req.headers.range } : {}) },
+          responseType: 'stream',
+          timeout: 300000,
+        },
+      });
+    } else {
+      const dlH = dl.authHeader ? { Authorization: dl.authHeader, ...(dl.extraHeaders||{}) } : dl.token ? { Authorization: dl.token } : {};
+      b2Response = await axios.get(dl.url, { responseType:'stream', timeout:30000, headers: { ...dlH, ...(req.headers.range?{Range:req.headers.range}:{}) } });
+    }
 
     // Пробрасываем заголовки от B2
     const ct = b2Response.headers['content-type']  || 'application/octet-stream';
