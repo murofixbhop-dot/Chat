@@ -300,7 +300,12 @@ async function selfAxios(method, fileName, opts = {}) {
       if (_selfHost) cfg.headers = { ...(cfg.headers || {}), Host: _selfHost };
     }
     try {
-      const resp = await axios[method](url, opts.data, cfg);
+      let resp;
+      if (method === 'get' || method === 'delete' || method === 'head') {
+        resp = await axios[method](url, cfg);
+      } else {
+        resp = await axios[method](url, opts.data, cfg);
+      }
       if (resp.status >= 400) {
         throw Object.assign(new Error(`[SELF] ${method.toUpperCase()} failed ${resp.status}`), { response: resp });
       }
