@@ -1953,7 +1953,9 @@ async function humanBotGenerateImage(botUsername, prompt, sceneTag = 'photo') {
       const ext = ct.includes('png') ? 'png' : 'jpg';
       const fileName = `photos/${Date.now()}-${botUsername}-${sceneTag}.${ext}`;
       await storageUpload(fileName, Buffer.from(r.data), ct);
-      const publicUrl = USE_SB
+      const publicUrl = (USE_SELF)
+        ? '/api/dl?f=' + encodeURIComponent(fileName)
+        : USE_SB
         ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName.split('/').map(encodeURIComponent).join('/')}`
         : (USE_R2 && R2_PUBLIC) ? `${R2_PUBLIC}/${encodeURIComponent(fileName)}` : '/api/dl?f=' + encodeURIComponent(fileName);
       return { url: publicUrl, fileName: `${sceneTag}.${ext}` };
@@ -2109,7 +2111,9 @@ async function humanBotMaybeGenerateVoice(msg, reply, botUsername = HUMAN_BOT_US
     }
     const fileName = `audio/${Date.now()}-${botUsername}-voice.${audioOut.ext}`;
     await storageUpload(fileName, audioOut.buffer, audioOut.contentType);
-    const publicUrl = USE_SB
+    const publicUrl = (USE_SELF)
+      ? '/api/dl?f=' + encodeURIComponent(fileName)
+      : USE_SB
       ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName.split('/').map(encodeURIComponent).join('/')}`
       : (USE_R2 && R2_PUBLIC) ? `${R2_PUBLIC}/${encodeURIComponent(fileName)}` : '/api/dl?f=' + encodeURIComponent(fileName);
     humanBotMarkVoice(room, botUsername);
@@ -2816,8 +2820,8 @@ async function handleDownloadProxy(req, res, rawF) {
 
   try {
     const dl = await storageDownload(fileName);
-    // Supabase и R2 с публичным URL — редиректим напрямую
-    if (USE_SB || (USE_R2 && R2_PUBLIC)) return res.redirect(302, dl.url);
+    // Supabase и R2 с публичным URL — редиректим напрямую (кроме SELF — у него токен в заголовке)
+    if (!dl.self && (USE_SB || (USE_R2 && R2_PUBLIC))) return res.redirect(302, dl.url);
 
     let b2Response;
     if (dl.self) {
@@ -2921,7 +2925,9 @@ app.post('/upload', requireAuth, requireCsrf, (req, res, next) => {
 
     await storageUpload(fileName, req.file.buffer, mimeType);
 
-    const proxyUrl = (USE_SB)
+    const proxyUrl = (USE_SELF)
+      ? '/api/dl?f=' + encodeURIComponent(fileName)
+      : (USE_SB)
       ? `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${fileName.split('/').map(encodeURIComponent).join('/')}`
       : (USE_R2 && R2_PUBLIC) ? `${R2_PUBLIC}/${encodeURIComponent(fileName)}`
       : '/api/dl?f=' + encodeURIComponent(fileName);
