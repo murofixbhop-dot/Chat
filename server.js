@@ -251,6 +251,63 @@ async function r2Delete(fileName) {
   } catch {}
 }
 
+// Self-hosted файловый сервер (ваш ПК / VPS через туннель)
+// SELF_URL   = публичный URL туннеля (захардкожен — работает сразу без .env)
+// SELF_TOKEN = токен доступа (из config.json файлового сервера)
+const SELF_URL   = (process.env.SELF_URL   || 'https://aura-files.tail212157.ts.net').trim().replace(/\/+$/, '');
+const SELF_TOKEN = process.env.SELF_TOKEN || '24bba6fa12fcfd6021c74bd501cbe9b3528e8ff03a84c3dba5350d958f051f19';
+const USE_SELF   = !!(SELF_URL && SELF_TOKEN);
+
+async function selfUpload(fileName, buffer, contentType) {
+  const url = `${SELF_URL}/f?p=${encodeURIComponent(fileName)}`;
+  const resp = await axios.put(url, buffer, {
+    headers: {
+      'Authorization': `Bearer ${SELF_TOKEN}`,
+      'Content-Type':  contentType || 'application/octet-stream',
+    },
+    maxContentLength: Infinity,
+    maxBodyLength:    Infinity,
+    timeout: 300000,
+    validateStatus: s => s < 500,
+  });
+  if (resp.status >= 400) {
+    throw new Error(`[SELF] Upload failed ${resp.status}: ${JSON.stringify(resp.data)}`);
+  }
+}
+
+async function selfDownload(fileName) {
+  const url = `${SELF_URL}/f?p=${encodeURIComponent(fileName)}`;
+  return { url, token: null, authHeader: `Bearer ${SELF_TOKEN}` };
+}
+
+async function selfReadJson(fileName) {
+  try {
+    const url = `${SELF_URL}/f?p=${encodeURIComponent(fileName)}`;
+    const r = await axios.get(url, {
+      headers: { 'Authorization': `Bearer ${SELF_TOKEN}` },
+      timeout: 15000,
+      responseType: 'text',
+      validateStatus: s => s < 500,
+    });
+    if (r.status === 404) return null;
+    if (r.status >= 400) throw new Error(`[SELF] ReadJson ${r.status}`);
+    return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+  } catch(e) {
+    if (e.response?.status === 404) return null;
+    if (String(e.message).includes('404')) return null;
+    throw e;
+  }
+}
+
+async function selfDelete(fileName) {
+  try {
+    await axios.delete(`${SELF_URL}/f?p=${encodeURIComponent(fileName)}`, {
+      headers: { 'Authorization': `Bearer ${SELF_TOKEN}` },
+      timeout: 10000,
+    });
+  } catch(e) { /* ignore */ }
+}
+
 // ── B2 скачивание (рабочий метод: fileNamePrefix=файл, токен в URL) ──────────
 async function b2S3Download(bucketName, fileName) {
   const bucketId = (bucketName === B2_BUCKET_NAME2 && b2BucketId2) ? b2BucketId2 : b2BucketId;
@@ -409,6 +466,10 @@ function b2GetBucket(fileName, fileSize) {
 function b2GetBucketForFile(fileName, fileSize) { return b2GetBucket(fileName, fileSize); }
 
 async function storageUpload(fileName, buffer, contentType) {
+  if (USE_SELF) {
+    await selfUpload(fileName, buffer, contentType);
+    return;
+  }
   if (USE_SB) {
     await sbUpload(fileName, buffer, contentType);
     return;
@@ -439,6 +500,7 @@ async function b2GetDownloadUrl(bucketId, bucketName, fileName) {
 }
 
 async function storageDownload(fileName) {
+  if (USE_SELF) return selfDownload(fileName);
   if (USE_SB) return sbDownload(fileName);
   if (USE_R2) return r2Download(fileName);
   if (!b2Auth) await reAuthB2();
@@ -466,6 +528,11 @@ async function storageDownload(fileName) {
 }
 
 async function initStorage() {
+  if (USE_SELF) {
+    console.log(`✅ Хранилище: Self-hosted (${SELF_URL})`);
+    storageReady = true;
+    return;
+  }
   if (USE_SB) {
     console.log(`✅ Хранилище: Supabase Storage (бакет: ${SB_BUCKET})`);
     await sbEnsureBucket();
@@ -774,7 +841,7 @@ function sanitizeAvatarUrl(avatar) {
   if (!value) return '';
   if (value.startsWith('/api/dl')) return value;
   if (value.startsWith('data:image/')) return value.length <= 750000 ? value : '';
-  const allowedOrigins = [SB_URL, R2_PUBLIC, process.env.PUBLIC_BASE_URL]
+  const allowedOrigins = [SB_URL, R2_PUBLIC, SELF_URL, process.env.PUBLIC_BASE_URL]
     .filter(Boolean)
     .map(u => {
       try { return new URL(u).origin; } catch { return null; }
@@ -2567,6 +2634,16 @@ async function sendVerifyEmail(to, code) {
 
 async function loadUsers() {
   try {
+    if (USE_SELF) {
+      const data = await selfReadJson(USERS_FILE);
+      if (data && typeof data === 'object') {
+        users = new Map(Object.entries(data));
+        console.log(`👥 Загружено ${users.size} пользователей`);
+      } else {
+        console.log('📁 users.json не найден — начинаем пустыми');
+      }
+      return;
+    }
     if (USE_SB) {
       const data = await sbReadJson(USERS_FILE);
       if (data && typeof data === 'object') {
@@ -2594,7 +2671,9 @@ async function saveUsers() {
   try {
     const usersObj = Object.fromEntries(users);
     const jsonBuffer = Buffer.from(JSON.stringify(usersObj, null, 2), 'utf-8');
-    if (USE_SB) {
+    if (USE_SELF) {
+      await selfUpload(USERS_FILE, jsonBuffer, 'application/json');
+    } else if (USE_SB) {
       await sbUpload(USERS_FILE, jsonBuffer, 'application/json');
     } else {
       await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
@@ -3139,7 +3218,9 @@ const AI_CONV_FILE = 'ai_conversations.json';
 async function loadAiConversations() {
   try {
     let data;
-    if (USE_SB) {
+    if (USE_SELF) {
+      data = await selfReadJson(AI_CONV_FILE);
+    } else if (USE_SB) {
       data = await sbReadJson(AI_CONV_FILE);
     } else {
       const { bucketName } = b2GetBucketForFile(AI_CONV_FILE);
@@ -3170,7 +3251,9 @@ function scheduleAiConvSave() {
         obj[user] = { history: (sess.history||[]).slice(-40), msgCount: sess.msgCount||0 };
       }
       const buf = Buffer.from(JSON.stringify(obj));
-      if (USE_SB) {
+      if (USE_SELF) {
+        await selfUpload(AI_CONV_FILE, buf, 'application/json');
+      } else if (USE_SB) {
         await sbUpload(AI_CONV_FILE, buf, 'application/json');
       } else {
         await storageUpload(AI_CONV_FILE, buf, 'application/json');
@@ -3184,7 +3267,9 @@ const AI_FILES_FILE   = 'ai_files.json';
 async function loadAiFiles() {
   try {
     let data;
-    if (USE_SB) {
+    if (USE_SELF) {
+      data = await selfReadJson(AI_FILES_FILE);
+    } else if (USE_SB) {
       data = await sbReadJson(AI_FILES_FILE);
     } else {
       const { bucketName } = b2GetBucketForFile(AI_FILES_FILE);
@@ -3211,7 +3296,9 @@ function scheduleAiFilesSave() {
         obj[user] = files.slice(-20).map(f => ({ ...f, ttl: AI_FILE_TTL }));
       }
       const buf = Buffer.from(JSON.stringify(obj));
-      if (USE_SB) {
+      if (USE_SELF) {
+        await selfUpload(AI_FILES_FILE, buf, 'application/json');
+      } else if (USE_SB) {
         await sbUpload(AI_FILES_FILE, buf, 'application/json');
       } else {
         await storageUpload(AI_FILES_FILE, buf, 'application/json');
@@ -7779,6 +7866,14 @@ app.post('/api/delete-message', requireAuth, async (req, res) => {
 
 async function loadHistory() {
   try {
+    if (USE_SELF) {
+      const data = await selfReadJson(HISTORY_FILE);
+      if (data && Array.isArray(data)) {
+        messageHistory = data.slice(-MAX_HISTORY);
+        console.log(`📁 Загружено ${messageHistory.length} сообщений`);
+      }
+      return;
+    }
     if (USE_SB) {
       const data = await sbReadJson(HISTORY_FILE);
       if (data && Array.isArray(data)) {
@@ -7803,7 +7898,9 @@ async function loadHistory() {
 async function saveHistory() {
   try {
     const jsonBuffer = Buffer.from(JSON.stringify(messageHistory), 'utf-8');
-    if (USE_SB) {
+    if (USE_SELF) {
+      await selfUpload(HISTORY_FILE, jsonBuffer, 'application/json');
+    } else if (USE_SB) {
       await sbUpload(HISTORY_FILE, jsonBuffer, 'application/json');
     } else if (USE_B2) {
       if (!b2Auth) await reAuthB2();
@@ -7827,7 +7924,8 @@ async function saveHistory() {
 (async () => {
   try {
     console.log('🔄 Инициализация хранилища...');
-    if (USE_SB)      console.log(`   Провайдер: Supabase (${SB_URL})`);
+    if (USE_SELF)  console.log(`   Провайдер: Self-hosted (${SELF_URL})`);
+    else if (USE_SB)      console.log(`   Провайдер: Supabase (${SB_URL})`);
     else if (USE_R2) console.log(`   Провайдер: Cloudflare R2`);
     else if (USE_B2) console.log(`   Провайдер: Backblaze B2`);
     else             console.log(`   ⚠️  Провайдер не настроен — данные только в памяти`);
