@@ -1,5 +1,7 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
+const dns = require('dns');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const axios = require('axios');
@@ -258,21 +260,74 @@ const SELF_URL   = (process.env.SELF_URL   || 'https://aura-files.tail212157.ts.
 const SELF_TOKEN = process.env.SELF_TOKEN || '24bba6fa12fcfd6021c74bd501cbe9b3528e8ff03a84c3dba5350d958f051f19';
 const USE_SELF   = !!(SELF_URL && SELF_TOKEN);
 
-async function selfUpload(fileName, buffer, contentType) {
-  const url = `${SELF_URL}/f?p=${encodeURIComponent(fileName)}`;
-  const resp = await axios.put(url, buffer, {
-    headers: {
-      'Authorization': `Bearer ${SELF_TOKEN}`,
-      'Content-Type':  contentType || 'application/octet-stream',
+// CDN-эджи Tailscale Funnel (fallback, если DNS на хостинге кэширует NXDOMAIN)
+const SELF_FALLBACK_IPS = ['185.40.234.37', '185.40.234.172', '185.40.234.210'];
+let _selfHost = null;
+try { _selfHost = new URL(SELF_URL).hostname; } catch (e) { _selfHost = null; }
+
+function makeSelfAgent(ip) {
+  // custom lookup: при ошибке DNS возвращает известный IP CDN
+  return new https.Agent({
+    keepAlive: false, // новые соединения — CDN Tailscale рвёт долгие keep-alive
+    lookup(hostname, opts, cb) {
+      dns.lookup(hostname, opts, (err, address, family) => {
+        if (err) {
+          cb(null, ip, 4);
+        } else {
+          cb(null, address, family);
+        }
+      });
     },
-    maxContentLength: Infinity,
-    maxBodyLength:    Infinity,
-    timeout: 300000,
-    validateStatus: s => s < 500,
   });
-  if (resp.status >= 400) {
-    throw new Error(`[SELF] Upload failed ${resp.status}: ${JSON.stringify(resp.data)}`);
+}
+const _selfAgents = SELF_FALLBACK_IPS.map(makeSelfAgent);
+
+function selfRequestConfig() {
+  const base = { maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 300000, validateStatus: s => s < 500, family: 4 };
+  // Пробуем по порядку: обычный DNS, затем каждый CDN IP
+  const attempts = [undefined, ..._selfAgents];
+  return { base, attempts };
+}
+
+async function selfAxios(method, fileName, opts = {}) {
+  const url = `${SELF_URL}/f?p=${encodeURIComponent(fileName)}`;
+  const { base, attempts } = selfRequestConfig();
+  let lastErr = null;
+  for (const agent of attempts) {
+    const cfg = { ...base, ...opts.cfg };
+    if (agent) {
+      cfg.httpsAgent = agent;
+      if (_selfHost) cfg.headers = { ...(cfg.headers || {}), Host: _selfHost };
+    }
+    try {
+      const resp = await axios[method](url, opts.data, cfg);
+      if (resp.status >= 400) {
+        throw Object.assign(new Error(`[SELF] ${method.toUpperCase()} failed ${resp.status}`), { response: resp });
+      }
+      return resp;
+    } catch (e) {
+      lastErr = e;
+      if (e.response && e.response.status < 500) throw e; // 4xx — не повторяем на других IP
+      console.error(`[SELF] ${method.toUpperCase()} ${fileName} попытка ${agent ? 'IP' : 'DNS'} не удалась:`, e.code || e.errno || '', e.message || '(пустая ошибка)');
+      if (agent !== undefined || attempts.indexOf(agent) < attempts.length - 1) {
+        await new Promise(res => setTimeout(res, 400));
+      }
+    }
   }
+  throw lastErr || new Error('[SELF] all attempts failed');
+}
+
+async function selfUpload(fileName, buffer, contentType) {
+  await selfAxios('put', fileName, {
+    data: buffer,
+    cfg: {
+      headers: {
+        'Authorization': `Bearer ${SELF_TOKEN}`,
+        'Content-Type':  contentType || 'application/octet-stream',
+      },
+      timeout: 300000,
+    },
+  });
 }
 
 async function selfDownload(fileName) {
@@ -282,15 +337,10 @@ async function selfDownload(fileName) {
 
 async function selfReadJson(fileName) {
   try {
-    const url = `${SELF_URL}/f?p=${encodeURIComponent(fileName)}`;
-    const r = await axios.get(url, {
-      headers: { 'Authorization': `Bearer ${SELF_TOKEN}` },
-      timeout: 15000,
-      responseType: 'text',
-      validateStatus: s => s < 500,
+    const r = await selfAxios('get', fileName, {
+      cfg: { headers: { 'Authorization': `Bearer ${SELF_TOKEN}` }, timeout: 15000, responseType: 'text' },
     });
     if (r.status === 404) return null;
-    if (r.status >= 400) throw new Error(`[SELF] ReadJson ${r.status}`);
     return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
   } catch(e) {
     if (e.response?.status === 404) return null;
@@ -301,9 +351,8 @@ async function selfReadJson(fileName) {
 
 async function selfDelete(fileName) {
   try {
-    await axios.delete(`${SELF_URL}/f?p=${encodeURIComponent(fileName)}`, {
-      headers: { 'Authorization': `Bearer ${SELF_TOKEN}` },
-      timeout: 10000,
+    await selfAxios('delete', fileName, {
+      cfg: { headers: { 'Authorization': `Bearer ${SELF_TOKEN}` }, timeout: 10000 },
     });
   } catch(e) { /* ignore */ }
 }
@@ -2861,7 +2910,7 @@ app.post('/upload', requireAuth, requireCsrf, (req, res, next) => {
     res.json({ success: true, url: proxyUrl, type: fileType, name: req.file.originalname });
 
   } catch (error) {
-    console.error('Ошибка загрузки:', error.response?.data || error.message);
+    console.error('Ошибка загрузки:', error.response?.data || error.message, '|', error.code || '', error.stack?.split('\n').slice(0,3).join(' '));
     res.status(500).json({ error: 'Ошибка загрузки файла' });
   }
 });
