@@ -620,7 +620,7 @@ option { background: var(--surface2); color: var(--text); }
   min-width: 16px; height: 16px; padding: 0 4px;
   background: var(--danger); color: #fff;
   border-radius: 99px; font-size: 10px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
+  display: none; align-items: center; justify-content: center;
   animation: scaleIn .2s ease;
 }
 
