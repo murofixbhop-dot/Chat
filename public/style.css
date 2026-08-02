@@ -621,7 +621,6 @@ option { background: var(--surface2); color: var(--text); }
   background: var(--danger); color: #fff;
   border-radius: 99px; font-size: 10px; font-weight: 700;
   display: none; align-items: center; justify-content: center;
-  animation: scaleIn .2s ease;
 }
 
 /* Chat list pane */
