@@ -9344,10 +9344,15 @@ setInterval(async () => {
       renderFriends();
     }
     if (newRqHash !== _lastReqsHash) {
-      _lastReqsHash = newRqHash;
-      friendRequests = d.friendRequests || [];
-      renderRequests();
-      updateReqBadge();
+      // Тот же guard от устаревшего ответа: если недавно было real-time событие
+      // по заявкам, а сервер вернул пусто — это старый снимок, не затираем.
+      const stale = Date.now() - _lastReqSocketAt < 10000 && friendRequests.length && !(d.friendRequests || []).length;
+      if (!stale) {
+        _lastReqsHash = newRqHash;
+        friendRequests = d.friendRequests || [];
+        renderRequests();
+        updateReqBadge();
+      }
     }
     if (newSentRqHash !== _lastSentReqsHash) {
       _lastSentReqsHash = newSentRqHash;
