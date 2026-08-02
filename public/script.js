@@ -1387,12 +1387,15 @@ function renderRequests() {
 }
 
 function updateReqBadge() {
-  if (!reqBadge) return;
+  const el = document.getElementById('reqBadge');
+  if (!el) return;
   if (friendRequests.length) {
-    reqBadge.textContent = friendRequests.length > 9 ? '9+' : friendRequests.length;
-    reqBadge.style.display = 'flex';
+    el.textContent = friendRequests.length > 9 ? '9+' : friendRequests.length;
+    el.style.display = 'flex';
+    el.style.visibility = 'visible';
   } else {
-    reqBadge.style.display = 'none';
+    el.textContent = '';
+    el.style.display = 'none';
   }
 }
 
