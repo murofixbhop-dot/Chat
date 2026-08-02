@@ -637,8 +637,6 @@
     ['#stReqs', 'app.requests', 'html'],
     ['#pFriends .new-btn', 'app.addFriend', 'html'],
     ['#pGroups .new-btn', 'app.createGroup', 'html'],
-    ['#roomName', 'app.generalChat'],
-    ['#roomSub', 'app.publicChat'],
     ['#onlinePill span:last-child', 'app.online'],
     ['#dropZone p', 'app.dropFile'],
     ['#msgsEmpty p', 'app.startConversation'],
