@@ -1,6 +1,6 @@
-// Aura Messenger — Service Worker v17
+// Aura Messenger — Service Worker v26
 // Network-first for app shell files, cache-first for icons/static.
-const CACHE = 'aura-v21';
+const CACHE = 'aura-v26';
 const NETWORK_FIRST = [
   '/',
   '/index.html',
