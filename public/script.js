@@ -441,7 +441,6 @@ let friends        = [];
 let groups         = [];
 let friendRequests = [];
 let sentFriendRequests = [];
-let _reqSeen = new Set();
 // Аватарки и ники — загружаем из localStorage для мгновенной отрисовки
 let userAvatars   = {};
 let userNicknames = {};
@@ -1389,9 +1388,8 @@ function renderRequests() {
 
 function updateReqBadge() {
   if (!reqBadge) return;
-  const unseen = friendRequests.filter(r => !_reqSeen.has(r));
-  if (unseen.length) {
-    reqBadge.textContent = unseen.length > 9 ? '9+' : unseen.length;
+  if (friendRequests.length) {
+    reqBadge.textContent = friendRequests.length > 9 ? '9+' : friendRequests.length;
     reqBadge.style.display = 'flex';
   } else {
     reqBadge.style.display = 'none';
@@ -1420,11 +1418,7 @@ function switchTab(name) {
     const p = $(pane);
     if (p) p.classList.toggle('hidden', !active);
   });
-  // Clear badge when requests tab opened (mark all as seen)
-  if (name === 'requests') {
-    if (reqBadge) reqBadge.style.display = 'none';
-    friendRequests.forEach(r => _reqSeen.add(r));
-  }
+  // Badge (if any) is managed by updateReqBadge() — stays visible while requests are pending
 }
 
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
