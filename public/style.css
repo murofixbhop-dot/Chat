@@ -615,6 +615,8 @@ option { background: var(--surface2); color: var(--text); }
 .sb-tab i { font-size: 15px; }
 .sb-tab.active { background: var(--active); color: var(--accent); }
 .sb-tab:hover:not(.active) { background: var(--hover); color: var(--text); }
+.sb-tab-wrap { flex: 1; position: relative; display: flex; min-width: 0; }
+.sb-tab-wrap .sb-tab { flex: 1; width: 100%; min-width: 0; }
 .nb {
   position: absolute; top: 4px; right: 6px;
   min-width: 16px; height: 16px; padding: 0 4px;

@@ -23,10 +23,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <!-- Fast critical icons first; the full Tabler bundle loads as a fallback. -->
-  <link rel="stylesheet" href="/critical-icons.css?v=28"/>
+  <link rel="stylesheet" href="/critical-icons.css?v=29"/>
   <link rel="preload" href="/vendor/tabler-icons/tabler-icons.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'"/>
   <noscript><link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css"/></noscript>
-  <link rel="stylesheet" href="style.css?v=28"/>
+  <link rel="stylesheet" href="style.css?v=29"/>
 </head>
 <body>
 
@@ -321,10 +321,12 @@
       <button class="sb-tab" id="stGroups" onclick="switchTab('groups')">
         <i class="ti ti-users"></i>Группы
       </button>
-      <button class="sb-tab" id="stReqs" onclick="switchTab('requests')">
-        <i class="ti ti-bell"></i>Заявки
+      <div class="sb-tab-wrap" id="reqTabWrap">
+        <button class="sb-tab" id="stReqs" onclick="switchTab('requests')">
+          <i class="ti ti-bell"></i>Заявки
+        </button>
         <span class="nb" id="reqBadge"></span>
-      </button>
+      </div>
     </div>
 
     <!-- Friends pane -->
@@ -422,9 +424,9 @@
 <div id="attachMenu" class="attach-popup" role="menu"></div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="script.js?v=28"></script>
-<script src="boot.js?v=28"></script>
-<script src="i18n.js?v=28"></script>
+<script src="script.js?v=29"></script>
+<script src="boot.js?v=29"></script>
+<script src="i18n.js?v=29"></script>
 
 <!-- FORGOT PASSWORD MODAL -->
 <div id="forgotModal" class="modal-bg">

@@ -1395,8 +1395,16 @@ function renderRequests() {
 }
 
 function updateReqBadge() {
-  const el = document.getElementById('reqBadge');
-  if (!el) return;
+  let el = document.getElementById('reqBadge');
+  if (!el) {
+    // Страховка: если кто-то пересоздал DOM вкладок — воссоздаём бейдж.
+    const wrap = document.getElementById('reqTabWrap') || document.getElementById('stReqs');
+    if (!wrap) return;
+    el = document.createElement('span');
+    el.className = 'nb';
+    el.id = 'reqBadge';
+    wrap.appendChild(el);
+  }
   if (friendRequests.length) {
     el.textContent = friendRequests.length > 9 ? '9+' : friendRequests.length;
     el.style.display = 'flex';
