@@ -441,6 +441,9 @@ let friends        = [];
 let groups         = [];
 let friendRequests = [];
 let sentFriendRequests = [];
+// Время последнего real-time события по заявкам — защита от stale-ответа loadUserData,
+// который может вернуть снимок, снятый ДО сохранения заявки сервером (медленный Render).
+let _lastReqSocketAt = 0;
 // Аватарки и ники — загружаем из localStorage для мгновенной отрисовки
 let userAvatars   = {};
 let userNicknames = {};
@@ -1015,7 +1018,12 @@ async function loadUserData() {
     });
     const d = await r.json();
     friends        = d.friends        || [];
-    friendRequests = d.friendRequests || [];
+    // Если недавно (до 10с) приходило real-time событие 'friend-request'/'friend-requests-sync',
+    // а серверный ответ пуст — это устаревший снимок (заявка ещё не сохранилась в момент запроса).
+    // Не даём ему затереть свежеполученную заявку.
+    if (!(Date.now() - _lastReqSocketAt < 10000 && friendRequests.length && !(d.friendRequests || []).length)) {
+      friendRequests = d.friendRequests || [];
+    }
     sentFriendRequests = d.sentFriendRequests || [];
     groups         = d.groups         || [];
     // Сохраняем email восстановления если вернулся с сервера
@@ -3346,6 +3354,7 @@ async function rejectReq(req) {
 // Real-time friend events
 socket.on('friend-request', ({ from }) => {
   if (!currentUser) return;
+  _lastReqSocketAt = Date.now();
   if (!friendRequests.includes(from)) {
     friendRequests.push(from);
     renderRequests(); updateReqBadge();
@@ -3356,6 +3365,7 @@ socket.on('friend-request', ({ from }) => {
 // Sync friend requests on reconnect (server sends all pending)
 socket.on('friend-requests-sync', ({ requests }) => {
   if (!currentUser || !requests?.length) return;
+  _lastReqSocketAt = Date.now();
   let changed = false;
   requests.forEach(from => {
     if (!friendRequests.includes(from)) {
