@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
+const zlib = require('zlib');
 // nodemailer используется для Gmail SMTP (загружается динамически в sendRecoveryEmail)
 
 const app = express();
@@ -256,7 +257,6 @@ async function r2Delete(fileName) {
 // Self-hosted файловый сервер (ваш ПК / VPS через туннель)
 // SELF_URL   = публичный URL туннеля (захардкожен — работает сразу без .env)
 // SELF_TOKEN = токен доступа (из config.json файлового сервера)
-// SELF_URL может обновляться динамически из GitHub (см. fetchSelfUrlFromGitHub)
 // Старый env/fallback с доменом aura-files больше не используется — машина переименована в aura
 let SELF_URL   = (process.env.SELF_URL && !process.env.SELF_URL.includes('aura-files') ? process.env.SELF_URL : 'https://aura.tail212157.ts.net:8443').trim().replace(/\/+$/, '');
 const SELF_TOKEN = process.env.SELF_TOKEN || '24bba6fa12fcfd6021c74bd501cbe9b3528e8ff03a84c3dba5350d958f051f19';
@@ -283,33 +283,6 @@ function makeSelfAgent(ip) {
   });
 }
 const _selfAgents = SELF_FALLBACK_IPS.map(makeSelfAgent);
-
-// ── Динамический URL хранилища из GitHub ────────────────────────────────
-// ПК при каждом запуске поднимает публичный туннель (cloudflared) и публикует
-// его свежий URL в репозиторий (storage_url.json). Если текущий URL хранилища
-// не работает — watchdog подхватывает новый URL отсюда.
-const STORAGE_URL_GH_RAW = 'https://raw.githubusercontent.com/murofixbhop-dot/Chat/main/storage_url.json';
-let lastSelfUrl = SELF_URL;
-
-async function fetchSelfUrlFromGitHub() {
-  try {
-    const r = await axios.get(STORAGE_URL_GH_RAW, { timeout: 10000, responseType: 'text' });
-    let data = r.data;
-    if (typeof data === 'string') {
-      data = data.replace(/^\uFEFF/, '').trim();
-      try { data = JSON.parse(data); } catch (e) { return null; }
-    }
-    const u = String(data && (data.url || data.selfUrl || '')).trim().replace(/\/+$/, '');
-    if (!/^https:\/\//i.test(u) || u === lastSelfUrl) return null; // без изменений / мусор
-    console.log(`🔗 Хранилище: обновляю URL с GitHub: ${u}`);
-    lastSelfUrl = u;
-    SELF_URL = u;
-    try { _selfHost = new URL(SELF_URL).hostname; } catch (e) { _selfHost = null; }
-    return u;
-  } catch (e) {
-    return null; // GitHub недоступен — продолжаем со старым URL
-  }
-}
 
 function selfRequestConfig() {
   const base = { maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 300000, validateStatus: s => s < 500, family: 4 };
@@ -2869,8 +2842,6 @@ async function storageWatchdog() {
       storageDownSince = Date.now();
       console.error('⚠️  Хранилище отвалилось — работаю из памяти, сохраняю изменения локально. Жду восстановления...');
     }
-    // Туннель мог сменить URL (ПК перезапустился) — пробуем подхватить новый из GitHub
-    try { await fetchSelfUrlFromGitHub(); } catch (e) { /* не критично */ }
     return;
   }
   if (!wasOnline || !usersLoaded) {
@@ -2942,7 +2913,19 @@ function validateUploadPayload(file, mimeType, fileType) {
 }
 
 app.use(attachUser);
-app.use(express.static('public'));
+
+// Gzip-мидлварь ОТКЛЮЧЁН: ломал отдачу index.html (пустое тело). Сайт быстр и без сжатия (Tailscale CDN).
+
+// ── Кэш-заголовки для статики: шрифты/иконки/JS/CSS — 7 дней, HTML — без кэша ──
+const CACHEABLE_STATIC = /^(\/vendor\/|\/icons\/|\/feature-icons\/|\/script\.js|\/style\.css|\/i18n\.js|\/boot\.js|\/landing\.js|\/landing\.css|\/critical-icons\.css|\/favicon\.svg|\/aura-logo\.svg|\/manifest\.json)/;
+app.use(express.static('public', {
+  setHeaders: (res, filePath) => {
+    const rel = filePath.replace(/\\/g, '/').split('/public/').pop();
+    if (CACHEABLE_STATIC.test('/' + rel)) {
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    }
+  }
+}));
 
 // в”Ђв”Ђ РџСЂРѕРєСЃРё РґР»СЏ СЃРєР°С‡РёРІР°РЅРёСЏ С„Р°Р№Р»РѕРІ СЃ B2 в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 async function handleDownloadProxy(req, res, rawF) {
@@ -3125,7 +3108,43 @@ app.get('/api/ice-servers', requireAuth, async (req, res) => {
   const TWILIO_SID  = process.env.TWILIO_ACCOUNT_SID;
   const TWILIO_AUTH = process.env.TWILIO_AUTH_TOKEN;
 
-  // Попытка 1: Twilio Network Traversal Service (самый надёжный TURN)
+  // Попытка 1: Cloudflare Calls TURN (бесплатно ~1TB/мес, работает из РФ — РФ-тест пройден)
+  // Включить TURN в дашборде Cloudflare → Workers & Pages → Cloudflare Calls → TURN
+  // Создать TURN key, затем в .env:
+  //   CF_TURN_ACCOUNT_ID = account id из дашборда
+  //   CF_TURN_KEY_ID     = id ключа (отображается как username)
+  //   CF_TURN_KEY_SECRET = секрет ключа
+  const CF_ACCT   = process.env.CF_TURN_ACCOUNT_ID;
+  const CF_KEY_ID = process.env.CF_TURN_KEY_ID;
+  const CF_SECRET = process.env.CF_TURN_KEY_SECRET;
+  if (CF_ACCT && CF_KEY_ID && CF_SECRET) {
+    try {
+      // Ephemeral credentials (спецификация Cloudflare):
+      //   username = keyId, credential = `${timestamp}:${hex(hmac_sha256(keySecret, `${keyId}:${timestamp}`))}`
+      const ts  = Math.floor(Date.now() / 1000) + 3600; // 1 час
+      const sig = crypto.createHmac('sha256', CF_SECRET)
+        .update(`${CF_KEY_ID}:${ts}`)
+        .digest('hex');
+      _iceCache = [
+        {
+          urls: [
+            'turn:turn.cloudflare.com:3478?transport=udp',
+            'turn:turn.cloudflare.com:3478?transport=tcp',
+            'turns:turn.cloudflare.com:53000?transport=tcp',
+          ],
+          username: CF_KEY_ID,
+          credential: `${ts}:${sig}`,
+        },
+        { urls: 'stun:turn.cloudflare.com:3478' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+      ];
+      _iceCacheTime = Date.now();
+      console.log('[ICE] Cloudflare TURN серверы получены');
+      return res.json(_iceCache);
+    } catch(e) { console.log('[ICE] Cloudflare TURN ошибка:', e.message); }
+  }
+
+  // Попытка 2: Twilio Network Traversal Service (самый надёжный TURN)
   if (TWILIO_SID && TWILIO_AUTH) {
     try {
       const auth = Buffer.from(`${TWILIO_SID}:${TWILIO_AUTH}`).toString('base64');
@@ -8580,6 +8599,10 @@ io.on('connection', (socket) => {
   socket.on('call-offer',        data => relayTo('call-offer',        data));
   socket.on('call-answer',       data => relayTo('call-answer',       data));
   socket.on('call-ice',          data => relayTo('call-ice',          data));
+  // Медиа-релей (серверный мост для строгих NAT): чанки MediaRecorder пересылаются через сервер
+  socket.on('call-relay-on',     data => relayTo('call-relay-on',     data));
+  socket.on('call-relay-data',   data => relayTo('call-relay-data',   data));
+  socket.on('call-relay-off',    data => relayTo('call-relay-off',    data));
   socket.on('call-bot-accept', ({ to, room } = {}) => {
     const from = currentUser;
     if (!isHumanBotUsername(to) || !from) return;
