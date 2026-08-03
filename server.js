@@ -256,7 +256,8 @@ async function r2Delete(fileName) {
 // Self-hosted файловый сервер (ваш ПК / VPS через туннель)
 // SELF_URL   = публичный URL туннеля (захардкожен — работает сразу без .env)
 // SELF_TOKEN = токен доступа (из config.json файлового сервера)
-const SELF_URL   = (process.env.SELF_URL   || 'https://aura-files.tail212157.ts.net').trim().replace(/\/+$/, '');
+// SELF_URL может обновляться динамически из GitHub (см. fetchSelfUrlFromGitHub)
+let SELF_URL   = (process.env.SELF_URL   || 'https://aura-files.tail212157.ts.net').trim().replace(/\/+$/, '');
 const SELF_TOKEN = process.env.SELF_TOKEN || '24bba6fa12fcfd6021c74bd501cbe9b3528e8ff03a84c3dba5350d958f051f19';
 const USE_SELF   = !!(SELF_URL && SELF_TOKEN);
 
@@ -281,6 +282,33 @@ function makeSelfAgent(ip) {
   });
 }
 const _selfAgents = SELF_FALLBACK_IPS.map(makeSelfAgent);
+
+// ── Динамический URL хранилища из GitHub ────────────────────────────────
+// ПК при каждом запуске поднимает публичный туннель (cloudflared) и публикует
+// его свежий URL в репозиторий (storage_url.json). Если текущий URL хранилища
+// не работает — watchdog подхватывает новый URL отсюда.
+const STORAGE_URL_GH_RAW = 'https://raw.githubusercontent.com/murofixbhop-dot/Chat/main/storage_url.json';
+let lastSelfUrl = SELF_URL;
+
+async function fetchSelfUrlFromGitHub() {
+  try {
+    const r = await axios.get(STORAGE_URL_GH_RAW, { timeout: 10000, responseType: 'text' });
+    let data = r.data;
+    if (typeof data === 'string') {
+      data = data.replace(/^\uFEFF/, '').trim();
+      try { data = JSON.parse(data); } catch (e) { return null; }
+    }
+    const u = String(data && (data.url || data.selfUrl || '')).trim().replace(/\/+$/, '');
+    if (!/^https:\/\//i.test(u) || u === lastSelfUrl) return null; // без изменений / мусор
+    console.log(`🔗 Хранилище: обновляю URL с GitHub: ${u}`);
+    lastSelfUrl = u;
+    SELF_URL = u;
+    try { _selfHost = new URL(SELF_URL).hostname; } catch (e) { _selfHost = null; }
+    return u;
+  } catch (e) {
+    return null; // GitHub недоступен — продолжаем со старым URL
+  }
+}
 
 function selfRequestConfig() {
   const base = { maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 300000, validateStatus: s => s < 500, family: 4 };
@@ -2840,6 +2868,8 @@ async function storageWatchdog() {
       storageDownSince = Date.now();
       console.error('⚠️  Хранилище отвалилось — работаю из памяти, сохраняю изменения локально. Жду восстановления...');
     }
+    // Туннель мог сменить URL (ПК перезапустился) — пробуем подхватить новый из GitHub
+    try { await fetchSelfUrlFromGitHub(); } catch (e) { /* не критично */ }
     return;
   }
   if (!wasOnline || !usersLoaded) {
