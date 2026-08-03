@@ -257,7 +257,8 @@ async function r2Delete(fileName) {
 // SELF_URL   = публичный URL туннеля (захардкожен — работает сразу без .env)
 // SELF_TOKEN = токен доступа (из config.json файлового сервера)
 // SELF_URL может обновляться динамически из GitHub (см. fetchSelfUrlFromGitHub)
-let SELF_URL   = (process.env.SELF_URL   || 'https://aura-files.tail212157.ts.net').trim().replace(/\/+$/, '');
+// Старый env/fallback с доменом aura-files больше не используется — машина переименована в aura
+let SELF_URL   = (process.env.SELF_URL && !process.env.SELF_URL.includes('aura-files') ? process.env.SELF_URL : 'https://aura.tail212157.ts.net:8443').trim().replace(/\/+$/, '');
 const SELF_TOKEN = process.env.SELF_TOKEN || '24bba6fa12fcfd6021c74bd501cbe9b3528e8ff03a84c3dba5350d958f051f19';
 const USE_SELF   = !!(SELF_URL && SELF_TOKEN);
 
