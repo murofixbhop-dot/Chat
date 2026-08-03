@@ -5832,17 +5832,26 @@ async function deleteAccount() {
 // ICE / TURN — расширенный список серверов для работы за NAT/firewall
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 const ICE_SERVERS_STATIC = [
+  // ── Приоритет: серверы, доступные из РФ (проверено) ────────────────────
+  // Cloudflare TURN-эндпоинт работает и как STUN (UDP 3478 проходит в РФ)
+  { urls: 'stun:turn.cloudflare.com:3478' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:stun.cloudflare.com:53' },
+  // stun.relay.metered.ca:80 — TCP STUN, проверенно проходит из РФ (TCP-канал для строгих NAT)
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  // Google STUN — UDP из РФ проходит (TCP заблокирован)
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
-  { urls: 'stun:stun.cloudflare.com:3478' },
-  { urls: 'stun:stun.relay.metered.ca:80' },
+  { urls: 'stun:stun.l.google.com:5349' },
+  { urls: 'stun:stun1.l.google.com:5349' },
+  // ── Запасные (другие регионы) ──────────────────────────────────────────
   { urls: 'stun:stun.global.twilio.com:3478' },
   { urls: 'stun:stun.stunprotocol.org:3478' },
   { urls: 'stun:stun.nextcloud.com:443' },
-  // openrelay — все транспорты
+  // openrelay — все транспорты (может быть недоступен из РФ)
   { urls: 'turn:openrelay.metered.ca:80',                username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443',               username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
@@ -7597,6 +7606,101 @@ socket.on('missed-calls', ({ calls }) => {
 });
 
 // в”Ђв”Ђ RTC PEER в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+// ════════ MEDIA RELAY — серверный мост для строгих NAT (фолбэк после ICE-попыток) ════════
+// Работает через WebSocket 443 (пробрасывается Funnel) — пробивает любые сети, включая РФ.
+// P2P остаётся основным режимом (мин. задержка), релей включается только если ICE не смог.
+let _relayActive = false, _relayRec = null, _relayMS = null, _relayBuf = null, _relayElem = null, _relayTimer = null;
+const RELAY_MIME = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') && /Chrome/i.test(navigator.userAgent)
+  ? 'video/webm;codecs=vp8,opus' : 'audio/webm;codecs=opus';
+
+function _startRelay() {
+  if (_relayActive || !_inCall || !localStream || !_callTarget) return;
+  _relayActive = true;
+  clearTimeout(_relayTimer);
+  console.log('[RELAY] Switching to server media relay...');
+  toast('Прямое соединение не пробивается — включаю серверный мост…', 'info', 4500);
+  const target = _callTarget;
+
+  // ── Приёмник: MediaSource + <video>/<audio> ──
+  try {
+    const isVid = RELAY_MIME.startsWith('video');
+    _relayElem = document.getElementById(isVid ? 'rv' : 'remoteAudio');
+    if (!_relayElem) {
+      _relayElem = document.createElement(isVid ? 'video' : 'audio');
+      _relayElem.id = 'relay-' + (isVid ? 'v' : 'a');
+      _relayElem.autoplay = true;
+      if (isVid) {
+        _relayElem.controls = true;
+        _relayElem.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);max-width:72vw;max-height:72vh;z-index:99999;background:#000;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.6)';
+        const rv = document.getElementById('rv');
+        if (rv) rv.style.display = 'none';
+      }
+      document.body.appendChild(_relayElem);
+    }
+    _relayMS = new MediaSource();
+    _relayElem.src = URL.createObjectURL(_relayMS);
+    const openMs = () => {
+      try {
+        _relayBuf = _relayMS.addSourceBuffer(RELAY_MIME);
+        _relayBuf.mode = 'segments';
+      } catch (e) { console.error('[RELAY] addSourceBuffer:', e); }
+    };
+    if (_relayMS.readyState === 'open') openMs();
+    else _relayMS.addEventListener('sourceopen', openMs, { once: true });
+    _relayElem.play().catch(() => {});
+  } catch (e) { console.error('[RELAY] receiver setup:', e); }
+
+  // ── Отправитель: MediaRecorder (чанки 500мс) ──
+  try {
+    const opts = { mimeType: RELAY_MIME, audioBitsPerSecond: 48000 };
+    if (RELAY_MIME.startsWith('video')) opts.videoBitsPerSecond = 900000;
+    _relayRec = new MediaRecorder(localStream, opts);
+    _relayRec.ondataavailable = async (e) => {
+      if (!_relayActive || !e.data || e.data.size === 0) return;
+      const chunk = await e.data.arrayBuffer();
+      socket.emit('call-relay-data', { to: target, from: currentUser, chunk });
+    };
+    _relayRec.start(500);
+  } catch (e) {
+    console.error('[RELAY] recorder failed:', e);
+    _relayActive = false;
+    return;
+  }
+
+  socket.emit('call-relay-on', { to: target, from: currentUser, mime: RELAY_MIME });
+}
+
+function _stopRelay() {
+  if (!_relayActive) return;
+  _relayActive = false;
+  clearTimeout(_relayTimer);
+  try { _relayRec?.stop(); } catch {}
+  _relayRec = null;
+  try { if (_relayBuf && _relayMS && _relayMS.readyState === 'open') _relayMS.endOfStream(); } catch {}
+  if (_relayElem) {
+    try { _relayElem.src = ''; } catch {}
+    const rv = document.getElementById('rv');
+    if (rv && _relayElem.id === 'relay-v') rv.style.display = '';
+    if (_relayElem.id && _relayElem.id.startsWith('relay-')) _relayElem.remove();
+    _relayElem = null;
+  }
+  _relayMS = null; _relayBuf = null;
+  if (_callTarget) socket.emit('call-relay-off', { to: _callTarget, from: currentUser });
+}
+
+// ── Серверные события релея ──
+socket.on('call-relay-on', ({ from }) => {
+  if (from !== _callTarget || !_inCall) return;
+  _startRelay(); // оба конца и шлют, и принимают — инициализируем вторую сторону
+});
+socket.on('call-relay-data', ({ from, chunk }) => {
+  if (from !== _callTarget || !_relayActive || !_relayBuf) return;
+  try { _relayBuf.appendBuffer(new Uint8Array(chunk)); } catch (e) { console.error('[RELAY] append:', e); }
+});
+socket.on('call-relay-off', ({ from }) => {
+  if (from === _callTarget) _stopRelay();
+});
+
 function _createPeer() {
   if (rtcPeer) { try { rtcPeer.close(); } catch {} }
   rtcPeer = new RTCPeerConnection({
@@ -7705,13 +7809,20 @@ function _createPeer() {
           }
         }, 6000);
       } else {
-        // Исчерпали попытки — завершаем
-        console.warn('[ICE] Exhausted restart attempts, ending call');
-        toast('Соединение не удалось — проверьте сеть', 'error', 4000);
-        _cleanup();
+        // Исчерпали ICE-попытки — переключаемся на серверный медиа-мост
+        console.warn('[ICE] Exhausted restart attempts, switching to media relay');
+        _startRelay();
       }
     }
   };
+
+  // Страховка: если через 12 секунд звонок не установлен (даже без статуса failed) — включаем релей
+  _relayTimer = setTimeout(() => {
+    if (_inCall && _callTarget && !_connected && !_relayActive) {
+      console.warn('[RELAY] Call not connected in 12s, switching to media relay');
+      _startRelay();
+    }
+  }, 12000);
 }
 
 // в”Ђв”Ђ TURN FALLBACK вЂ” recreate peer with TURN-first config в”Ђв”Ђ
@@ -7727,8 +7838,11 @@ async function _recreatePeerWithTurnFallback() {
 
   // TURN-first config — приоритет TURN relay для строгих NAT
   const TURN_FIRST = [
+    // Cloudflare — единственный TURN, проверенно доступный из РФ (UDP/TCP/TLS)
     ...ICE_SERVERS.filter(s => s.urls?.toString().startsWith('turn') || s.urls?.toString().startsWith('turns')),
-    // Добавляем STUN в конец как запасной вариант
+    // STUN: сначала доступные из РФ
+    { urls: 'stun:turn.cloudflare.com:3478' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:openrelay.metered.ca:3478' },
   ];
@@ -7760,9 +7874,9 @@ async function _recreatePeerWithTurnFallback() {
     const st = rtcPeer?.connectionState;
     if (st === 'closed') _cleanup();
     if (st === 'failed') {
-      // Последняя попытка провалилась — завершаем
-      toast('Соединение не удалось', 'error', 4000);
-      _cleanup();
+      // TURN тоже не помог — включаем серверный медиа-мост
+      console.warn('[RELAY] TURN fallback failed, switching to media relay');
+      _startRelay();
     }
   };
   rtcPeer.oniceconnectionstatechange = () => {
@@ -8689,6 +8803,7 @@ function doLogout() {
 }
 
 function _cleanup() {
+  _stopRelay();
   if (_connected) playCallSound('end'); // звук только если звонок был принят
   stopRing();
   // Add call record to chat if call was connected

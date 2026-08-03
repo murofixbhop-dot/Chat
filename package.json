@@ -1,24 +1,17 @@
-{
-  "name": "simple-chat",
-  "version": "4.0.0",
-  "description": "Чат с фото, видео, голосом и Backblaze B2",
+﻿{
+  "name": "aura-chat",
+  "version": "1.0.0",
+  "description": "Aura Messenger - chat server",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
   "dependencies": {
-    "@tabler/icons-webfont": "3.14.0",
-    "axios": "^1.8.4",
-    "express": "^4.22.1",
-    "multer": "^2.1.1",
-    "nodemailer": "^8.0.7",
-    "socket.io": "^4.8.3"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
-  "overrides": {
-    "ws": "^8.20.1"
+    "axios": "^1.7.9",
+    "express": "^4.21.2",
+    "form-data": "^4.0.1",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.16",
+    "socket.io": "^4.8.1"
   }
 }
