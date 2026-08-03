@@ -2696,8 +2696,11 @@ async function loadUsers() {
       const data = await selfReadJson(USERS_FILE);
       if (data && typeof data === 'object') {
         users = new Map(Object.entries(data));
+        usersLoaded = true; storageOnline = true;
         console.log(`👥 Загружено ${users.size} пользователей`);
       } else {
+        // Файла нет (404), но хранилище отвечает — состояние консистентное
+        usersLoaded = true; storageOnline = true;
         console.log('📁 users.json не найден — начинаем пустыми');
       }
       return;
@@ -2706,8 +2709,10 @@ async function loadUsers() {
       const data = await sbReadJson(USERS_FILE);
       if (data && typeof data === 'object') {
         users = new Map(Object.entries(data));
+        usersLoaded = true; storageOnline = true;
         console.log(`👥 Загружено ${users.size} пользователей`);
       } else {
+        usersLoaded = true; storageOnline = true;
         console.log('📁 users.json не найден — начинаем пустыми');
       }
       return;
@@ -2718,14 +2723,29 @@ async function loadUsers() {
     const data = JSON.parse(text);
     if (data && typeof data === 'object') {
       users = new Map(Object.entries(data));
+      usersLoaded = true; storageOnline = true;
       console.log(`👥 Загружено ${users.size} пользователей`);
     }
   } catch (err) {
-    console.log('📁 users.json не найден — начинаем пустыми');
+    const is404 = err?.response?.status === 404 || String(err?.message || '').includes('404');
+    if (is404) {
+      usersLoaded = true; storageOnline = true;
+      console.log('📁 users.json не найден — начинаем пустыми');
+    } else {
+      usersLoaded = false; storageOnline = false;
+      console.log(`📁 users.json недоступен (${err.message || err.code || err}) — ждём восстановления хранилища`);
+    }
   }
 }
 
 async function saveUsers() {
+  // Защита: пока первичная загрузка из хранилища не удалась — НЕ пишем,
+  // чтобы не затереть хранилище пустыми данными (боты + 0 юзеров).
+  // Изменения копятся в памяти и будут слиты после восстановления связи.
+  if (!usersLoaded) {
+    storageDirty = true;
+    return;
+  }
   try {
     const usersObj = Object.fromEntries(users);
     const jsonBuffer = Buffer.from(JSON.stringify(usersObj, null, 2), 'utf-8');
@@ -2736,15 +2756,100 @@ async function saveUsers() {
     } else {
       await storageUpload(USERS_FILE, jsonBuffer, 'application/json');
     }
+    storageOnline = true;
+    storageDirty = false;
     console.log('💾 Пользователи сохранены');
   } catch (err) {
-    console.error('Ошибка сохранения пользователей:', err.message);
-    if (!saveUsers._retry) {
-      saveUsers._retry = true;
-      setTimeout(() => { saveUsers._retry = false; saveUsers(); }, 10000);
-    }
+    storageOnline = false;
+    storageDirty = true;
+    console.error('💾 Ошибка сохранения пользователей (хранилище недоступно?):', err.message);
+    // Повторной записью после восстановления займётся storageWatchdog
   }
 }
+
+// ========== АВТОВОССТАНОВЛЕНИЕ ХРАНИЛИЩА (watchdog) ==========
+// storageOnline  — хранилище сейчас отвечает
+// storageDirty   — есть изменения в памяти, ещё не записанные в хранилище
+// usersLoaded    — пользователи успешно прочитаны из хранилища (защита от перезаписи пустотой)
+let storageOnline = false;
+let storageDirty  = false;
+let usersLoaded   = false;
+let storageDownSince = 0;
+
+// Лёгкая проверка доступности хранилища (одна попытка, короткий таймаут)
+async function storageHealthCheck() {
+  if (USE_SELF) {
+    await selfAxios('get', USERS_FILE, { cfg: { headers: { 'Authorization': `Bearer ${SELF_TOKEN}` }, timeout: 8000, responseType: 'text' } });
+    return;
+  }
+  if (USE_SB) {
+    await sbReadJson(USERS_FILE);
+    return;
+  }
+  if (USE_R2) {
+    const d = await r2Download(USERS_FILE);
+    await axios.head(d.url, { timeout: 8000 });
+    return;
+  }
+  if (USE_B2) {
+    if (!b2Auth) await reAuthB2();
+    const { bucketName } = b2GetBucketForFile(USERS_FILE);
+    await b2S3Download(bucketName, USERS_FILE);
+    return;
+  }
+  throw new Error('не настроено ни одно хранилище');
+}
+
+// Полное переподключение: свежие данные из хранилища + локальные (offline) изменения поверх
+async function reconnectStorage() {
+  // Локальные изменения, сделанные во время простоя — чтобы не потерять
+  const localDirty = storageDirty ? new Map(users) : null;
+  await loadUsers(); // свежие данные (проставит usersLoaded / storageOnline)
+  if (localDirty) {
+    let added = 0;
+    for (const [k, v] of localDirty) {
+      if (!users.has(k)) added++;
+      users.set(k, v); // локальные изменения — поверх свежих
+    }
+    console.log(`🔀 Наложены локальные изменения: ${localDirty.size} записей (новых: ${added})`);
+  }
+  ensureHumanBotAccount();
+  storageDirty = false;
+  try { await saveUsers(); } catch (e) { /* уже прологировано в saveUsers */ }
+  try { await loadHistory(); } catch (e) { console.error('⚠️ history.json не перечитан:', e.message); }
+  try { await loadAiConversations(); } catch (e) { console.error('⚠️ ai_conversations.json не перечитан:', e.message); }
+  try { await loadAiFiles(); } catch (e) { console.error('⚠️ ai_files.json не перечитан:', e.message); }
+  console.log('✅ Хранилище переподключено, все данные загружены');
+}
+
+async function storageWatchdog() {
+  if (!USE_SELF && !USE_SB && !USE_R2 && !USE_B2) return; // хранилища нет — нечего сторожить
+  let ok = false;
+  try {
+    if (USE_B2 && !b2Auth) await reAuthB2();
+    if (USE_SB && !storageOnline) await sbEnsureBucket();
+    await storageHealthCheck();
+    ok = true;
+  } catch (e) {
+    ok = false;
+  }
+  const wasOnline = storageOnline;
+  storageOnline = ok;
+  if (!ok) {
+    if (wasOnline || !storageDownSince) {
+      storageDownSince = Date.now();
+      console.error('⚠️  Хранилище отвалилось — работаю из памяти, сохраняю изменения локально. Жду восстановления...');
+    }
+    return;
+  }
+  if (!wasOnline || !usersLoaded) {
+    console.log('🔄 Хранилище снова доступно — переподключаюсь...');
+    await reconnectStorage();
+    storageDownSince = 0;
+  }
+}
+// Проверка каждые 30 секунд
+setInterval(storageWatchdog, 30000);
 
 // ========== ЗАГРУЗКА ФАЙЛОВ ==========
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -8010,25 +8115,11 @@ async function saveHistory() {
     await loadHistory();
     await loadAiConversations();
     await loadAiFiles();
+    storageOnline = true;
     console.log('✅ Хранилище инициализировано');
   } catch (err) {
     console.error('❌ Ошибка инициализации хранилища:', err.message);
-    console.log('⚠️  Сервер запускается без персистентности — данные в памяти');
-    // Повторная попытка через 30 секунд
-    setTimeout(async () => {
-      try {
-        await initStorage();
-        await loadUsers();
-        ensureHumanBotAccount();
-        await saveUsers();
-        await loadHistory();
-        await loadAiConversations();
-        await loadAiFiles();
-        console.log('✅ Хранилище переподключено');
-      } catch(e2) {
-        console.error('❌ Повторная попытка не удалась:', e2.message);
-      }
-    }, 30000);
+    console.log('⚠️  Сервер запускается из памяти. Автопереподключение уже работает (каждые 30 сек) — данные подхватятся и будут слиты.');
   }
 })();
 
